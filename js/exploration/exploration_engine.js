@@ -1,0 +1,186 @@
+/**
+ * js/exploration/exploration_engine.js
+ * The Physics and Collision Engine for Local Map Exploration.
+ * Handles boat momentum, turning, wall collisions, damage, and zone transitions.
+ */
+
+// Import TILE constants to know what we can hit
+import { TILE, LOCAL_MAP_SIZE } from './local_map.js';
+import { clamp } from '../util/utils.js';
+
+export const ExplorationEngine = {
+    // --- State ---
+    x: 256,
+    y: 256,
+    velocity: 0,
+    heading: -Math.PI / 2, // Facing North (Up)
+    
+    // --- Data References ---
+    boatStats: null,
+    localMap: null,
+    
+    // --- Engine Constants ---
+    collisionRadius: 6, // Radius of the boat's hitbox in grid pixels
+    waterFriction: 1.5, // How quickly the boat glides to a stop
+    
+    // --- Event Callbacks (Hooked up by the UI Harness) ---
+    onDamage: null,
+    onZoneTransition: null,
+    onDockInteract: null,
+
+    /**
+     * Initializes the engine when entering a new cave.
+     */
+    init(startX, startY, effectiveExplorationStats, localMapData, heading = -Math.PI / 2, velocity = 0) {
+        this.x = startX;
+        this.y = startY;
+        this.velocity = velocity; // Preserved from previous map
+        this.heading = heading;   // Preserved from previous map
+        
+        this.boatStats = effectiveExplorationStats; 
+        this.localMap = localMapData;
+        
+        console.log("🧭 Exploration Engine Initialized at", startX, startY);
+    },
+
+    /**
+     * The 60FPS Physics Update Loop.
+     * @param {number} dt - Delta time in seconds
+     * @param {Object} input - { forward, backward, left, right, action }
+     */
+    update(dt, input) {
+        if (!this.boatStats || !this.localMap) return;
+
+        // --- 1. ROTATION ---
+        // Convert turnSpeed stat (e.g., 80) to radians per second.
+        // A speed of 90 means turning 90 degrees per second.
+        const turnRate = (this.boatStats.turnSpeed * (Math.PI / 180)) * dt;
+        
+        if (input.left)  this.heading -= turnRate;
+        if (input.right) this.heading += turnRate;
+
+        // --- 2. ACCELERATION & THRUST ---
+        let thrust = 0;
+        if (input.forward) thrust = this.boatStats.acceleration;
+        if (input.backward) thrust = -this.boatStats.acceleration * 0.5; // Reverse is half power
+
+        this.velocity += thrust * dt;
+
+        // Apply water friction (drag)
+        this.velocity -= this.velocity * this.waterFriction * dt;
+
+        // Clamp to max speeds
+        const maxSpeed = this.boatStats.speed;
+        this.velocity = clamp(this.velocity, -maxSpeed * 0.4, maxSpeed);
+
+        // --- 3. MOVEMENT ---
+        const dx = Math.cos(this.heading) * this.velocity * dt;
+        const dy = Math.sin(this.heading) * this.velocity * dt;
+
+        this.x += dx;
+        this.y += dy;
+
+        // --- 4. COLLISION DETECTION ---
+        this._checkCollisions();
+
+        // --- 5. ZONE TRANSITIONS ---
+        this._checkZoneTransitions();
+
+        // --- 6. DOCK INTERACTION ---
+        if (input.action) this._checkDock();
+    },
+
+    /**
+     * INTERNAL: Checks for walls and bounces the boat.
+     */
+    _checkCollisions() {
+        // Look at the tiles immediately surrounding the boat's radius
+        const minX = Math.max(0, Math.floor(this.x - this.collisionRadius));
+        const maxX = Math.min(LOCAL_MAP_SIZE - 1, Math.ceil(this.x + this.collisionRadius));
+        const minY = Math.max(0, Math.floor(this.y - this.collisionRadius));
+        const maxY = Math.min(LOCAL_MAP_SIZE - 1, Math.ceil(this.y + this.collisionRadius));
+
+        let hit = false;
+        let impactVelocity = Math.abs(this.velocity);
+
+        for (let ty = minY; ty <= maxY; ty++) {
+            for (let tx = minX; tx <= maxX; tx++) {
+                const tileId = this.localMap.grid[ty][tx];
+                
+                // Solid objects: LAND and ROCK
+                if (tileId === TILE.LAND || tileId === TILE.ROCK) {
+                    // Check circular intersection with the center of the grid tile (tx + 0.5, ty + 0.5)
+                    const distX = this.x - (tx + 0.5);
+                    const distY = this.y - (ty + 0.5);
+                    const distance = Math.hypot(distX, distY);
+
+                    // Tile "radius" is approx 0.5. Add boat collision radius.
+                    const minSafeDistance = this.collisionRadius + 0.5;
+
+                    if (distance < minSafeDistance) {
+                        hit = true;
+                        
+                        // Push the boat back out of the wall
+                        const overlap = minSafeDistance - distance;
+                        const pushX = (distX / distance) * overlap;
+                        const pushY = (distY / distance) * overlap;
+
+                        this.x += pushX;
+                        this.y += pushY;
+                    }
+                }
+            }
+        }
+
+        if (hit) {
+            // Bounce the velocity
+            this.velocity = -this.velocity * 0.4; 
+
+            // Calculate Hull Damage if hitting the wall hard enough
+            if (impactVelocity > 20 && this.onDamage) {
+                // Dodge chance applies!
+                if (Math.random() < this.boatStats.hazardDodgeChance) {
+                    console.log("Dodged wall collision damage!");
+                } else {
+                    // Damage scales with speed (e.g. hitting wall at 100 speed = ~10 dmg)
+                    const damage = Math.floor(impactVelocity * 0.1);
+                    this.onDamage(damage, "Rock Collision");
+                }
+            }
+        }
+    },
+
+    /**
+     * INTERNAL: Checks if the boat sailed off the edge of the map.
+     */
+    _checkZoneTransitions() {
+        const edgeThreshold = 2; // Pixels from the absolute edge
+
+        if (this.x < edgeThreshold && this.onZoneTransition) {
+            this.onZoneTransition('w');
+        } else if (this.x > LOCAL_MAP_SIZE - edgeThreshold && this.onZoneTransition) {
+            this.onZoneTransition('e');
+        } else if (this.y < edgeThreshold && this.onZoneTransition) {
+            this.onZoneTransition('n');
+        } else if (this.y > LOCAL_MAP_SIZE - edgeThreshold && this.onZoneTransition) {
+            this.onZoneTransition('s');
+        }
+    },
+
+    /**
+     * INTERNAL: Checks if the boat is on top of a dock when ACTION is pressed.
+     */
+    _checkDock() {
+        const gx = Math.floor(this.x);
+        const gy = Math.floor(this.y);
+        
+        if (gx >= 0 && gx < LOCAL_MAP_SIZE && gy >= 0 && gy < LOCAL_MAP_SIZE) {
+            const tileId = this.localMap.grid[gy][gx];
+            if (tileId === TILE.DOCK && this.onDockInteract) {
+                // Completely stop the boat
+                this.velocity = 0; 
+                this.onDockInteract();
+            }
+        }
+    }
+};

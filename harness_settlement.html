@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settlement Harness - Underdark Fishing</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Settlement Layout Styles */
+        .town-banner {
+            width: 100%; max-width: 1200px; margin: 1rem auto; 
+            border: 2px solid var(--border); border-radius: 0.5rem;
+            overflow: hidden; background: #020617; position: relative; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            /* Removed fixed height. Let it scale naturally */
+            display: flex; justify-content: center; align-items: center;
+        }
+        .town-banner img { 
+            width: 100%; height: auto; display: block; image-rendering: pixelated; 
+        }
+        
+        .town-name-plate {
+            position: absolute; top: 1rem; left: 1.5rem; background: rgba(2, 6, 23, 0.7);
+            padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid var(--border); backdrop-filter: blur(2px);
+            z-index: 10;
+        }
+        .town-name { font-family: 'Cinzel', serif; font-size: 2rem; color: #FBBF24; text-shadow: 0 0 10px rgba(251,191,36,0.4); margin: 0; line-height: 1;}
+        .town-biome { color: var(--ink); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; }
+
+        .control-bar { background: var(--panel); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; display: flex; gap: 1.5rem; align-items: center; justify-content: center; max-width: 1200px; margin: 0 auto; }
+        .control-bar label { font-size: 0.9rem; color: var(--accent-2); display: flex; flex-direction: column; gap: 0.4rem;}
+        .control-bar select, .control-bar input { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.5rem; border-radius: 0.25rem; font-family: inherit; font-size: 0.9rem; }
+        .btn { background: var(--panel-2); border: 1px solid var(--border); color: var(--ink); padding: 0.6rem 1.2rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit; font-weight: bold;}
+        .btn:hover { border-color: var(--accent); color: var(--accent); }
+        .btn.primary { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; border-color: var(--accent); }
+        .btn.primary:hover { filter: brightness(1.2); color: #020617; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem;}
+        .tab-btn { background: var(--bg); border: 1px solid var(--border); color: var(--muted); padding: 0.75rem 1.5rem; border-radius: 0.5rem 0.5rem 0 0; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 1rem;}
+        .tab-btn.active { background: var(--panel); color: var(--accent); border-color: var(--accent); border-bottom-color: var(--panel); margin-bottom: -0.5rem; padding-bottom: 1rem;}
+        .tab-content { display: none; background: var(--panel); border: 1px solid var(--border); padding: 1.5rem; border-radius: 0 0.5rem 0.5rem 0.5rem; min-height: 400px; }
+        .tab-content.active { display: block; }
+
+        /* NPC Dialogue Box */
+        .dialogue-box { background: var(--bg-2); border: 1px solid var(--accent-2); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; min-height: 80px; display: flex; align-items: center; font-size: 1.1rem; color: var(--ink); box-shadow: inset 0 0 20px rgba(0,0,0,0.5);}
+        .npc-speaker { font-weight: bold; color: var(--accent); margin-right: 0.5rem; font-family: 'Cinzel', serif;}
+
+        /* Grids */
+        .npc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+        .npc-card { background: var(--bg); border: 1px solid var(--border); padding: 0.75rem; border-radius: 0.5rem; display: flex; gap: 1rem; align-items: center; cursor: pointer; transition: all 0.2s;}
+        .npc-card:hover { border-color: var(--accent); transform: translateY(-2px); background: var(--panel-2);}
+        .npc-card img { width: 64px; height: 64px; image-rendering: pixelated; border-radius: 0.25rem; border: 1px solid #1E293B; background: #0b1226; }
+        
+        .item-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .item-row { background: var(--bg); border: 1px solid var(--border); padding: 0.75rem 1rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+        .item-info b { color: var(--ink); font-size: 1.05rem;}
+        .item-info p { color: var(--muted); font-size: 0.85rem; margin: 0.25rem 0 0 0; }
+        .item-buy { display: flex; align-items: center; gap: 1rem; }
+        .price { color: #FBBF24; font-weight: bold; font-size: 1.1rem;}
+
+        .quest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .quest-card { background: var(--bg); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; }
+        .quest-card h3 { margin: 0 0 0.5rem 0; font-family: 'Cinzel', serif; color: var(--accent-2); border-bottom: 1px dashed var(--border); padding-bottom: 0.5rem;}
+
+        #init-overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.95); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div id="init-overlay">
+        <h1 style="color: var(--glow)">Audio Context Required</h1>
+        <button id="btn-init" class="btn primary" style="width: auto; padding: 1rem 2rem; font-size: 1.2rem;">Enter Settlement</button>
+    </div>
+
+    <div class="container" style="max-width: 1200px; filter: blur(4px);" id="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1 style="margin: 0;">⛺ Settlement Hub Harness</h1>
+            <a href="index.html" class="btn" style="text-decoration: none;">← Back to Hub</a>
+        </div>
+
+        <div class="control-bar" style="margin-top: 1rem;">
+            <label>Biome: 
+                <select id="biome-select">
+                    <option value="fungal">Rot Garden (Mushroom)</option>
+                    <option value="crystal">Shimmering Grottos (Crystal)</option>
+                    <option value="abyssal">Abyssal Trench (Gothic)</option>
+                    <option value="volcanic">Sulphur Springs (Bunker)</option>
+                    <option value="frozen">Frozen Fjord (Sloped Cabin)</option>
+                    <option value="hub">Hub (Classic Wood)</option>
+                </select>
+            </label>
+            <label>Player Level: <input type="number" id="player-lvl" value="1" min="1" max="10" style="width: 4rem;"></label>
+            <label>Bartering Stat: <input type="number" id="player-barter" value="1" min="1" max="10" style="width: 4rem;"></label>
+            <label>Seed: <input type="number" id="seed" placeholder="Random" style="width: 8rem;"></label>
+            <button id="btn-gen" class="btn primary" style="margin-top: 1.3rem;">Generate Town</button>
+        </div>
+
+        <!-- Panorama Banner -->
+        <div class="town-banner">
+            <div class="town-name-plate">
+                <h2 class="town-name" id="town-title">Oakhaven</h2>
+                <div class="town-biome" id="town-biome">Fungal Biome</div>
+            </div>
+            <img id="town-img" src="" alt="Settlement View">
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="tab-tavern">Tavern & Quests</button>
+            <button class="tab-btn" data-tab="tab-market">Merchant Shop</button>
+            <button class="tab-btn" data-tab="tab-fishmonger">Fishmonger</button>
+            <button class="tab-btn" data-tab="tab-dockmaster">Dockmaster</button>
+        </div>
+
+        <!-- Dialogue Output -->
+        <div class="dialogue-box">
+            <span class="npc-speaker" id="dialogue-speaker">System:</span>
+            <span id="dialogue-text" style="font-style: italic;">Welcome to the settlement. Click on an NPC to talk.</span>
+        </div>
+
+        <!-- TAB CONTENTS -->
+        <div id="tab-tavern" class="tab-content active">
+            <h2 style="margin-top: 0;">Tavern Patrons</h2>
+            <div class="npc-grid" id="tavern-npcs"></div>
+            
+            <h2 style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1rem;">Notice Board</h2>
+            <div class="quest-grid" id="quest-board"></div>
+        </div>
+
+        <div id="tab-market" class="tab-content">
+            <h2 style="margin-top: 0;">Market Inventory</h2>
+            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                <div class="npc-card" id="npc-merchant" style="flex: 1;"></div>
+                <div style="flex: 2; padding: 1rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 0.5rem; color: var(--muted); font-size: 0.85rem;">
+                    The merchant's prices dynamically react to your <b>Bartering Stat</b>. Check back daily for randomized lure components and rare equipment.
+                </div>
+            </div>
+            <div class="item-list" id="merchant-inventory"></div>
+        </div>
+
+        <div id="tab-fishmonger" class="tab-content">
+            <h2 style="margin-top: 0;">The Fishmonger</h2>
+            <div class="npc-grid"><div class="npc-card" id="npc-fishmonger"></div></div>
+            <p class="muted" style="margin-top: 1rem;">(Fish selling logic is tested in the upcoming Fishing Harness. The Fishmonger buys your catches at dynamic prices based on town demand!)</p>
+        </div>
+
+        <div id="tab-dockmaster" class="tab-content">
+            <h2 style="margin-top: 0;">The Boatwright</h2>
+            <div class="npc-grid"><div class="npc-card" id="npc-dockmaster"></div></div>
+            <p class="muted" style="margin-top: 1rem;">(Dockmaster repairs your boat HP to full. Upgrades like Iron Plating and Lanterns are purchased via the Merchant.)</p>
+        </div>
+    </div>
+
+   <script type="module">
+        import { createRng } from './js/util/rng.js';
+        import { AudioEngine } from './js/audio/audio_engine.js';
+        import { SFX } from './js/audio/sfx_generator.js';
+        import { MusicEngine } from './js/audio/music_engine.js';
+        import { generateSettlementArt } from './js/art/settlement_generator.js';
+        import { generateNPCData } from './js/data/npc_data_generator.js';
+        import { generateFishData } from './js/data/fish_data_generator.js';
+        import { MerchantGenerator } from './js/economy/merchant_generator.js';
+        import { QuestGenerator } from './js/economy/quest_generator.js';
+        import { DialogueGenerator } from './js/economy/dialogue_generator.js';
+        import { generateSettlementName } from './js/exploration/global_map.js';
+
+        let currentNPCs = {};
+        let currentFishPool =[];
+
+        // --- 1. INITIALIZATION ---
+        document.getElementById('btn-init').addEventListener('click', async () => {
+            await AudioEngine.init();
+            AudioEngine.setMasterVolume(0.5);
+            SFX.init();
+            
+            document.getElementById('init-overlay').style.display = 'none';
+            document.getElementById('main-content').style.filter = 'none';
+            
+            document.getElementById('btn-gen').click();
+        });
+
+        // Tab Switching Logic
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+                SFX.playUIHover();
+            });
+        });
+
+        // --- 2. GENERATION LOGIC ---
+        document.getElementById('btn-gen').addEventListener('click', () => {
+            const biomeId = document.getElementById('biome-select').value;
+            const playerLvl = parseInt(document.getElementById('player-lvl').value);
+            const barterLvl = parseInt(document.getElementById('player-barter').value);
+            
+            const seedInput = document.getElementById('seed').value;
+            const seed = seedInput ? parseInt(seedInput) : Date.now();
+            const rng = createRng(seed);
+
+            // 1. Play Biome Music
+            MusicEngine.playBiome(biomeId === 'hub' ? 'hub' : biomeId, createRng(seed));
+
+            // 2. Generate Town Art & Name
+            const art = generateSettlementArt({ rng: createRng(seed), biomeId });
+            
+            // USE THE NEW NAME GENERATOR HERE
+            const townName = generateSettlementName(biomeId, createRng(seed));
+
+            document.getElementById('town-title').innerText = townName;
+            document.getElementById('town-biome').innerText = `${biomeId} Settlement`;
+            document.getElementById('town-img').src = art.imageDataUrl;
+
+            // 3. Generate Local Fish Pool (For Rumors & Quests to reference)
+            currentFishPool =[];
+            for (let i = 0; i < 8; i++) {
+                currentFishPool.push(generateFishData({ seed: rng.next() * 100000 }));
+            }
+
+            // 4. Generate Core NPCs
+            currentNPCs = {
+                merchant: generateNPCData({ seed: rng.next() * 100000 }),
+                fishmonger: generateNPCData({ seed: rng.next() * 100000 }),
+                dockmaster: generateNPCData({ seed: rng.next() * 100000 }),
+                patrons:[
+                    generateNPCData({ seed: rng.next() * 100000 }),
+                    generateNPCData({ seed: rng.next() * 100000 })
+                ]
+            };
+
+            // 5. Render NPCs
+            renderNPC(document.getElementById('npc-merchant'), currentNPCs.merchant, 'Merchant');
+            renderNPC(document.getElementById('npc-fishmonger'), currentNPCs.fishmonger, 'Fishmonger');
+            renderNPC(document.getElementById('npc-dockmaster'), currentNPCs.dockmaster, 'Boatwright');
+            
+            const tavernCont = document.getElementById('tavern-npcs');
+            tavernCont.innerHTML = '';
+            currentNPCs.patrons.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'npc-card';
+                renderNPC(el, p, 'Tavern Patron');
+                tavernCont.appendChild(el);
+            });
+
+            // 6. Generate & Render Shop Inventory
+            const inventory = MerchantGenerator.generateInventory(seed, biomeId, barterLvl);
+            const invCont = document.getElementById('merchant-inventory');
+            invCont.innerHTML = '';
+            
+            inventory.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `
+                    <div class="item-info">
+                        <b>${item.name}</b> <span style="font-size:0.7rem; color:var(--muted); text-transform:uppercase;">[${item.type}]</span>
+                        <p>${item.desc || (item.stock === 99 ? 'Endless supply.' : `In stock: ${item.stock}`)}</p>
+                    </div>
+                    <div class="item-buy">
+                        <span class="price">${item.price}g</span>
+                        <button class="btn primary btn-buy">Buy</button>
+                    </div>
+                `;
+                row.querySelector('.btn-buy').addEventListener('click', () => {
+                    SFX.playGold();
+                    triggerDialogue(currentNPCs.merchant, DialogueGenerator.getHaggleResponse(true, rng));
+                });
+                invCont.appendChild(row);
+            });
+
+            // 7. Generate & Render Quests
+            const biomesList =['fungal', 'crystal', 'abyssal', 'volcanic', 'frozen'];
+            const quests = QuestGenerator.generateQuestBoard(seed, playerLvl, currentFishPool, biomesList);
+            const questCont = document.getElementById('quest-board');
+            questCont.innerHTML = '';
+
+            quests.forEach(q => {
+                const qCard = document.createElement('div');
+                qCard.className = 'quest-card';
+                
+                // Fetch dynamic flavor text from the dialogue engine
+                const flavor = DialogueGenerator.getQuestFlavor(q, rng);
+
+                qCard.innerHTML = `
+                    <h3>${q.title}</h3>
+                    <p style="font-style:italic; font-size:0.85rem; color:var(--muted); margin-bottom: 0.5rem;">"${flavor}"</p>
+                    <p style="font-size: 0.9rem; color:var(--ink);">${q.desc}</p>
+                    <div style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid var(--border); font-size: 0.85rem;">
+                        <span style="color:#FBBF24; font-weight:bold;">Reward: ${q.rewards.gold}g</span> | 
+                        <span style="color:#A78BFA; font-weight:bold;">${q.rewards.xp} XP</span>
+                        ${q.rewards.item ? `<br/><span style="color:#3B82F6; font-weight:bold;">+ ${q.rewards.item.qty}x ${q.rewards.item.id.replace('part_', '').replace('_', ' ')}</span>` : ''}
+                    </div>
+                `;
+                questCont.appendChild(qCard);
+            });
+
+            // Clear dialogue box
+            document.getElementById('dialogue-speaker').innerText = "System:";
+            document.getElementById('dialogue-text').innerText = `You entered ${townName}. The air smells like ${biomeId === 'volcanic' ? 'sulphur' : 'damp moss'}.`;
+        });
+
+        // --- HELPER: RENDER NPC CARD & ATTACH DIALOGUE ---
+        function renderNPC(element, npcData, roleOverride) {
+            element.innerHTML = `
+                <img src="${npcData.imageDataUrl}" alt="${npcData.name}">
+                <div>
+                    <b style="color:var(--ink); font-size: 1.1rem;">${npcData.name}</b>
+                    <div style="font-size:0.8rem; color:var(--muted);">${npcData.race} ${npcData.gender}</div>
+                    <div style="font-size:0.75rem; color:var(--accent); text-transform:uppercase; margin-top:0.2rem;">${roleOverride}</div>
+                </div>
+            `;
+            
+            element.addEventListener('click', () => {
+                let text = "";
+                const rng = createRng(Date.now());
+
+                if (roleOverride === 'Tavern Patron') {
+                    // Patrons drop gameplay hints about the fish generated for this town!
+                    const randomFish = rng.pick(currentFishPool);
+                    text = DialogueGenerator.generateRumor(randomFish, rng);
+                } else {
+                    // Merchants/Dockmasters say greetings
+                    text = DialogueGenerator.getGreeting(roleOverride, rng);
+                }
+
+                triggerDialogue(npcData, text);
+            });
+        }
+
+        // --- HELPER: TRIGGER DIALOGUE ---
+        function triggerDialogue(npcData, text) {
+            document.getElementById('dialogue-speaker').innerText = npcData.name + ":";
+            document.getElementById('dialogue-text').innerText = `"${text}"`;
+            
+            // Play Animalese Audio!
+            SFX.speakText(text, npcData.race, npcData.gender, 40);
+        }
+
+    </script>
+</body>
+</html>

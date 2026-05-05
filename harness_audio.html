@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Harness - Underdark Fishing</title>
+    <!-- FIX: Stops the annoying favicon 404 error -->
+    <link rel="icon" href="data:,">
+    <!-- Import Tone.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .audio-section { background: var(--panel-2); border: 1px solid var(--border); padding: 1.5rem; border-radius: 0.5rem; margin-bottom: 1.5rem; }
+        .audio-section h3 { margin-top: 0; color: var(--accent-2); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem; display: flex; justify-content: space-between;}
+        .btn-grid { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .btn { background: var(--panel); border: 1px solid var(--border); color: var(--ink); padding: 0.75rem 1.25rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit; font-size: 0.95rem; font-weight: bold; transition: all 0.15s;}
+        .btn:hover:not(:disabled) { border-color: var(--accent); background: #1e293b; color: var(--accent); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn.danger { border-color: #991B1B; color: #FCA5A5; }
+        .btn.danger:hover:not(:disabled) { background: #7F1D1D; color: white; border-color: #DC2626; }
+        .btn.success { border-color: #166534; color: #86EFAC; }
+        .btn.success:hover:not(:disabled) { background: #14532D; color: white; border-color: #22C55E; }
+        .btn.primary { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; border-color: var(--accent); }
+        .btn.primary:hover:not(:disabled) { filter: brightness(1.2); color: #020617; }
+        
+        #init-overlay {
+            position: fixed; inset: 0; background: rgba(2, 6, 23, 0.9); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        
+        .control-row { display: flex; align-items: center; gap: 1rem; margin-top: 1rem; background: var(--panel); padding: 1rem; border-radius: 0.25rem; border: 1px solid var(--border); flex-wrap: wrap;}
+        input[type=range] { flex-grow: 1; cursor: pointer; }
+        input[type=text] { flex-grow: 1; background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.75rem; border-radius: 0.25rem; font-family: inherit; width: 100%;}
+        select { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.5rem; border-radius: 0.25rem; font-family: inherit; }
+    </style>
+</head>
+<body>
+    <div id="init-overlay">
+        <h1 style="color: var(--glow)">Sound requires interaction</h1>
+        <p class="muted" style="margin-bottom: 2rem;">Click the button below to start the Web Audio API.</p>
+        <button id="btn-init" class="btn primary" style="padding: 1rem 2rem; font-size: 1.2rem;">Initialize Audio Context</button>
+    </div>
+
+    <div class="container" style="max-width: 900px; filter: blur(4px); transition: filter 0.3s;" id="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>🔊 Procedural Audio Harness</h1>
+            <a href="index.html" style="background: var(--panel-2); color: var(--ink); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 0.25rem; text-decoration: none;">← Back to Hub</a>
+        </div>
+        <p class="muted" style="margin-bottom: 2rem;">Testing procedural Tone.js sound synthesis. All volumes normalized to -12dB standard.</p>
+
+        <!-- MASTER VOLUME -->
+        <div class="control-row" style="margin-bottom: 2rem;">
+            <label for="master-vol" style="font-weight: bold; width: 140px;">Master Volume:</label>
+            <input type="range" id="master-vol" min="0" max="100" value="50" disabled>
+            <span id="vol-readout" class="muted small">50%</span>
+        </div>
+
+        <div class="audio-section">
+            <h3>User Interface & State</h3>
+            <div class="btn-grid">
+                <button class="btn sfx-btn" data-sfx="hover">Hover (Thock)</button>
+                <button class="btn sfx-btn" data-sfx="select">Select (Ping)</button>
+                <button class="btn sfx-btn" data-sfx="error">Error (Thud)</button>
+                <button class="btn sfx-btn" data-sfx="gold">Sell / Gold (Jingle)</button>
+                <button class="btn success sfx-btn" data-sfx="catch">Catch Success!</button>
+                <button class="btn success sfx-btn" data-sfx="levelup">Level Up!</button>
+            </div>
+        </div>
+
+        <div class="audio-section">
+            <h3>Fishing Minigame & Exploration</h3>
+            <div class="btn-grid">
+                <button class="btn sfx-btn" data-sfx="boat">Boat Move</button>
+                <button class="btn sfx-btn" data-sfx="cast">Cast Line</button>
+                <button class="btn sfx-btn" data-sfx="splash">Lure Splash</button>
+                <button class="btn sfx-btn" data-sfx="reel">Reel Click</button>
+                <button class="btn danger sfx-btn" data-sfx="snap">Line Snap!</button>
+            </div>
+            
+            <div class="control-row">
+                <label for="tension-slider" style="font-weight: bold; width: 140px;">Tension: <span id="tension-val" style="color: var(--warn)">0</span>%</label>
+                <input type="range" id="tension-slider" min="0" max="100" value="0" disabled>
+                <span class="muted small">Drag above 50% to trigger alarm.</span>
+            </div>
+        </div>
+
+        <div class="audio-section" style="border-color: var(--accent);">
+            <h3 style="color: var(--accent);">🎶 Generative Biome Music</h3>
+            
+            <div class="control-row">
+                <label style="font-weight: bold;">Biome:
+                    <select id="music-biome">
+                        <option value="fungal">Rot Garden (Fungal)</option>
+                        <option value="crystal">Shimmering Grottos (Crystal)</option> 
+                        <option value="abyssal">Abyssal Trench (Deep)</option> 
+                        <option value="volcanic">Sulphur Springs (Volcanic)</option> 
+                        <option value="frozen">Frozen Fjord (Ice)</option>
+                        <option value="hub">Settlement Dock (Hub)</option> <!-- ENABLED -->
+                    </select>
+                </label>
+                
+                <button class="btn primary" id="btn-play-music">▶ Play / Regenerate</button>
+                <button class="btn danger" id="btn-stop-music">■ Stop</button>
+            </div>
+        </div>
+
+        <div class="audio-section">
+            <h3>NPC "Animalese" Dialogue Engine</h3>
+            <input type="text" id="dialogue-text" value="Ah, a new arrival! The fishing is dangerous down here, but the rewards are grand." />
+            <div class="control-row">
+                <label>Race:
+                    <select id="diag-race">
+                        <option value="Human">Human</option>
+                        <option value="Elf">Elf</option>
+                        <option value="Dwarf">Dwarf</option>
+                        <option value="Orc">Orc</option>
+                    </select>
+                </label>
+                <label>Gender:
+                    <select id="diag-gender">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                    </select>
+                </label>
+                <label style="display:flex; align-items:center; gap:0.5rem; flex-grow:1;">Speed: 
+                    <input type="range" id="diag-speed" min="20" max="100" value="45" disabled>
+                </label>
+                <button class="btn primary" id="btn-speak">Speak!</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { AudioEngine } from './js/audio/audio_engine.js';
+        import { SFX } from './js/audio/sfx_generator.js';
+        import { MusicEngine } from './js/audio/music_engine.js';
+        import { createRng } from './js/util/rng.js';
+
+        const initOverlay = document.getElementById('init-overlay');
+        const mainContent = document.getElementById('main-content');
+        
+        // 1. Initialize
+        document.getElementById('btn-init').addEventListener('click', async () => {
+            await AudioEngine.init();
+            SFX.init();
+            
+            // Set slider to 50% baseline
+            const initialVol = document.getElementById('master-vol').value;
+            AudioEngine.setMasterVolume(initialVol / 100);
+
+            initOverlay.style.display = 'none';
+            mainContent.style.filter = 'none';
+            document.querySelectorAll('input[type=range]').forEach(el => el.disabled = false);
+        });
+
+        // 2. Master Volume
+        const volSlider = document.getElementById('master-vol');
+        const volReadout = document.getElementById('vol-readout');
+        volSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            volReadout.innerText = `${val}%`;
+            AudioEngine.setMasterVolume(val / 100);
+        });
+
+        // 3. SFX Buttons
+        document.querySelectorAll('.sfx-btn').forEach(btn => {
+            btn.addEventListener('mousedown', () => {
+                const type = btn.dataset.sfx;
+                if (type === 'hover') SFX.playUIHover();
+                else if (type === 'select') SFX.playUISelect();
+                else if (type === 'error') SFX.playError();
+                else if (type === 'gold') SFX.playGold();
+                else if (type === 'catch') SFX.playCatchSuccess();
+                else if (type === 'levelup') SFX.playLevelUp();
+                else if (type === 'boat') SFX.playBoatMove();
+                else if (type === 'cast') SFX.playCast();
+                else if (type === 'splash') SFX.playSplash();
+                else if (type === 'reel') SFX.playReel();
+                else if (type === 'snap') SFX.playLineSnap();
+            });
+        });
+
+        // 4. Tension Slider
+        const tensionSlider = document.getElementById('tension-slider');
+        const tensionVal = document.getElementById('tension-val');
+        tensionSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            tensionVal.innerText = val;
+            if (val < 50) tensionVal.style.color = "var(--ink)";
+            else if (val < 85) tensionVal.style.color = "var(--warn)";
+            else tensionVal.style.color = "#DC2626"; 
+            SFX.updateTension(val);
+        });
+        tensionSlider.addEventListener('mouseup', () => {
+            tensionSlider.value = 0;
+            tensionVal.innerText = "0";
+            tensionVal.style.color = "var(--ink)";
+            SFX.updateTension(0);
+        });
+
+        // 5. Music Generator Controls
+        document.getElementById('btn-play-music').addEventListener('click', () => {
+            const biomeId = document.getElementById('music-biome').value;
+            const rng = createRng(Date.now()); 
+            MusicEngine.playBiome(biomeId, rng);
+        });
+
+        document.getElementById('btn-stop-music').addEventListener('click', () => {
+            MusicEngine.stop();
+        });
+
+        // 6. Dialogue Engine
+        document.getElementById('btn-speak').addEventListener('click', () => {
+            const text = document.getElementById('dialogue-text').value;
+            const race = document.getElementById('diag-race').value;
+            const gender = document.getElementById('diag-gender').value;
+            const speed = parseInt(document.getElementById('diag-speed').value);
+            SFX.speakText(text, race, gender, speed);
+        });
+    </script>
+</body>
+</html>

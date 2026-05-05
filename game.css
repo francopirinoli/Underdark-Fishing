@@ -1,0 +1,728 @@
+/* game.css */
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+:root {
+    /* Core Palette */
+    --bg-void: #000000;
+    --panel-base: #0F172A;
+    --panel-border: #1E293B;
+    --panel-light: #1e293b;
+    
+    /* Accents */
+    --cyan-glow: #22D3EE;
+    --gold-warn: #FBBF24;
+    --red-danger: #EF4444;
+    --green-safe: #22C55E;
+    
+    /* Typography */
+    --text-main: #E2E8F0;
+    --text-muted: #64748B;
+    --font-crpg: 'VT323', monospace;
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none; /* Prevent accidental text selection while playing */
+}
+
+/* =========================================
+   CUSTOM SCROLLBAR
+========================================= */
+::-webkit-scrollbar {
+    width: 12px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-void);
+    border-left: 2px solid var(--panel-border);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--panel-border);
+    border: 1px solid var(--cyan-glow);
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--cyan-glow);
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--bg-void);
+    overflow: hidden; /* Strict no-scroll */
+    font-family: var(--font-crpg);
+    color: var(--text-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 
+  THE MASTER CONTAINER
+  Fixed at 1280x720 (16:9). 
+  JS will dynamically update the 'transform: scale()' property to fit the monitor.
+*/
+#game-container {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    background: var(--bg-void);
+    overflow: hidden;
+    transform-origin: center center;
+    /* Optional: subtle border to see the game bounds against black letterboxing */
+    border: 1px solid #111; 
+}
+
+/* =========================================
+   Z-INDEX LAYERING ARCHITECTURE
+========================================= */
+
+/* Z-0 | THE WORLD */
+#z0-world {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: var(--bg-void);
+}
+#z0-world canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+/* Z-10 | THE HUD */
+#z10-hud {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none; /* Let clicks pass through to the world */
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* HUD Panels */
+.hud-panel {
+    background: rgba(15, 23, 42, 0.85); /* Semi-transparent navy */
+    border: 2px solid var(--panel-border);
+    padding: 1rem;
+    border-radius: 4px;
+    pointer-events: auto; /* Re-enable clicks for UI elements */
+    backdrop-filter: blur(4px);
+}
+
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+
+/* Vital Bars */
+.vital-row { display: flex; align-items: center; margin-bottom: 0.5rem; }
+.vital-label { width: 60px; font-size: 1.2rem; color: var(--text-muted); text-transform: uppercase; }
+.vital-bar-track { flex-grow: 1; height: 16px; background: var(--bg-void); border: 1px solid var(--panel-border); width: 150px; }
+.vital-bar-fill { height: 100%; transition: width 0.2s; }
+.fill-hp { background: var(--green-safe); }
+.fill-fuel { background: var(--gold-warn); }
+
+/* Minimap & Clock */
+.nav-box { text-align: right; }
+.clock-text { font-size: 1.5rem; color: var(--cyan-glow); margin-bottom: 0.5rem; text-shadow: 0 0 5px rgba(34, 211, 238, 0.4); }
+#minimap-container { width: 150px; height: 150px; background: var(--bg-void); border: 2px solid var(--panel-border); }
+
+/* Action Log */
+.action-log { width: 350px; height: 100px; font-size: 1.2rem; display: flex; flex-direction: column; justify-content: flex-end; }
+.log-msg { margin-top: 0.2rem; animation: fadeOut 4s forwards; }
+
+@keyframes fadeOut {
+    0% { opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Z-50 | ACTION OVERLAYS (Minigame / Town Hub) */
+#z50-action {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: none; /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+/* Z-100 | THE GRIMOIRE (Main Menus) */
+#z100-grimoire {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: none; /* Hidden by default */
+    background: var(--panel-base);
+    color: var(--text-main);
+    flex-direction: column;
+}
+
+.grimoire-header {
+    display: flex;
+    border-bottom: 2px solid var(--cyan-glow);
+    background: var(--bg-void);
+}
+.grim-tab {
+    padding: 1rem 2rem;
+    font-size: 1.5rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-transform: uppercase;
+}
+.grim-tab.active {
+    color: var(--cyan-glow);
+    background: var(--panel-base);
+    border-top: 2px solid var(--cyan-glow);
+    border-left: 2px solid var(--cyan-glow);
+    border-right: 2px solid var(--cyan-glow);
+    margin-bottom: -2px;
+}
+.grimoire-content {
+    flex-grow: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+/* =========================================
+   Z-200 | SYSTEM MENUS (Start Screen, Char Creator)
+========================================= */
+#z200-menus {
+    position: absolute;
+    inset: 0;
+    z-index: 200;
+    display: none;
+    background: var(--bg-void);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.menu-title {
+    font-size: 5rem;
+    color: var(--cyan-glow);
+    text-shadow: 0 0 20px rgba(34, 211, 238, 0.5);
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.menu-btn {
+    background: var(--panel-base);
+    color: var(--text-main);
+    border: 2px solid var(--panel-border);
+    padding: 1rem 3rem;
+    font-size: 2rem;
+    font-family: inherit;
+    cursor: pointer;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.2s;
+    width: 400px;
+}
+.menu-btn:hover:not(:disabled) {
+    border-color: var(--cyan-glow);
+    color: var(--cyan-glow);
+    background: var(--panel-light);
+    transform: translateY(-2px);
+}
+.menu-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* Character Creation Layout */
+.char-create-container {
+    display: flex;
+    gap: 2rem;
+    background: var(--panel-base);
+    border: 2px solid var(--panel-border);
+    padding: 2rem;
+    border-radius: 0.5rem;
+    width: 800px;
+}
+
+.char-left { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.char-right { flex: 1; }
+
+.char-portrait-box {
+    width: 256px;
+    height: 256px;
+    background: var(--bg-void);
+    border: 2px solid var(--panel-border);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+    image-rendering: pixelated;
+}
+
+.char-input-group {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 1rem;
+}
+.char-input-group label { color: var(--text-muted); font-size: 1.2rem; margin-bottom: 0.2rem; }
+.char-input-group select, .char-input-group input {
+    background: var(--bg-void); color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    padding: 0.5rem; font-family: inherit; font-size: 1.2rem;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed var(--panel-border);
+    padding: 0.5rem 0;
+    font-size: 1.4rem;
+}
+.stat-controls button {
+    background: var(--panel-light); color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    width: 30px; height: 30px;
+    font-family: inherit; cursor: pointer;
+}
+.stat-controls button:hover:not(:disabled) { border-color: var(--cyan-glow); color: var(--cyan-glow); }
+.stat-controls button:disabled { opacity: 0.3; cursor: not-allowed; }
+.stat-val { display: inline-block; width: 30px; text-align: center; color: var(--cyan-glow); font-weight: bold;}
+
+/* =========================================
+   GRIMOIRE INNER TABS (Map & Character)
+========================================= */
+.grim-page {
+    width: 100%;
+    height: 100%;
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Map Tab Styles */
+#grim-map-canvas {
+    background-color: var(--bg-void);
+    border: 2px solid var(--panel-border);
+    border-radius: 8px;
+    image-rendering: pixelated;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 1.2rem;
+    color: var(--text-muted);
+}
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid var(--panel-border);
+}
+
+/* Character Tab Styles */
+.grim-stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dashed var(--panel-border);
+    padding: 0.8rem 0;
+    font-size: 1.5rem;
+}
+.grim-stat-name {
+    color: var(--text-main);
+}
+.grim-stat-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.grim-stat-val {
+    display: inline-block;
+    width: 30px;
+    text-align: center;
+    color: var(--cyan-glow);
+    font-weight: bold;
+}
+.grim-stat-btn {
+    background: var(--panel-light);
+    color: var(--text-main);
+    border: 1px solid var(--panel-border);
+    width: 32px;
+    height: 32px;
+    font-family: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.1s;
+}
+.grim-stat-btn:hover:not(:disabled) {
+    border-color: var(--cyan-glow);
+    color: var(--cyan-glow);
+    background: var(--panel-base);
+}
+.grim-stat-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* =========================================
+   INVENTORY & LOADOUT TABS
+========================================= */
+.inv-slot {
+    width: 72px;
+    height: 72px;
+    background: #000;
+    border: 2px solid var(--panel-border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.1s;
+    position: relative;
+}
+.inv-slot img {
+    width: 90%;
+    height: 90%;
+    image-rendering: pixelated;
+    pointer-events: none;
+}
+.inv-slot:hover {
+    border-color: var(--cyan-glow);
+    transform: scale(1.05);
+}
+.inv-slot.selected {
+    border-color: var(--gold-warn);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+.inv-qty {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #FFF;
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+}
+
+.loadout-slot {
+    background: var(--bg-void);
+    border: 2px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+.loadout-slot .slot-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+}
+.loadout-slot img {
+    width: 96px;
+    height: 96px;
+    image-rendering: pixelated;
+    background: #000;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+}
+.loadout-details b {
+    color: var(--cyan-glow);
+    font-size: 1.6rem;
+    display: block;
+}
+.loadout-details span {
+    color: var(--text-main);
+    font-size: 1.2rem;
+}
+
+.dashboard-group {
+    background: var(--panel-base);
+    border: 1px solid var(--panel-border);
+    padding: 1rem;
+    border-radius: 6px;
+}
+.dashboard-group h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 0.3rem;
+}
+.dash-pos { color: var(--glow); }
+.dash-neg { color: var(--red-danger); }
+
+/* Crafting Bench Slots */
+.craft-slot {
+    width: 72px;
+    height: 72px;
+    background: var(--bg-void);
+    border: 2px dashed var(--text-muted);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.1s;
+}
+.craft-slot img {
+    width: 90%;
+    height: 90%;
+    image-rendering: pixelated;
+    pointer-events: none;
+}
+.craft-slot:hover {
+    border-color: var(--cyan-glow);
+    border-style: solid;
+}
+
+/* =========================================
+   Z-75 | SETTLEMENT HUB
+========================================= */
+
+.hub-banner {
+    width: 100%;
+    height: 280px; /* Increased from 240px to show more of the beautiful pixel art */
+    border-bottom: 2px solid var(--panel-border);
+    position: relative;
+    background: #020617;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end; /* Anchors the dock to the bottom */
+    overflow: hidden;
+}
+.hub-banner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: bottom; /* Ensures the buildings and dock are always fully visible */
+    image-rendering: pixelated;
+}
+.hub-name-plate {
+    position: absolute;
+    top: 1rem;
+    left: 2rem;
+    background: rgba(2, 6, 23, 0.85);
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    border: 1px solid var(--panel-border);
+    z-index: 10;
+}
+.hub-name {
+    font-size: 2rem;
+    color: var(--gold-warn);
+    margin: 0;
+    line-height: 1;
+}
+.hub-biome {
+    color: var(--text-main);
+    font-size: 1.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.3rem;
+}
+
+/* New JRPG Dialogue Box - Moved to Top Right */
+.hub-dialogue-box {
+    position: absolute;
+    top: 1rem;     /* Moved from bottom to top */
+    right: 2rem;   /* Anchored to the right side */
+    left: auto;    /* Removed full-width stretching */
+    width: 65%;    /* Takes up the right portion of the empty sky */
+    bottom: auto;
+    margin: 0;
+    background: rgba(15, 23, 42, 0.85); 
+    backdrop-filter: blur(4px); 
+    border: 2px solid var(--cyan-glow);
+    padding: 0.8rem 1.2rem; /* Slightly tighter padding to save space */
+    border-radius: 8px;
+    min-height: 80px; /* Thinner height */
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    box-shadow: inset 0 0 20px rgba(34, 211, 238, 0.1), 0 4px 15px rgba(0, 0, 0, 0.6);
+    z-index: 20; 
+}
+#hub-dialogue-portrait {
+    width: 64px;  /* Scaled down slightly to fit the sleeker box */
+    height: 64px;
+    image-rendering: pixelated;
+    border-radius: 4px;
+    border: 2px solid var(--panel-border);
+    background: #000;
+    flex-shrink: 0;
+}
+.hub-dialogue-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem; /* Tighter gap */
+    font-size: 1.3rem; /* Adjusted slightly so long text fits nicely */
+    color: var(--text-main);
+}
+.npc-speaker {
+    font-weight: bold;
+    color: var(--cyan-glow);
+    font-size: 1.3rem;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hub-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.hub-tab-btn {
+    background: var(--bg-void);
+    border: 1px solid var(--panel-border);
+    color: var(--text-muted);
+    padding: 0.8rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    font-family: inherit;
+    font-size: 1.3rem;
+    text-align: left;
+    transition: all 0.1s;
+}
+.hub-tab-btn.active {
+    background: var(--panel-base);
+    color: var(--cyan-glow);
+    border-color: var(--cyan-glow);
+    border-left: 6px solid var(--cyan-glow);
+}
+.hub-tab-btn:hover:not(.active) {
+    border-color: var(--text-muted);
+    color: var(--text-main);
+}
+
+.shop-item-row {
+    background: var(--bg-void);
+    border: 1px solid var(--panel-border);
+    padding: 0.8rem 1rem;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.shop-item-info b { color: var(--text-main); font-size: 1.3rem; }
+.shop-item-info p { color: var(--text-muted); font-size: 1rem; margin: 0.2rem 0 0 0; }
+.shop-buy { display: flex; align-items: center; gap: 1rem; }
+.shop-price { color: var(--gold-warn); font-weight: bold; font-size: 1.3rem; }
+
+/* =========================================
+   BESTIARY & QUEST TABS
+========================================= */
+
+/* Bestiary */
+.bestiary-row {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--panel-border);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.4rem;
+    color: var(--text-main);
+    transition: background 0.1s;
+    text-transform: capitalize;
+}
+.bestiary-row:hover {
+    background: var(--panel-light);
+}
+.bestiary-row.active {
+    background: var(--panel-base);
+    color: var(--cyan-glow);
+    border-left: 4px solid var(--cyan-glow);
+    font-weight: bold;
+}
+.bestiary-row.undiscovered {
+    color: var(--text-muted);
+}
+
+/* Quests */
+.quest-card {
+    background: var(--bg-void);
+    border: 2px solid var(--panel-border);
+    padding: 1.5rem;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+.quest-card.completed {
+    border-color: var(--green-safe);
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.1);
+}
+.quest-title { 
+    color: var(--cyan-glow); 
+    font-size: 1.6rem; 
+    margin: 0 0 0.5rem 0; 
+}
+.quest-desc { 
+    color: var(--text-main); 
+    font-size: 1.1rem; 
+    margin: 0 0 1rem 0; 
+    flex: 1; 
+}
+.quest-tracker {
+    display: flex;
+    justify-content: space-between;
+    font-size: 1.2rem;
+    color: var(--gold-warn);
+    margin-bottom: 0.3rem;
+}
+.quest-bar {
+    width: 100%;
+    height: 8px;
+    background: #000;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+.quest-fill {
+    height: 100%;
+    background: var(--gold-warn);
+    transition: width 0.3s;
+}
+
+/* =========================================
+   SHOP TOOLTIP
+========================================= */
+#shop-tooltip {
+    position: absolute;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--cyan-glow);
+    border-radius: 6px;
+    padding: 1rem;
+    color: var(--text-main);
+    font-size: 1.2rem;
+    pointer-events: none; /* Prevents flickering when mouse is over it */
+    z-index: 3000;
+    min-width: 250px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+#shop-tooltip b { 
+    color: var(--gold-warn); 
+    font-size: 1.4rem; 
+    display: block; 
+    margin-bottom: 0.5rem; 
+}
+#shop-tooltip .tt-row { 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 0.2rem; 
+}

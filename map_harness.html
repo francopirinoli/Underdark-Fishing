@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map Harness - Underdark Fishing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .map-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 1rem;
+        }
+        canvas {
+            background-color: var(--bg-2);
+            border: 2px solid var(--border);
+            border-radius: 0.5rem;
+            width: 100%;
+            aspect-ratio: 1; /* Keep canvases perfectly square */
+            image-rendering: pixelated;
+            cursor: crosshair;
+        }
+        .info-panel {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            background: var(--panel);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+        }
+        .controls input {
+            background: var(--bg-2); border: 1px solid var(--border); color: var(--ink);
+            padding: 0.5rem; border-radius: 0.25rem; font-family: inherit;
+        }
+        .btn {
+            background: linear-gradient(180deg, #22D3EE, #0E7490); 
+            color: #020617; font-weight: bold; border: 1px solid var(--accent);
+            padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit;
+            text-decoration: none;
+        }
+        .tag {
+            display: inline-block; padding: 0.2rem 0.5rem; border-radius: 0.25rem; 
+            font-size: 0.8rem; background: var(--bg); border: 1px solid var(--border);
+            margin-right: 0.25rem; margin-bottom: 0.25rem;
+        }
+        .tag.biome { color: #fff; text-shadow: 0 0 2px #000; }
+        .legend-item { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); margin-right: 1rem; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1400px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>🗺️ Dual-Layer Map Harness</h1>
+            <a href="index.html" style="background: var(--panel-2); color: var(--ink); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 0.25rem; text-decoration: none;">← Back to Hub</a>
+        </div>
+
+        <div class="controls">
+            <label>World Seed: <input type="number" id="seed" placeholder="Enter number..." /></label>
+            <button id="btn-generate" class="btn">Generate New World</button>
+            <span class="muted small">Click any tile on the Global Map to explore its Local Cave.</span>
+        </div>
+
+        <div class="map-container">
+            <!-- Left Side: Global Map -->
+            <div>
+                <h2 style="margin-bottom: 0.5rem;">Global Network</h2>
+                <canvas id="canvas-global" width="512" height="512"></canvas>
+            </div>
+
+            <!-- Right Side: Local Map & Info -->
+            <div>
+                <h2 style="margin-bottom: 0.5rem;">Local Cave Lake <span id="local-title" style="color: var(--muted); font-size: 1rem;"></span></h2>
+                <canvas id="canvas-local" width="512" height="512"></canvas>
+                
+                <div id="node-info" class="info-panel">
+                    <p class="muted">Select a node to view details.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { generateGlobalMap } from './js/exploration/global_map.js';
+        import { generateLocalMap } from './js/exploration/local_map.js';
+        import { BIOMES } from './js/exploration/biomes.js';
+        import { renderGlobalMap, renderLocalMap } from './js/exploration/map_renderer.js';
+
+        let currentWorld = null;
+        let selectedNode = null;
+
+        const canvasGlobal = document.getElementById('canvas-global');
+        const canvasLocal = document.getElementById('canvas-local');
+        const nodeInfo = document.getElementById('node-info');
+        const localTitle = document.getElementById('local-title');
+
+        document.getElementById('btn-generate').addEventListener('click', () => {
+            const seedInput = document.getElementById('seed').value;
+            const seed = seedInput ? parseInt(seedInput) : Date.now();
+            
+            // 1. Generate Global Map
+            currentWorld = generateGlobalMap(seed);
+            
+            // 2. Select the starting node by default
+            selectedNode = currentWorld.nodes[currentWorld.startY][currentWorld.startX];
+            
+            // 3. Render
+            updateDisplay();
+        });
+
+        canvasGlobal.addEventListener('mousedown', (e) => {
+            if (!currentWorld) return;
+            
+            // Calculate which tile was clicked based on canvas scaling
+            const rect = canvasGlobal.getBoundingClientRect();
+            const scaleX = canvasGlobal.width / rect.width;
+            const scaleY = canvasGlobal.height / rect.height;
+            const px = (e.clientX - rect.left) * scaleX;
+            const py = (e.clientY - rect.top) * scaleY;
+            
+            const tileW = canvasGlobal.width / currentWorld.width;
+            const tileH = canvasGlobal.height / currentWorld.height;
+            
+            const gridX = Math.floor(px / tileW);
+            const gridY = Math.floor(py / tileH);
+
+            if (gridX >= 0 && gridX < currentWorld.width && gridY >= 0 && gridY < currentWorld.height) {
+                selectedNode = currentWorld.nodes[gridY][gridX];
+                updateDisplay();
+            }
+        });
+
+        function updateDisplay() {
+            // Re-render Global Map to show selection box
+            renderGlobalMap(canvasGlobal, currentWorld, BIOMES, selectedNode);
+            
+            if (selectedNode) {
+                // Generate and Render Local Map
+                const localMap = generateLocalMap(selectedNode, currentWorld.seed);
+                const biome = BIOMES[selectedNode.biomeId];
+                
+                renderLocalMap(canvasLocal, localMap, biome);
+
+                // Update UI Info
+                localTitle.textContent = `— ${selectedNode.name}`;
+                
+                // Format Exits
+                const exitsArr =[];
+                if (selectedNode.exits.n) exitsArr.push("North");
+                if (selectedNode.exits.s) exitsArr.push("South");
+                if (selectedNode.exits.e) exitsArr.push("East");
+                if (selectedNode.exits.w) exitsArr.push("West");
+                
+                let exitsText = exitsArr.length > 0 ? exitsArr.join(', ') : "Dead End";
+                
+                // Format Settlement
+                let settlementText = selectedNode.hasSettlement 
+                    ? `<div style="margin-top:0.5rem; color: #FBBF24;"><strong>⚓ Settlement:</strong> ${selectedNode.settlementName} (Dock built: ${localMap.dockPlaced ? 'Yes' : 'No'})</div>` 
+                    : "";
+
+                // Generate Local Map Legend
+                const pal = biome.palette;
+                const legendHtml = `
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 0.5rem;">
+                        <span class="legend-item"><div class="legend-color" style="background: ${pal.water}"></div> Water</span>
+                        <span class="legend-item"><div class="legend-color" style="background: ${pal.deepWater}"></div> Deep Water</span>
+                        <span class="legend-item"><div class="legend-color" style="background: ${pal.land}"></div> Land</span>
+                        <span class="legend-item"><div class="legend-color" style="background: ${pal.rock}"></div> Rock</span>
+                        <span class="legend-item"><div class="legend-color" style="background: ${pal.flora}"></div> Flora / Moss</span>
+                        ${selectedNode.hasSettlement ? `<span class="legend-item"><div class="legend-color" style="background: #78350F"></div> Dock</span>` : ''}
+                    </div>
+                `;
+
+                // Update info panel
+                nodeInfo.innerHTML = `
+                <div style="font-size: 1.2rem; color: var(--ink); margin-bottom: 0.5rem;"><strong>${selectedNode.name}</strong></div>
+                <span class="tag biome" style="background-color: ${biome.globalColor}">${biome.name}</span>
+                <span class="tag">Exits: ${exitsText}</span>
+                <span class="tag">Coordinates: [${selectedNode.x}, ${selectedNode.y}]</span>
+                
+                <!-- ADD THIS LINE HERE -->
+                <span class="tag" style="text-transform: capitalize;">Shape: ${localMap.lakeType.replace('_', ' ')}</span>
+                
+                <div style="margin-top:0.5rem; color: var(--muted); font-size: 0.9rem;">${biome.description}</div>
+                ${settlementText}
+                ${legendHtml}
+            `;
+            }
+        }
+
+        // Trigger initial generation
+        document.getElementById('btn-generate').click();
+    </script>
+</body>
+</html>

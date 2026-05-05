@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underdark Fishing</title>
+    <!-- Prevent favicon requests in dev -->
+    <link rel="icon" href="data:,">
+    <!-- Tone.js for Audio Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Game Styles -->
+    <link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+    <!-- THE MASTER CONTAINER -->
+    <div id="game-container">
+
+        <!-- ========================================== -->
+        <!-- Z-0 | THE WORLD (Exploration Map rendering) -->
+        <!-- ========================================== -->
+        <div id="z0-world">
+            <canvas id="game-canvas"></canvas>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-10 | THE HUD (Vitals, Minimap, Logs)     -->
+        <!-- ========================================== -->
+        <div id="z10-hud">
+            <!-- Top Row -->
+            <div class="hud-top">
+                <!-- Vitals -->
+                <div class="hud-panel">
+                    <div class="vital-row">
+                        <span class="vital-label">HULL</span>
+                        <div class="vital-bar-track"><div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div></div>
+                    </div>
+                    <div class="vital-row">
+                        <span class="vital-label">FUEL</span>
+                        <div class="vital-bar-track"><div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 80%;"></div></div>
+                    </div>
+                    <div style="font-size: 1.2rem; margin-top: 0.5rem; color: #E2E8F0;">
+                        🍖 <span id="hud-rations">12</span> Rations
+                    </div>
+                </div>
+
+                <!-- Navigation -->
+                <div class="nav-box">
+                    <div class="hud-panel clock-text" id="hud-clock">Day 1 - 08:00</div>
+                    <div id="minimap-container">
+                        <canvas id="minimap-canvas" width="150" height="150"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="hud-bottom">
+                <!-- Action Log -->
+                <div class="action-log" id="hud-log">
+                    <!-- Logs injected here via JS -->
+                </div>
+
+                <!-- Loadout Quick View -->
+                <div class="hud-panel" style="text-align: right;">
+                    <div style="font-size: 1.2rem; color: var(--cyan-glow);" id="hud-rod-name">Pine Caster</div>
+                    <div style="font-size: 1rem; color: var(--text-muted);" id="hud-lure-name">Bare Hook</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-50 | ACTION OVERLAYS                     -->
+        <!-- ========================================== -->
+        <div id="z50-action">
+            <!-- Fishing Minigame UI injected here -->
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-75 | SETTLEMENT HUB                      -->
+        <!-- ========================================== -->
+        <div id="z75-hub" style="display: none; position: absolute; inset: 0; z-index: 75; background: var(--bg-void); flex-direction: column;">
+            
+            <!-- Panoramic Banner -->
+            <div class="hub-banner">
+                <div class="hub-name-plate">
+                    <h2 class="hub-name" id="hub-title">Town Name</h2>
+                    <div class="hub-biome" id="hub-biome">Biome</div>
+                </div>
+                <img id="hub-img" src="" alt="Settlement View">
+
+                <!-- Dialogue Box Moved INSIDE the banner -->
+                <div class="hub-dialogue-box">
+                    <img id="hub-dialogue-portrait" src="" alt="NPC Portrait" />
+                    <div class="hub-dialogue-content">
+                        <span class="npc-speaker" id="hub-speaker">System</span>
+                        <span id="hub-text" style="font-style: italic;">Welcome to the settlement.</span>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; flex: 1; overflow: hidden; padding: 0 2rem 2rem 2rem; gap: 2rem; margin-top: 1.5rem;">
+                
+                <!-- Left: Navigation Tabs -->
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem; max-width: 250px;">
+                    <div class="hub-tabs">
+                        <button class="hub-tab-btn active" data-tab="market">Merchant</button>
+                        <button class="hub-tab-btn" data-tab="fishmonger">Fishmonger</button>
+                        <button class="hub-tab-btn" data-tab="boatwright">Boatwright</button>
+                        <button class="hub-tab-btn" data-tab="tavern">Tavern</button>
+                    </div>
+                    <button class="menu-btn" id="btn-hub-depart" style="width: 100%; margin-top: auto; padding: 0.8rem; font-size: 1.6rem; border-color: var(--red-danger); color: var(--red-danger);">Depart</button>
+                </div>
+
+                <!-- Right: Active Shop / Content Area -->
+                <div id="hub-content-area" style="flex: 2; height: 100%; background: var(--panel-base); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; overflow-y: auto;">
+                    <!-- Injected dynamically by JS -->
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-100 | THE GRIMOIRE (Pause Menu)          -->
+        <!-- ========================================== -->
+        <div id="z100-grimoire">
+            <div class="grimoire-header">
+                <div class="grim-tab active" data-tab="map">Map</div>
+                <div class="grim-tab" data-tab="inventory">Inventory & Crafting</div>
+                <div class="grim-tab" data-tab="loadout">Loadout</div>
+                <div class="grim-tab" data-tab="character">Character</div>
+                <div class="grim-tab" data-tab="bestiary">Bestiary</div>
+                <div class="grim-tab" data-tab="quests">Quests</div>
+            </div>
+            
+            <div class="grimoire-content" id="grimoire-body">
+                
+                <!-- 1. MAP TAB -->
+                <div id="grim-page-map" class="grim-page" style="display: flex; gap: 2rem;">
+                    <div>
+                        <canvas id="grim-map-canvas" width="512" height="512"></canvas>
+                    </div>
+                   <div class="grim-map-info">
+                        <h2 style="font-size: 2.5rem; margin-top: 0; margin-bottom: 0.5rem;" id="grim-map-title">The Darklake</h2>
+                        <p style="color: var(--text-muted); font-size: 1.2rem; margin-top: 0;">Global Node Network</p>
+                        
+                        <div style="background: var(--bg-void); border: 1px solid var(--panel-border); padding: 1rem; border-radius: 4px; margin-top: 2rem;">
+                            <h3 style="margin-top: 0; color: var(--text-main);">Current Location</h3>
+                            <div id="grim-map-coords" style="color: var(--cyan-glow); font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem;">[0, 0]</div>
+                            <div id="grim-map-biome" style="font-size: 1.2rem;">Biome Name</div>
+                        </div>
+
+                        <!-- NEW: Ecology Section -->
+                        <div style="background: var(--bg-void); border: 1px solid var(--panel-border); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+                            <h3 style="margin-top: 0; margin-bottom: 0.8rem; color: var(--text-main);">Regional Ecology</h3>
+                            <div id="grim-map-ecology" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 120px; overflow-y: auto; padding-right: 0.5rem;">
+                                <!-- Species injected here by JS -->
+                            </div>
+                        </div>
+
+                        <div id="grim-map-legend" style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <!-- Injected by JS based on Biomes -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. CHARACTER TAB -->
+                <div id="grim-page-character" class="grim-page" style="display: none; gap: 2rem;">
+                    <div style="flex: 1; background: var(--bg-void); border: 2px solid var(--panel-border); padding: 2rem; border-radius: 8px; display: flex; flex-direction: column; align-items: center;">
+                        <img id="grim-char-portrait" src="" style="width: 256px; height: 256px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px;" />
+                        <h2 id="grim-char-name" style="font-size: 2.5rem; margin: 1rem 0 0.2rem 0; color: var(--cyan-glow);">Name</h2>
+                        <div id="grim-char-lore" style="color: var(--text-muted); font-size: 1.2rem;">Race Gender</div>
+                        
+                        <div style="width: 100%; margin-top: 2rem;">
+                            <div style="display: flex; justify-content: space-between; font-size: 1.2rem; margin-bottom: 0.5rem;">
+                                <span>Level <span id="grim-char-level" style="color: var(--cyan-glow); font-weight: bold;">1</span></span>
+                                <span><span id="grim-char-xp">0</span> / <span id="grim-char-max-xp">100</span> XP</span>
+                            </div>
+                            <div style="width: 100%; height: 16px; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; overflow: hidden;">
+                                <div id="grim-char-xp-fill" style="width: 0%; height: 100%; background: var(--cyan-glow);"></div>
+                            </div>
+                        </div>
+                        
+                        <div style="width: 100%; margin-top: 2rem; display: flex; justify-content: space-between; font-size: 1.5rem; background: var(--panel-base); padding: 1rem; border-radius: 4px; border: 1px solid var(--panel-border);">
+                            <span>💰 <span id="grim-char-gold" style="color: var(--gold-warn);">0</span>g</span>
+                            <span>🍖 <span id="grim-char-rations">0</span></span>
+                        </div>
+                    </div>
+                    
+                    <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); padding: 2rem; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid var(--panel-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                            <h2 style="margin: 0; font-size: 2rem;">Attributes</h2>
+                            <div style="color: var(--gold-warn); font-size: 1.2rem;">Unspent Points: <span id="grim-char-pts">0</span></div>
+                        </div>
+                        <div id="grim-char-stats" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                    </div>
+                </div>
+
+                <!-- 3. INVENTORY & CRAFTING TAB -->
+                <div id="grim-page-inventory" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                    <!-- Left: Bench & Grid -->
+                    <div style="flex: 2; display: flex; flex-direction: column; gap: 1rem; overflow: hidden;">
+                        
+                        <div style="background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem;">
+                                <h3 style="margin: 0; color: var(--cyan-glow); font-size: 1.8rem;">Crafting Bench</h3>
+                                <span style="color: var(--text-muted); font-size: 1.2rem;">Select 3 to 5 Parts</span>
+                            </div>
+                            <div id="grim-craft-slots" style="display: flex; gap: 1rem;"></div>
+                        </div>
+
+                        <div style="flex: 1; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
+                            <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: baseline;">
+                                <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Cargo Hold & Parts</h2>
+                                <span style="color: var(--text-muted); font-size: 1.2rem;">Capacity: <span id="grim-inv-count" style="color: var(--text-main);">0</span> / <span id="grim-inv-max">10</span></span>
+                            </div>
+                            <div id="grim-inv-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Details / Preview -->
+                    <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column;">
+                        <div id="grim-inv-details" style="display: none; flex-direction: column; height: 100%;">
+                            <div style="text-align: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                                <img id="grim-item-img" src="" style="width: 128px; height: 128px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000;" />
+                                <h2 id="grim-item-name" style="color: var(--gold-warn); margin: 0.5rem 0 0 0; font-size: 2rem;">Item Name</h2>
+                                <div id="grim-item-sub" style="color: var(--text-muted); font-size: 1.2rem;">Rarity Type</div>
+                            </div>
+                            
+                            <div id="grim-item-stats" style="flex: 1; font-size: 1.4rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                            
+                            <div style="margin-top: auto; display: flex; gap: 1rem;">
+                                <button id="btn-inv-action" class="menu-btn" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; display: none;">Dissect</button>
+                                <button id="btn-inv-equip" class="menu-btn" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; display: none; border-color: var(--green-safe); color: var(--green-safe);">Equip</button>
+                            </div>
+                        </div>
+                        
+                        <div id="grim-inv-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem; text-align: center;">
+                            Select an item in your cargo,<br>or add parts to the Bench.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. LOADOUT TAB -->
+                <div id="grim-page-loadout" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem;">
+                        <div class="loadout-slot" id="loadout-boat">
+                            <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Boat Chassis</h3>
+                            <div class="slot-content"></div>
+                        </div>
+                        <div class="loadout-slot" id="loadout-rod">
+                            <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Fishing Rod</h3>
+                            <div class="slot-content"></div>
+                        </div>
+                        <div class="loadout-slot" id="loadout-lure">
+                            <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Active Lure</h3>
+                            <div class="slot-content"></div>
+                        </div>
+                    </div>
+                    <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; overflow-y: auto;">
+                        <h2 style="margin: 0 0 1rem 0; color: var(--cyan-glow); font-size: 2.2rem;">Physics & Effective Stats</h2>
+                        <div id="grim-dashboard-content" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+                    </div>
+                </div>
+
+                <!-- 5. BESTIARY TAB (NEW) -->
+                <div id="grim-page-bestiary" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                    <!-- Left: Grid of Discovered Fish -->
+                    <div style="flex: 2; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
+                        <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: baseline;">
+                            <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Bestiary</h2>
+                            <span style="color: var(--text-muted); font-size: 1.2rem;">Discovered: <span id="grim-bestiary-count" style="color: var(--text-main);">0</span></span>
+                        </div>
+                        <div id="grim-bestiary-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;">
+                            <!-- Bestiary slots injected here -->
+                        </div>
+                    </div>
+
+                    <!-- Right: Lore & Stats Panel -->
+                    <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; overflow-y: auto;">
+                        <div id="grim-bestiary-details" style="display: none; flex-direction: column; height: 100%;">
+                            <div style="text-align: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                                <img id="grim-bestiary-img" src="" style="width: 128px; height: 128px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000;" />
+                                <h2 id="grim-bestiary-name" style="color: var(--gold-warn); margin: 0.5rem 0 0 0; font-size: 2rem;">Species Name</h2>
+                                <div id="grim-bestiary-sub" style="color: var(--text-muted); font-size: 1.2rem;">Rarity Family</div>
+                            </div>
+                            
+                            <!-- Knowledge Level Progress -->
+                            <div style="margin-bottom: 1.5rem; background: var(--panel-base); padding: 1rem; border-radius: 6px; border: 1px solid var(--panel-border);">
+                                <div style="display: flex; justify-content: space-between; font-size: 1.2rem; margin-bottom: 0.5rem;">
+                                    <span style="color: var(--cyan-glow); font-weight: bold;">Knowledge Lv. <span id="grim-bestiary-lvl">1</span></span>
+                                    <span style="color: var(--text-muted);"><span id="grim-bestiary-xp">0</span> / <span id="grim-bestiary-next-xp">100</span> XP</span>
+                                </div>
+                                <div style="width: 100%; height: 8px; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; overflow: hidden;">
+                                    <div id="grim-bestiary-xp-fill" style="width: 0%; height: 100%; background: var(--cyan-glow); transition: width 0.3s;"></div>
+                                </div>
+                                <div id="grim-bestiary-unlocks" style="font-size: 1rem; color: var(--text-muted); margin-top: 0.5rem; text-align: center;">
+                                    Dissect to unlock Habitat and Lure Preferences.
+                                </div>
+                            </div>
+
+                            <div id="grim-bestiary-stats" style="flex: 1; font-size: 1.3rem; color: var(--text-main); display: flex; flex-direction: column; gap: 1rem;">
+                                <!-- Stats injected here -->
+                            </div>
+                        </div>
+                        
+                        <div id="grim-bestiary-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem; text-align: center;">
+                            Select a discovered species.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. QUESTS TAB (NEW) -->
+                <div id="grim-page-quests" class="grim-page" style="display: none; flex-direction: column; height: 100%;">
+                    <h1 style="color: var(--cyan-glow); margin-top: 0;">Active Quests</h1>
+                    <div id="grim-quests-list" style="display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; padding-right: 1rem;">
+                        <!-- Quests injected here -->
+                    </div>
+                    <div id="grim-quests-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem;">
+                        No active quests. Check the Notice Board in a settlement.
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-150 | PAUSE MENU & SETTINGS              -->
+        <!-- ========================================== -->
+        <div id="z150-pause" style="display: none; position: absolute; inset: 0; z-index: 150; background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(4px); flex-direction: column; align-items: center; justify-content: center;">
+            <div class="hud-panel" style="width: 450px; text-align: center; border-color: var(--cyan-glow); box-shadow: 0 0 30px rgba(34, 211, 238, 0.2);">
+                <h1 style="color: var(--cyan-glow); font-size: 3.5rem; margin-top: 0; margin-bottom: 1.5rem; letter-spacing: 0.05em;">PAUSED</h1>
+
+                <div style="margin-bottom: 1.5rem; text-align: left;">
+                    <label style="color: var(--text-main); font-size: 1.4rem; display: flex; justify-content: space-between;">
+                        Music Volume <span id="lbl-vol-music" style="color: var(--cyan-glow);">50%</span>
+                    </label>
+                    <input type="range" id="slider-vol-music" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                </div>
+
+                <div style="margin-bottom: 2.5rem; text-align: left;">
+                    <label style="color: var(--text-main); font-size: 1.4rem; display: flex; justify-content: space-between;">
+                        SFX Volume <span id="lbl-vol-sfx" style="color: var(--cyan-glow);">50%</span>
+                    </label>
+                    <input type="range" id="slider-vol-sfx" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                </div>
+
+                <button class="menu-btn" id="btn-resume-game" style="width: 100%; margin-bottom: 0.8rem; font-size: 1.6rem; padding: 0.8rem;">Resume</button>
+                <button class="menu-btn" id="btn-quit-to-menu" style="width: 100%; font-size: 1.6rem; padding: 0.8rem; border-color: var(--red-danger); color: var(--red-danger);">Save & Quit to Menu</button>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- Z-200 | SYSTEM MENUS (Start, Character)    -->
+        <!-- ========================================== -->
+        <div id="z200-menus">
+            <!-- START SCREEN -->
+            <div id="screen-start" style="display: flex; flex-direction: column; align-items: center;">
+                <h1 class="menu-title">UNDERDARK<br>FISHING</h1>
+                <button class="menu-btn" id="btn-new-game">New Descent</button>
+                <button class="menu-btn" id="btn-load-game" disabled>Continue</button>
+            </div>
+
+            <!-- CHARACTER CREATOR -->
+            <div id="screen-char-create" style="display: none; flex-direction: column; align-items: center;">
+                <h1 style="color: var(--cyan-glow); font-size: 3rem; margin-bottom: 1rem;">Forge Identity</h1>
+                
+                <div class="char-create-container">
+                    <div class="char-left">
+                        <img id="cc-portrait" class="char-portrait-box" src="" />
+                        <button class="menu-btn" id="btn-cc-reroll" style="width: 100%; padding: 0.5rem; font-size: 1.2rem;">Randomize Appearance</button>
+                        
+                        <div class="char-input-group" style="margin-top: 1rem;">
+                            <label>Angler Name</label>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <input type="text" id="cc-name" value="Angler" style="flex: 1; margin: 0;" />
+                                <button class="menu-btn" id="btn-cc-random-name" style="width: auto; padding: 0.5rem 1rem; margin: 0; font-size: 1.2rem;" title="Randomize Name">🎲</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 1rem; width: 100%;">
+                            <div class="char-input-group">
+                                <label>Race</label>
+                                <select id="cc-race">
+                                    <option value="Human">Human</option>
+                                    <option value="Dwarf">Dwarf</option>
+                                    <option value="Elf">Elf</option>
+                                    <option value="Orc">Orc</option>
+                                </select>
+                            </div>
+                            <div class="char-input-group">
+                                <label>Gender</label>
+                                <select id="cc-gender">
+                                    <option value="Female">Female</option>
+                                    <option value="Male">Male</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="char-right">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem;">
+                            <h2 style="margin: 0; font-size: 2rem;">Attributes</h2>
+                            <div style="color: var(--gold-warn); font-size: 1.2rem;">Points: <span id="cc-pts">3</span></div>
+                        </div>
+                        
+                        <div id="cc-stats-list"></div>
+
+                        <button class="menu-btn" id="btn-embark" style="width: 100%; margin-top: 2rem; border-color: var(--cyan-glow);">Embark</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- FLOATING TOOLTIPS                          -->
+        <!-- ========================================== -->
+        <div id="shop-tooltip" style="display: none;"></div>
+
+    </div>
+
+    <!-- DYNAMIC SCALING SCRIPT -->
+    <script>
+        function resizeGame() {
+            const container = document.getElementById('game-container');
+            const targetWidth = 1280;
+            const targetHeight = 720;
+            
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            const scaleX = windowWidth / targetWidth;
+            const scaleY = windowHeight / targetHeight;
+            
+            const scale = Math.min(scaleX, scaleY);
+            
+            container.style.transform = `scale(${scale})`;
+        }
+
+        window.addEventListener('resize', resizeGame);
+        resizeGame();
+    </script>
+
+    <!-- MAIN GAME LOOP -->
+    <script type="module" src="./js/game.js"></script>
+
+</body>
+</html>

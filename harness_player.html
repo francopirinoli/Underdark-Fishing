@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Harness - Underdark Fishing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1.2fr;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            align-items: start;
+        }
+        .panel-col {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            min-height: 80vh;
+        }
+        .panel-col h2 { font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-top: 0;}
+        
+        .char-card, .gear-card {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin-bottom: 1rem;
+        }
+        .char-card img { width: 128px; height: 128px; image-rendering: pixelated; background: #020617; border-radius: 0.25rem; border: 1px solid #1E293B; margin: 0 auto; display: block; }
+        .gear-card img { width: 100%; max-width: 160px; image-rendering: pixelated; background: #020617; border-radius: 0.25rem; border: 1px solid #1E293B; display: block; margin: 0 auto 0.5rem; }
+        
+        .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px dashed var(--border); font-size: 0.85rem;}
+        .stat-name { color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
+        .stat-val { font-weight: bold; color: var(--ink); }
+        .pos { color: var(--glow); }
+        .neg { color: var(--warn); }
+        
+        .btn { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit; font-weight: bold; }
+        .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn.primary { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; border-color: var(--accent); }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: var(--panel); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); }
+        
+        select, input[type="text"] { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.4rem; border-radius: 0.25rem; font-family: inherit; width: 100%; margin-bottom: 0.5rem;}
+        
+        .dashboard-group { background: var(--bg-2); border: 1px solid var(--border); padding: 0.75rem; border-radius: 0.375rem; margin-bottom: 1rem; }
+        .dashboard-group h3 { margin-top: 0; color: var(--accent-2); font-size: 0.9rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; margin-bottom: 0.5rem;}
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1400px;">
+        <div class="top-bar">
+            <h1>👤 Player Stats & Loadout Harness</h1>
+            <a href="index.html" class="btn" style="width: auto; margin:0;">← Hub</a>
+        </div>
+
+        <div class="layout-grid">
+            <!-- COL 1: CHARACTER SHEET -->
+            <div class="panel-col">
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+                    <h2 style="border: none; padding: 0; margin: 0;">1. Character Sheet</h2>
+                    <button class="btn" id="btn-reset" style="padding: 0.3rem 0.6rem; font-size: 0.7rem;">Reset</button>
+                </div>
+                
+                <div class="char-card">
+                    <img id="char-portrait" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" />
+                    <div style="text-align: center; margin-top: 0.5rem;">
+                        <b id="char-name" style="color: var(--accent); font-size:1.1rem; font-family: 'Cinzel', serif;">Angler</b>
+                        <div id="char-lore" style="font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem;">Human Female</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                    <select id="char-race"><option value="Human">Human</option><option value="Dwarf">Dwarf</option><option value="Elf">Elf</option><option value="Orc">Orc</option></select>
+                    <select id="char-gender"><option value="Female">Female</option><option value="Male">Male</option></select>
+                </div>
+                <button class="btn primary" id="btn-reroll" style="width: 100%; margin-bottom: 1.5rem;">Reroll Identity</button>
+
+                <div class="char-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <b style="color: var(--ink);">Level <span id="char-lvl">1</span></b>
+                        <span style="font-size: 0.8rem; color: var(--muted);">XP: <span id="char-xp">0</span></span>
+                    </div>
+                    <button class="btn" id="btn-add-xp" style="width: 100%; font-size: 0.8rem;">+100 XP (Level Up)</button>
+                </div>
+
+                <div class="char-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <b>Core Stats</b>
+                        <span style="font-size: 0.8rem; color: var(--glow);">Points: <span id="char-pts">5</span></span>
+                    </div>
+                    <div id="stat-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- COL 2: ARMORY / LOADOUT -->
+            <div class="panel-col">
+                <h2>2. Armory (Loadout)</h2>
+                <p style="font-size: 0.8rem; color: var(--muted); margin-top: -0.5rem;">Generate random gear to equip to your active slots.</p>
+                
+                <div class="gear-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <b style="color: var(--ink);">Fishing Rod</b>
+                        <button class="btn" id="btn-roll-rod" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Roll</button>
+                    </div>
+                    <div id="slot-rod" style="text-align: center; font-size: 0.85rem; color: var(--muted);">[ Empty ]</div>
+                </div>
+
+                <div class="gear-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <b style="color: var(--ink);">Boat Hull</b>
+                        <button class="btn" id="btn-roll-boat" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Roll</button>
+                    </div>
+                    <div id="slot-boat" style="text-align: center; font-size: 0.85rem; color: var(--muted);">[ Empty ]</div>
+                </div>
+
+                <div class="gear-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <b style="color: var(--ink);">Active Lure</b>
+                        <button class="btn" id="btn-roll-lure" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">Roll</button>
+                    </div>
+                    <div id="slot-lure" style="text-align: center; font-size: 0.85rem; color: var(--muted);">[ Empty ]</div>
+                </div>
+            </div>
+
+            <!-- COL 3: EFFECTIVE STATS (DASHBOARD) -->
+            <div class="panel-col">
+                <h2>3. Physics Dashboard</h2>
+                <p style="font-size: 0.8rem; color: var(--muted); margin-top: -0.5rem;">Live output of <code>getEffectiveStats()</code>.</p>
+                
+                <div id="dashboard-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ES Module Script -->
+    <script type="module">
+        import { createRng } from './js/util/rng.js';
+        import { PlayerEngine } from './js/data/player_data.js';
+        import { generateNPCData } from './js/data/npc_data_generator.js';
+        import { generateRodData } from './js/data/rod_data_generator.js';
+        import { generateBoatData } from './js/data/boat_data_generator.js';
+        import { generateLure } from './js/art/lure_generator.js';
+
+        let player = PlayerEngine.createPlayer();
+
+        // --- UI BINDINGS ---
+        
+        function initHarness() {
+            document.getElementById('btn-reroll').addEventListener('click', rollIdentity);
+            document.getElementById('btn-reset').addEventListener('click', () => {
+                player = PlayerEngine.createPlayer();
+                rollIdentity();
+            });
+            document.getElementById('btn-add-xp').addEventListener('click', () => {
+                PlayerEngine.addXp(player, 100);
+                updateUI();
+            });
+
+            document.getElementById('btn-roll-rod').addEventListener('click', () => {
+                const rod = generateRodData({ seed: Date.now() });
+                PlayerEngine.equipItem(player, 'rod', rod);
+                updateUI();
+            });
+
+            document.getElementById('btn-roll-boat').addEventListener('click', () => {
+                const boat = generateBoatData({ seed: Date.now() }); // Use the data wrapper now!
+                PlayerEngine.equipItem(player, 'boat', boat);
+                updateUI();
+            });
+
+            document.getElementById('btn-roll-lure').addEventListener('click', () => {
+                const rng = createRng(Date.now());
+                const art = generateLure({ rng });
+                // Mock a generated lure object matching our spec
+                const lure = {
+                    id: `lure_${Date.now()}`,
+                    name: art.name,
+                    imageDataUrl: art.imageDataUrl,
+                    stats: {
+                        color: rng.int(-100, 100),
+                        sound: rng.int(-100, 100),
+                        light: rng.int(-100, 100),
+                        weight: rng.int(-100, 100)
+                    }
+                };
+                PlayerEngine.equipItem(player, 'lure', lure);
+                updateUI();
+            });
+
+            rollIdentity();
+        }
+
+        function rollIdentity() {
+            const race = document.getElementById('char-race').value;
+            const gender = document.getElementById('char-gender').value;
+            const npc = generateNPCData({ seed: Date.now(), race, gender });
+            
+            player.identity.name = npc.name;
+            player.identity.race = npc.race;
+            player.identity.gender = npc.gender;
+            player.identity.portraitData = npc.imageDataUrl;
+            
+            updateUI();
+        }
+
+        // --- RENDERING ---
+
+        function updateUI() {
+            // 1. Update Character Sheet
+            document.getElementById('char-portrait').src = player.identity.portraitData;
+            document.getElementById('char-name').innerText = player.identity.name;
+            document.getElementById('char-lore').innerText = `${player.identity.race} ${player.identity.gender}`;
+            
+            document.getElementById('char-lvl').innerText = player.vitals.level;
+            document.getElementById('char-xp').innerText = player.vitals.xp;
+            document.getElementById('char-pts').innerText = player.availablePoints;
+
+            // Render Stats List
+            const statCont = document.getElementById('stat-container');
+            statCont.innerHTML = '';
+            for (const [key, val] of Object.entries(player.stats)) {
+                const div = document.createElement('div');
+                div.className = 'stat-row';
+                div.innerHTML = `
+                    <span class="stat-name">${key}</span>
+                    <div>
+                        <span class="stat-val" style="margin-right: 0.5rem;">${val}</span>
+                        <!-- CHANGED HERE: Disable button at 5 instead of 10 -->
+                        <button class="btn" style="padding: 0.1rem 0.4rem; font-size: 0.8rem;" ${player.availablePoints === 0 || val >= 5 ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+                div.querySelector('button').addEventListener('click', () => {
+                    PlayerEngine.allocateStat(player, key);
+                    updateUI();
+                });
+                statCont.appendChild(div);
+            }
+
+            // 2. Update Armory Slots
+            renderSlot('rod', player.gear.rod, (rod) => `
+                <img src="${rod.art.imageDataUrl}" style="width: 120px;" />
+                <b style="color: var(--accent);">${rod.identity.name}</b>
+                <div style="font-size: 0.8rem; margin-top: 0.3rem;">Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</div>
+            `);
+
+            renderSlot('boat', player.gear.boat, (boat) => `
+                <img src="${boat.art.profileDataUrl}" style="width: 160px;" />
+                <b style="color: var(--accent);">${boat.identity.name}</b>
+                <div style="font-size: 0.8rem; margin-top: 0.3rem;">Type: ${boat.art.boatType.toUpperCase()}</div>
+            `);
+
+            renderSlot('lure', player.gear.lure, (lure) => `
+                <img src="${lure.imageDataUrl}" style="width: 80px;" />
+                <b style="color: var(--accent);">${lure.name}</b>
+                <div style="font-size: 0.8rem; margin-top: 0.3rem;">C: ${lure.stats.color} | S: ${lure.stats.sound} | L: ${lure.stats.light} | W: ${lure.stats.weight}</div>
+            `);
+
+            // 3. Update Dashboard
+            const eff = PlayerEngine.getEffectiveStats(player);
+            const dash = document.getElementById('dashboard-container');
+            
+            const fmt = (val, isBonus=false) => {
+                if (isBonus && val > 1.0) return `<span class="pos">${val}x</span>`;
+                if (isBonus && val < 1.0) return `<span class="pos">${val}x</span>`; // Assuming discounts
+                return `<span class="stat-val">${val}</span>`;
+            };
+
+            dash.innerHTML = `
+                <div class="dashboard-group">
+                    <h3>🎣 Fishing Minigame Physics</h3>
+                    <div class="stat-row"><span class="stat-name">Total Reeling Power</span> ${fmt(eff.minigame.power)}</div>
+                    <div class="stat-row"><span class="stat-name">Hook React Window</span> ${fmt(eff.minigame.hookWindowMs + 'ms')}</div>
+                    <div class="stat-row"><span class="stat-name">Player Stamina Pool</span> ${fmt(eff.minigame.stamina)}</div>
+                    <div class="stat-row"><span class="stat-name">Line Snap Tension</span> ${fmt(eff.minigame.maxTension)}</div>
+                    <div class="stat-row"><span class="stat-name">Tension Decay Rate</span> ${fmt(eff.minigame.flexibility)}</div>
+                </div>
+                <div class="dashboard-group">
+                    <h3>🗺️ Exploration & Survival</h3>
+                    <div class="stat-row"><span class="stat-name">Boat Speed</span> ${fmt(eff.exploration.speed)}</div>
+                    <div class="stat-row"><span class="stat-name">Boat Stealth</span> ${fmt(eff.exploration.stealth)}</div>
+                    <div class="stat-row"><span class="stat-name">Hazard Dodge Chance</span> <span class="pos">${Math.round(eff.exploration.hazardDodgeChance * 100)}%</span></div>
+                </div>
+                <div class="dashboard-group">
+                    <h3>💰 Economy & Crafting</h3>
+                    <div class="stat-row"><span class="stat-name">Store Prices</span> <span class="pos">${Math.round(eff.economy.discountMultiplier * 100)}%</span></div>
+                    <div class="stat-row"><span class="stat-name">Sell Value Multiplier</span> <span class="pos">${eff.economy.sellMultiplier}x</span></div>
+                    <div class="stat-row"><span class="stat-name">Dissection Yield Bonus</span> <span class="pos">${eff.economy.dissectionBudgetMult}x</span></div>
+                </div>
+                <div class="dashboard-group">
+                    <h3>✨ Active Lure Output</h3>
+                    <div class="stat-row"><span class="stat-name">Color (Cold/Warm)</span> <span class="stat-val">${eff.activeLure.color}</span></div>
+                    <div class="stat-row"><span class="stat-name">Sound (Silent/Loud)</span> <span class="stat-val">${eff.activeLure.sound}</span></div>
+                    <div class="stat-row"><span class="stat-name">Light (Dark/Shiny)</span> <span class="stat-val">${eff.activeLure.light}</span></div>
+                    <div class="stat-row"><span class="stat-name">Weight (Float/Sink)</span> <span class="stat-val">${eff.activeLure.weight}</span></div>
+                </div>
+            `;
+        }
+
+        function renderSlot(id, data, formatFn) {
+            const el = document.getElementById(`slot-${id}`);
+            if (data) {
+                el.innerHTML = formatFn(data);
+                el.style.color = "var(--ink)";
+            } else {
+                el.innerHTML = "[ Empty ]";
+                el.style.color = "var(--muted)";
+            }
+        }
+
+        // Run
+        initHarness();
+    </script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+/**
+ * js/data/fish_data_generator.js
+ * The Master Fish Data Factory.
+ * Wraps procedural pixel art in a comprehensive, mathematically balanced gameplay stat block.
+ * V2 - Enforces Biome restrictions and separates Species Data from Individual Fish Instances.
+ */
+
+import { createRng } from '../util/rng.js';
+
+// Import all 8 art generators
+import { generateStandardFish } from '../art/fish_generator.js';
+import { generateRay } from '../art/ray_generator.js';
+import { generateShark } from '../art/shark_generator.js';
+import { generateCephalopod } from '../art/cephalopod_generator.js';
+import { generateCrustacean } from '../art/crustacean_generator.js';
+import { generateDeepSea } from '../art/deepsea_generator.js';
+import { generateEel } from '../art/eel_generator.js';
+import { generateJellyfish } from '../art/jellyfish_generator.js';
+
+const ART_GENERATORS = {
+    'fish': generateStandardFish,
+    'ray': generateRay,
+    'shark': generateShark,
+    'cephalopod': generateCephalopod,
+    'crustacean': generateCrustacean,
+    'deepsea': generateDeepSea,
+    'eel': generateEel,
+    'jellyfish': generateJellyfish
+};
+
+// --- RARITY MULTIPLIERS ---
+const RARITY_TIERS =[
+    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 10,  xpBase: 10,  tolerance: 0.8, hookMod: 1.0 },
+    { name: 'Uncommon',  weight: 30, statMult: 1.4, valBase: 35,  xpBase: 25,  tolerance: 0.6, hookMod: 0.8 },
+    { name: 'Rare',      weight: 14, statMult: 2.2, valBase: 120, xpBase: 65,  tolerance: 0.4, hookMod: 0.6 },
+    { name: 'Legendary', weight: 5,  statMult: 3.5, valBase: 500, xpBase: 200, tolerance: 0.2, hookMod: 0.4 },
+    { name: 'Boss',      weight: 1,  statMult: 6.0, valBase: 2500,xpBase: 800, tolerance: 0.1, hookMod: 0.25 }
+];
+
+// --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---
+const ARCHETYPES = {
+    'fish': {
+        sizes: ['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
+        baseStamina: 50, baseSpeed: 50, baseAggro: 0.3,
+        prefBias: { color: 0, sound: 0, light: 0, weight: 0 } // Neutral, highly variable
+    },
+    'shark': {
+        sizes: ['Medium', 'Large', 'Massive'], depths:['Surface', 'Mid-water'],
+        baseStamina: 40, baseSpeed: 95, baseAggro: 0.85, // Fast, aggressive, tires out quickly
+        prefBias: { color: 70, sound: 80, light: 10, weight: 20 } // Warm (blood), loud
+    },
+    'eel': {
+        sizes: ['Small', 'Medium', 'Large'], depths: ['Bottom-feeder'],
+        baseStamina: 110, baseSpeed: 40, baseAggro: 0.2, // Endurance fighters, slow tension climb
+        prefBias: { color: -40, sound: -80, light: -50, weight: 60 } // Dark, silent, heavy
+    },
+    'ray': {
+        sizes: ['Medium', 'Large', 'Massive'], depths:['Bottom-feeder'],
+        baseStamina: 80, baseSpeed: 45, baseAggro: 0.3, // Heavy, stubborn bottom huggers
+        prefBias: { color: 0, sound: -40, light: 0, weight: 80 } // Heavy, quiet
+    },
+    'crustacean': {
+        sizes: ['Tiny', 'Small', 'Medium'], depths: ['Bottom-feeder'],
+        baseStamina: 90, baseSpeed: 20, baseAggro: 0.4, // Tanky, very slow
+        prefBias: { color: -20, sound: 0, light: -20, weight: 90 } // Very heavy
+    },
+    'jellyfish': {
+        sizes: ['Tiny', 'Small', 'Medium'], depths: ['Surface', 'Mid-water'],
+        baseStamina: 20, baseSpeed: 20, baseAggro: 0.05, // Extremely easy to reel in
+        prefBias: { color: 0, sound: -90, light: 80, weight: -80 } // Silent, shiny, feather-light
+    },
+    'cephalopod': {
+        sizes: ['Small', 'Medium', 'Large'], depths: ['Mid-water', 'Bottom-feeder'],
+        baseStamina: 70, baseSpeed: 60, baseAggro: 0.5, // Puzzle fighters
+        prefBias: { color: -60, sound: -50, light: 0, weight: 10 } // Cold, quiet
+    },
+    'deepsea': {
+        sizes:['Medium', 'Large', 'Massive'], depths: ['Bottom-feeder'],
+        baseStamina: 100, baseSpeed: 70, baseAggro: 0.7, // Terrifying all-rounders
+        prefBias: { color: -80, sound: 50, light: -90, weight: 70 } // Cold, loud, pitch black
+    }
+};
+
+// --- BIOME TEMPERATURE MAPPING ---
+const BIOME_TEMPS = {
+    'frozen':   { min: -100, max: -40 },
+    'abyssal':  { min: -80,  max: -10 },
+    'crystal':  { min: -30,  max: 20 },
+    'fungal':   { min: 10,   max: 50 },
+    'volcanic': { min: 60,   max: 100 }
+};
+
+const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+/**
+ * Generates the BASE SPECIES archetype.
+ * This represents the "Pokedex entry" of the fish, not an individual catch.
+ */
+export function generateFishData(options = {}) {
+    const seed = options.seed || Date.now();
+    const rng = createRng(seed);
+
+    // 1. Determine Valid Families based on Biome
+    let availableFamilies = Object.keys(ART_GENERATORS);
+    if (options.biomeId && options.biomeId !== 'abyssal') {
+        // Deepsea Horrors ONLY spawn in Abyssal biomes
+        availableFamilies = availableFamilies.filter(f => f !== 'deepsea');
+    }
+    const family = options.family || rng.pick(availableFamilies);
+    
+    // 2. Determine Rarity
+    let rarityObj;
+    if (options.rarity) {
+        rarityObj = RARITY_TIERS.find(r => r.name.toLowerCase() === options.rarity.toLowerCase());
+    } else {
+        let roll = rng.int(1, 100);
+        let cumulative = 0;
+        for (const tier of RARITY_TIERS) {
+            cumulative += tier.weight;
+            if (roll <= cumulative) {
+                rarityObj = tier;
+                break;
+            }
+        }
+    }
+    
+    if (family === 'deepsea' && rarityObj.weight > 15) {
+        rarityObj = RARITY_TIERS[2]; // Force Deepsea to Rare or higher
+    }
+
+    const arch = ARCHETYPES[family];
+
+    // 3. Generate Pixel Art & Name
+    const artResult = ART_GENERATORS[family]({ rng });
+
+    // 4. Environmental Stats
+    let biomes =[];
+    if (family === 'deepsea') {
+        biomes.push('abyssal');
+    } else if (options.biomeId) {
+        biomes.push(options.biomeId);
+        // 30% chance to also be native to a random secondary biome
+        if (rng.chance(0.3)) {
+            const sec = rng.pick(Object.keys(BIOME_TEMPS));
+            if (sec !== options.biomeId) biomes.push(sec);
+        }
+    } else {
+        biomes.push(rng.pick(Object.keys(BIOME_TEMPS)));
+    }
+
+    const primaryBiome = biomes[0];
+    const tempPref = rng.int(BIOME_TEMPS[primaryBiome].min, BIOME_TEMPS[primaryBiome].max);
+    const depthPref = rng.pick(arch.depths);
+    const activeHours = rng.pick(['Diurnal', 'Nocturnal', 'Crepuscular', 'Always Active']);
+
+    // 5. Lure Preferences (-100 to 100)
+    const prefColor = clamp(Math.round(arch.prefBias.color + rng.float(-30, 30)), -100, 100);
+    const prefSound = clamp(Math.round(arch.prefBias.sound + rng.float(-30, 30)), -100, 100);
+    const prefLight = clamp(Math.round(arch.prefBias.light + rng.float(-30, 30)), -100, 100);
+    const prefWeight = clamp(Math.round(arch.prefBias.weight + rng.float(-30, 30)), -100, 100);
+
+    // 6. Physical Properties
+    const sizeTier = rng.pick(arch.sizes);
+    const weightBrackets = {
+        'Tiny': { min: 0.1, max: 2.5 },
+        'Small': { min: 2.0, max: 8.0 },
+        'Medium': { min: 7.0, max: 25.0 },
+        'Large': { min: 20.0, max: 150.0 },
+        'Massive': { min: 120.0, max: 800.0 }
+    };
+    
+    let minW = Number((weightBrackets[sizeTier].min * rarityObj.statMult * rng.float(0.9, 1.1)).toFixed(2));
+    let maxW = Number((weightBrackets[sizeTier].max * rarityObj.statMult * rng.float(0.9, 1.1)).toFixed(2));
+
+    // 7. Combat / Minigame Stats
+    const stamina = Math.round(arch.baseStamina * rarityObj.statMult * rng.float(0.85, 1.15));
+    const speed = Math.round(arch.baseSpeed * rarityObj.statMult * rng.float(0.85, 1.15));
+    let aggression = Number(clamp(arch.baseAggro * (rarityObj.name === 'Boss' ? 2.0 : 1.0) * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
+    const hookWindowMs = Math.max(250, Math.round(1500 * rarityObj.hookMod * rng.float(0.9, 1.1)));
+
+    // 8. Economy
+    const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
+    const baseValue = Math.round(rarityObj.valBase * sizeEconMod[sizeTier] * rng.float(0.9, 1.2));
+    const baseXp = Math.round(rarityObj.xpBase * sizeEconMod[sizeTier] * rng.float(0.9, 1.2));
+
+    return {
+        id: `sp_${family}_${seed}`, // This acts as the unique SPECIES ID
+        seed: seed,
+        
+        identity: {
+            name: artResult.name,
+            family: family,
+            rarity: rarityObj.name
+        },
+        
+        art: {
+            imageDataUrl: artResult.imageDataUrl,
+            palette: artResult.data.palette,
+            metadata: artResult.data
+        },
+        
+        environment: { biomes, depthPref, tempPref, activeHours },
+        lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: rarityObj.tolerance },
+        physical: { sizeTier, weightRange: { min: minW, max: maxW } },
+        combat: { stamina, speed, aggression, hookWindowMs },
+        economy: { baseValue: Math.max(1, baseValue), baseXp: Math.max(5, baseXp) }
+    };
+}
+
+/**
+ * NEW: Generates an INDIVIDUAL caught fish based on a Species template.
+ * Rolls a unique weight and assigns an instance ID so you can have multiple in your cargo.
+ */
+export function generateFishInstance(speciesData, rng) {
+    // Deep clone the species data so we don't accidentally mutate the master template
+    const fishInstance = JSON.parse(JSON.stringify(speciesData));
+    
+    // Roll the specific weight for this catch
+    const minW = fishInstance.physical.weightRange.min;
+    const maxW = fishInstance.physical.weightRange.max;
+    fishInstance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
+    
+    // Assign a unique instance ID for inventory tracking
+    fishInstance.instanceId = `inst_${rng.int(1000000, 9999999)}`;
+    fishInstance.invType = 'fish';
+
+    return fishInstance;
+}

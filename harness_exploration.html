@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exploration & Fishing Harness</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .layout-grid { display: grid; grid-template-columns: 800px 1fr; gap: 1.5rem; margin-top: 1rem; align-items: start; }
+        .panel-col { background: var(--panel); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; }
+        .panel-col h2 { font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-top: 0;}
+        .stat-line { display: flex; justify-content: space-between; font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px dashed var(--border); }
+        .val { font-weight: bold; color: var(--accent); }
+        .btn { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.6rem 1rem; border-radius: 0.25rem; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 0.5rem; transition: all 0.15s;}
+        .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        .btn.primary { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; border-color: var(--accent); }
+        .btn.primary:hover:not(:disabled) { filter: brightness(1.2); color: #020617; }
+        .tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 0.25rem; background: var(--bg-2); border: 1px solid var(--border); font-size: 0.8rem; }
+        
+        #game-wrapper { position: relative; width: 800px; height: 600px; }
+        
+        #minigame-container { position: absolute; inset: 0; pointer-events: none; z-index: 100; }
+
+        #init-overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.95); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .log-box { background: var(--bg-2); border: 1px solid var(--border); padding: 0.5rem; height: 280px; overflow-y: auto; font-size: 0.8rem; font-family: monospace; color: var(--muted); display: flex; flex-direction: column; gap: 0.25rem; margin-top: 1rem;}
+        .log-entry { border-left: 2px solid var(--muted); padding-left: 0.5rem; }
+        .log-entry.alert { border-color: var(--warn); color: var(--warn); }
+        .log-entry.danger { border-color: #EF4444; color: #FCA5A5; }
+        .log-entry.success { border-color: #22C55E; color: #86EFAC; }
+    </style>
+</head>
+<body>
+    <div id="init-overlay">
+        <h1 style="color: var(--glow)">Audio Context Required</h1>
+        <p class="muted" style="margin-bottom: 2rem;">Click below to initialize Audio & Engine.</p>
+        <button id="btn-init" class="btn primary" style="width: auto; padding: 1rem 2rem; font-size: 1.2rem;">Start Game Engine</button>
+    </div>
+
+    <div class="container" style="max-width: 1400px; filter: blur(4px); transition: filter 0.3s;" id="main-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--panel); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border);">
+            <h1 style="margin:0;">🧭 Vertical Slice Harness</h1>
+            <a href="index.html" class="btn" style="width: auto; margin:0;">← Hub</a>
+        </div>
+
+        <div class="layout-grid">
+            <!-- COL 1: GAME VIEW -->
+            <div id="game-wrapper">
+                <div id="game-canvas-container"></div>
+                <div id="minigame-container"></div>
+            </div>
+
+            <!-- COL 2: CONTROLS & LOG -->
+            <div class="panel-col">
+                <h2>Controls & Status</h2>
+                <div style="background: var(--bg-2); border: 1px solid var(--border); padding: 0.75rem; border-radius: 0.25rem; margin-bottom: 1rem;">
+                    <div style="text-align: center; margin-bottom: 0.5rem; font-size: 0.8rem;">
+                        <b>W A S D</b> to Drive | <b>Mouse</b> to Aim<br/>
+                        <b>Hold Click</b> to Cast | <b>Scroll Wheel</b> to Sink<br/>
+                        <b>Click</b> to Hook/Reel/Cancel
+                    </div>
+                    <div class="stat-line"><span>State</span> <span class="val" id="stat-state" style="color: #22D3EE;">DRIVING</span></div>
+                    <div class="stat-line"><span>Lantern</span> <span class="val" id="stat-lantern">Oil (250px)</span></div>
+                    <div class="stat-line"><span>Current Tile</span> <span class="val" id="stat-tile">---</span></div>
+                    <div class="stat-line"><span>Global Node</span> <span class="val" id="stat-node">[0, 0]</span></div>
+                    <div class="stat-line"><span>Max Cast Distance</span> <span class="val" id="stat-castdist">0</span></div>
+                </div>
+
+                <div style="margin-bottom: 1rem;">
+                    <span class="tag" id="tag-biome" style="color: #fff; text-shadow: 0 0 2px #000;">Biome: ---</span>
+                    <span class="tag" id="tag-shape" style="text-transform: capitalize;">Shape: ---</span>
+                </div>
+
+                <button class="btn" id="btn-upgrade-light">Cycle Lantern (Oil -> Kero -> Magic)</button>
+                <button class="btn" id="btn-regenerate">Jump to Random Cave Node</button>
+                <button class="btn" id="btn-cheat" style="border-color: var(--glow); color: var(--glow);">Toggle Cheat: Perfect Lure [OFF]</button>
+                
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <label style="font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">Player Fishing Stat (Determines Cast Range): <span id="stat-lvl-display" style="color: white; font-weight: bold;">1</span></label>
+                    <input type="range" id="fishing-stat-slider" min="1" max="5" value="1" style="width: 100%; cursor: pointer;">
+                </div>
+
+                <h2 style="margin-top: 1rem;">Action Log</h2>
+                <div class="log-box" id="action-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ES Module Script -->
+    <script type="module">
+        import { createRng } from './js/util/rng.js';
+        import { AudioEngine } from './js/audio/audio_engine.js';
+        import { SFX } from './js/audio/sfx_generator.js';
+        import { MusicEngine } from './js/audio/music_engine.js';
+        
+        import { generateGlobalMap } from './js/exploration/global_map.js';
+        import { generateLocalMap, TILE } from './js/exploration/local_map.js';
+        import { BIOMES } from './js/exploration/biomes.js';
+        
+        import { generateBoatData } from './js/data/boat_data_generator.js';
+        import { generateRodData } from './js/data/rod_data_generator.js';
+        import { generateFishData } from './js/data/fish_data_generator.js';
+        import { PlayerEngine } from './js/data/player_data.js';
+        import { generateLure } from './js/art/lure_generator.js';
+        
+        import { ExplorationEngine } from './js/exploration/exploration_engine.js';
+        import { ExplorationRenderer } from './js/exploration/exploration_renderer.js';
+        import { FishingEngine } from './js/fishing/fishing_engine.js';
+        import { FishingRenderer } from './js/fishing/fishing_renderer.js';
+
+        // --- STATE ---
+        let player = PlayerEngine.createPlayer();
+        
+        let currentWorld = null;
+        let globalX = 0;
+        let globalY = 0;
+        let lastTransitionDir = null; 
+
+        let currentLocalMap = null;
+        let currentBiome = null;
+        
+        let gameLoopId = null;
+        let lastTime = 0;
+        
+        let gameState = 'DRIVING'; 
+        let isCheatActive = false;
+        
+        // Input tracking
+        const inputKeys = { forward: false, backward: false, left: false, right: false, action: false };
+        let isReelingInput = false;
+        let mouseScreenPos = { x: 400, y: 300 };
+
+        // Cast Charging State
+        let isChargingCast = false;
+        let castChargePct = 0; 
+        let maxCastDistancePx = 100; 
+        let biteTimeoutId = null; 
+
+        const logBox = document.getElementById('action-log');
+        function log(msg, color = '') {
+            const el = document.createElement('div');
+            el.className = 'log-entry';
+            if (color) el.style.color = color;
+            el.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`;
+            logBox.appendChild(el);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        // --- 1. INITIALIZATION ---
+        document.getElementById('btn-init').addEventListener('click', async () => {
+            await AudioEngine.init();
+            AudioEngine.setMasterVolume(0.6);
+            SFX.init();
+            
+            ExplorationRenderer.init(document.getElementById('game-canvas-container'), 800, 600);
+            FishingRenderer.init(document.getElementById('minigame-container'));
+
+            document.getElementById('init-overlay').style.display = 'none';
+            document.getElementById('main-content').style.filter = 'none';
+
+            // Generate a random visual lure so the Water Column Renderer has an image to use
+            const rng = createRng(Date.now());
+            const lureArt = generateLure({ rng });
+
+            PlayerEngine.equipItem(player, 'boat', generateBoatData({ seed: Date.now() }));
+            PlayerEngine.equipItem(player, 'rod', generateRodData({ seed: Date.now() }));
+            PlayerEngine.equipItem(player, 'lure', { 
+                imageDataUrl: lureArt.imageDataUrl,
+                stats: { color: 0, sound: 0, light: 0, weight: 0 } 
+            });
+            
+            ExplorationRenderer.loadBoat(player.gear.boat.art.topDownDataUrl);
+
+            updatePlayerMaxDistance();
+
+            const seed = Date.now();
+            currentWorld = generateGlobalMap(seed);
+            globalX = currentWorld.startX;
+            globalY = currentWorld.startY;
+            spawnLocalMap();
+            
+            lastTime = performance.now();
+            gameLoopId = requestAnimationFrame(gameLoop);
+            log("Engine Online. Sail or hold click to cast.", "#22D3EE");
+        });
+
+        // --- 2. INPUT BINDINGS ---
+        window.addEventListener('keydown', (e) => {
+            if (gameState === 'DRIVING') {
+                if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') inputKeys.forward = true;
+                if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') inputKeys.backward = true;
+                if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') inputKeys.left = true;
+                if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') inputKeys.right = true;
+            } else if (gameState === 'FISHING') {
+                if (e.code === 'Space') isReelingInput = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'w' || e.key === 'W' || e.key === 'ArrowUp') inputKeys.forward = false;
+            if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') inputKeys.backward = false;
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') inputKeys.left = false;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') inputKeys.right = false;
+            if (e.code === 'Space') isReelingInput = false;
+        });
+
+        document.getElementById('game-wrapper').addEventListener('mousemove', (e) => {
+            const rect = ExplorationRenderer.mainCanvas.getBoundingClientRect();
+            mouseScreenPos.x = e.clientX - rect.left;
+            mouseScreenPos.y = e.clientY - rect.top;
+            
+            if (gameState === 'DRIVING' && currentLocalMap) {
+                const worldPos = ExplorationRenderer.screenToWorld(mouseScreenPos.x, mouseScreenPos.y);
+                const tx = Math.floor(worldPos.x); const ty = Math.floor(worldPos.y);
+                if (tx >= 0 && tx < currentLocalMap.width && ty >= 0 && ty < currentLocalMap.height) {
+                    const tId = currentLocalMap.grid[ty][tx];
+                    let tName = "Land / Rock";
+                    if (tId === TILE.WATER) tName = "Water (Shallow)";
+                    if (tId === TILE.DEEP_WATER) tName = "Deep Water";
+                    if (tId === TILE.FLORA) tName = "Flora / Moss";
+                    document.getElementById('stat-tile').innerText = tName;
+                }
+            }
+        });
+
+        // Mouse Wheel Depth Control
+        document.getElementById('game-wrapper').addEventListener('wheel', (e) => {
+            if (gameState === 'FISHING' && FishingEngine.phase === 'SINKING') {
+                FishingEngine.scrollDepth(e.deltaY / 15);
+                e.preventDefault(); 
+            }
+        }, { passive: false });
+
+        // Click Logic
+        document.getElementById('game-wrapper').addEventListener('mousedown', (e) => {
+            if (gameState === 'DRIVING') {
+                isChargingCast = true;
+                castChargePct = 0;
+            } 
+            else if (gameState === 'FISHING') {
+                if (FishingEngine.phase === 'SINKING') {
+                    // CANCELLATION LOGIC
+                    if (biteTimeoutId) clearTimeout(biteTimeoutId);
+                    endFishing("Cast cancelled.", "#64748B");
+                } else {
+                    isReelingInput = true;
+                    if (FishingEngine.phase === 'BITE') FishingEngine.attemptHook();
+                }
+            }
+        });
+
+        document.getElementById('game-wrapper').addEventListener('mouseup', () => {
+            if (gameState === 'DRIVING' && isChargingCast) {
+                isChargingCast = false;
+                attemptCast(castChargePct);
+                castChargePct = 0;
+            }
+            isReelingInput = false;
+        });
+
+        // --- 3. UI BUTTONS ---
+        document.getElementById('btn-regenerate').addEventListener('click', () => {
+            lastTransitionDir = null; 
+            spawnLocalMap();
+        });
+        
+        document.getElementById('btn-cheat').addEventListener('click', (e) => {
+            isCheatActive = !isCheatActive;
+            e.target.innerText = `Toggle Cheat: Perfect Lure [${isCheatActive ? 'ON' : 'OFF'}]`;
+            log(`Cheat Mode ${isCheatActive ? 'Activated' : 'Deactivated'}.`, "#FBBF24");
+        });
+
+        document.getElementById('fishing-stat-slider').addEventListener('input', (e) => {
+            player.stats.fishing = parseInt(e.target.value);
+            document.getElementById('stat-lvl-display').innerText = player.stats.fishing;
+            updatePlayerMaxDistance();
+        });
+
+        const lanterns =[
+            { name: "Oil (250px)", r: 250 },
+            { name: "Kerosene (350px)", r: 350 },
+            { name: "Magic (500px)", r: 500 }
+        ];
+        let lantIdx = 0;
+        document.getElementById('btn-upgrade-light').addEventListener('click', () => {
+            lantIdx = (lantIdx + 1) % 3;
+            player.gear.boat.upgrades.lantern.lightRadius = lanterns[lantIdx].r;
+            document.getElementById('stat-lantern').innerText = lanterns[lantIdx].name;
+            SFX.playUISelect();
+        });
+
+        // --- 4. GAME LOGIC ---
+        function updatePlayerMaxDistance() {
+            maxCastDistancePx = 100 + (player.stats.fishing * 30); 
+            document.getElementById('stat-castdist').innerText = maxCastDistancePx + "px";
+        }
+
+        function spawnLocalMap() {
+            const prevHeading = ExplorationEngine.heading;
+            const prevVelocity = ExplorationEngine.velocity;
+
+            const targetNode = currentWorld.nodes[globalY][globalX];
+            currentBiome = BIOMES[targetNode.biomeId];
+            
+            const nodeSeed = currentWorld.seed + globalX + globalY;
+            currentLocalMap = generateLocalMap(targetNode, nodeSeed);
+
+            ExplorationRenderer.buildMapCache(currentLocalMap, currentBiome);
+            
+            let spawnX = 256, spawnY = 256;
+            const EDGE_OFFSET = 40; 
+            
+            if (lastTransitionDir === 'n') { spawnX = 256; spawnY = 512 - EDGE_OFFSET; }
+            else if (lastTransitionDir === 's') { spawnX = 256; spawnY = EDGE_OFFSET; }
+            else if (lastTransitionDir === 'e') { spawnX = EDGE_OFFSET; spawnY = 256; }
+            else if (lastTransitionDir === 'w') { spawnX = 512 - EDGE_OFFSET; spawnY = 256; }
+
+            ExplorationEngine.init(spawnX, spawnY, player.gear.boat.stats, currentLocalMap, prevHeading, prevVelocity);
+
+            ExplorationEngine.onDamage = (dmg) => {
+                log(`💥 Collision! Took ${dmg} hull damage.`, "danger");
+                SFX.playLineSnap(); 
+            };
+
+            ExplorationEngine.onZoneTransition = (dir) => {
+                let moved = false;
+                if (dir === 'n' && targetNode.exits.n && globalY > 0) { globalY--; moved = true; }
+                if (dir === 's' && targetNode.exits.s && globalY < currentWorld.height - 1) { globalY++; moved = true; }
+                if (dir === 'e' && targetNode.exits.e && globalX < currentWorld.width - 1) { globalX++; moved = true; }
+                if (dir === 'w' && targetNode.exits.w && globalX > 0) { globalX--; moved = true; }
+
+                if (moved) {
+                    lastTransitionDir = dir;
+                    log(`Sailed ${dir.toUpperCase()} into new region...`, "#22D3EE");
+                    spawnLocalMap();
+                } else {
+                    ExplorationEngine.velocity = -ExplorationEngine.velocity * 0.5;
+                }
+            };
+
+            document.getElementById('stat-node').innerText = `[${globalX}, ${globalY}] - ${targetNode.name}`;
+            document.getElementById('tag-biome').innerText = currentBiome.name;
+            document.getElementById('tag-biome').style.backgroundColor = currentBiome.globalColor;
+            document.getElementById('tag-shape').innerText = `Shape: ${currentLocalMap.lakeType.replace('_', ' ')}`;
+
+            MusicEngine.playBiome(currentBiome.id, createRng(nodeSeed));
+            log(`Entered ${targetNode.name} (${currentBiome.name}).`);
+        }
+
+        function attemptCast(chargeMultiplier) {
+            const screenBoatX = ExplorationRenderer.VIEW_W / 2;
+            const screenBoatY = ExplorationRenderer.VIEW_H / 2;
+            
+            const dx = mouseScreenPos.x - screenBoatX;
+            const dy = mouseScreenPos.y - screenBoatY;
+            const mouseDist = Math.hypot(dx, dy);
+            
+            const aimedDist = Math.min(mouseDist, maxCastDistancePx);
+            const finalDist = aimedDist * chargeMultiplier;
+
+            const targetScreenX = screenBoatX + (dx / mouseDist) * finalDist;
+            const targetScreenY = screenBoatY + (dy / mouseDist) * finalDist;
+
+            const worldPos = ExplorationRenderer.screenToWorld(targetScreenX, targetScreenY);
+            const tx = Math.floor(worldPos.x); const ty = Math.floor(worldPos.y);
+
+            if (tx >= 0 && tx < currentLocalMap.width && ty >= 0 && ty < currentLocalMap.height) {
+                const tId = currentLocalMap.grid[ty][tx];
+                if (tId === TILE.WATER || tId === TILE.DEEP_WATER || tId === TILE.FLORA) {
+                    
+                    ExplorationEngine.velocity = 0; 
+                    
+                    let maxDepth = 20; 
+                    if (tId === TILE.FLORA) maxDepth = 25;
+                    if (tId === TILE.DEEP_WATER) maxDepth = 60;
+
+                    const castPool =[];
+                    for(let i = 0; i < 10; i++) { // Generate 10 possible fish for this tile
+                        let opts = { seed: Date.now() + i };
+                        if (tId === TILE.DEEP_WATER) opts.family = 'deepsea';
+                        castPool.push(generateFishData(opts));
+                    }
+
+                    if (isCheatActive) {
+                        // Cheat: Copy the preferences of the first fish in the pool to guarantee a match
+                        player.gear.lure.stats = { ...castPool[0].lurePrefs };
+                        log("Cheat Active: Lure morphed to match a nearby fish.", "#FBBF24");
+                    }
+
+                    gameState = 'FISHING';
+                    document.getElementById('stat-state').innerText = "FISHING";
+                    document.getElementById('stat-state').style.color = "#FBBF24";
+
+                    const effStats = PlayerEngine.getEffectiveStats(player);
+                    
+                    FishingEngine.startCast(effStats, player.stats.stamina, castPool, maxDepth);
+                    
+                    FishingRenderer.open({
+                        lureDataUrl: player.gear.lure.imageDataUrl,
+                        biome: currentBiome,
+                        tileId: tId
+                    });
+                    
+                    log(`Line cast. Max depth: ${maxDepth}m. Scroll to sink...`);
+                    
+                    // Give the player 5 seconds to find the right depth before checking for a bite
+                    biteTimeoutId = setTimeout(() => {
+                        if (gameState !== 'FISHING') return; 
+                        if (!FishingEngine.evaluateBite()) {
+                            endFishing("Nothing bit. Wrong depth or wrong lure.", "danger");
+                        }
+                    }, 5000); 
+
+                } else {
+                    log("You hit land. Cast into water.", "#64748B");
+                }
+            }
+        }
+
+        function endFishing(msg, style) {
+            log(msg, style);
+            FishingRenderer.close();
+            gameState = 'DRIVING';
+            document.getElementById('stat-state').innerText = "DRIVING";
+            document.getElementById('stat-state').style.color = "#22D3EE";
+        }
+
+        // --- 5. THE 60FPS LOOP ---
+        function gameLoop(time) {
+            const dt = (time - lastTime) / 1000;
+            lastTime = time;
+
+            if (gameState === 'DRIVING') {
+                if (isChargingCast) {
+                    castChargePct = Math.min(1.0, castChargePct + dt * 1.5);
+                    inputKeys.forward = inputKeys.backward = inputKeys.left = inputKeys.right = false;
+                }
+
+                ExplorationEngine.update(dt, inputKeys);
+                
+                const lightRadius = player.gear.boat.upgrades.lantern.lightRadius;
+                const castState = {
+                    mouseX: mouseScreenPos.x, mouseY: mouseScreenPos.y,
+                    isCharging: isChargingCast, chargePct: castChargePct, maxDist: maxCastDistancePx
+                };
+
+                ExplorationRenderer.render(ExplorationEngine, lightRadius, castState, false);
+            } 
+            else if (gameState === 'FISHING') {
+                // Keep rendering the background exploration map while fishing
+                ExplorationRenderer.render(ExplorationEngine, player.gear.boat.upgrades.lantern.lightRadius, null, true);
+                
+                FishingEngine.update(dt, isReelingInput);
+                FishingRenderer.update(FishingEngine, dt, isReelingInput);
+
+                // Use the dynamically selected fish identity from the engine
+                if (FishingEngine.phase === 'CAUGHT') endFishing(`Caught a ${FishingEngine.fishData.identity.name}!`, "success");
+                else if (FishingEngine.phase === 'SNAPPED') endFishing("Line snapped! Lost the lure.", "danger");
+                else if (FishingEngine.phase === 'ESCAPED') endFishing("The fish escaped.", "danger");
+            }
+
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>

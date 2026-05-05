@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crafting Harness - Underdark Fishing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1.2fr;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            align-items: start;
+        }
+        .panel-col {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            min-height: 80vh;
+        }
+        .panel-col h2 { font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-top: 0;}
+        
+        .fish-card, .part-card, .lure-card {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            border-radius: 0.375rem;
+            margin-bottom: 0.75rem;
+            transition: all 0.2s;
+        }
+        .fish-card img, .lure-card img {
+            width: 120px; image-rendering: pixelated; background: #020617; border-radius: 0.25rem; border: 1px solid #1E293B; display: block; margin: 0 auto 0.5rem;
+        }
+        .part-card { cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .part-card:hover { border-color: var(--accent); }
+        .part-card.selected { border-color: var(--glow); background: rgba(190, 242, 100, 0.1); }
+        
+        .stat-line { font-size: 0.8rem; color: var(--muted); display: flex; justify-content: space-between; margin-bottom: 0.2rem;}
+        .stat-val { font-weight: bold; }
+        .pos { color: var(--glow); }
+        .neg { color: var(--warn); }
+        
+        .progress-bar { width: 100%; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; margin-top: 0.25rem;}
+        .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+
+        .btn { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.5rem 1rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit; font-weight: bold; width: 100%; margin-top: 0.5rem;}
+        .btn:hover { border-color: var(--accent); }
+        .btn.primary { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; border-color: var(--accent); }
+        .btn.danger { background: #7F1D1D; color: white; border-color: #DC2626; }
+        
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: var(--panel); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1400px;">
+        <div class="top-bar">
+            <h1>🎣 Dissection & Crafting Harness</h1>
+            
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <label style="color: var(--accent); font-weight: bold;">
+                    Player LureCrafting Stat: 
+                    <input type="range" id="stat-slider" min="1" max="5" value="1" style="vertical-align: middle;">
+                    <span id="stat-val" style="color: white;">1</span>
+                </label>
+                <a href="index.html" class="btn" style="width: auto; margin:0;">← Hub</a>
+            </div>
+        </div>
+
+        <div class="layout-grid">
+            <!-- COL 1: CATCHING -->
+            <div class="panel-col">
+                <h2>1. Caught Fish</h2>
+                <button class="btn primary" id="btn-catch">Catch Random Fish</button>
+                <div id="catch-container" style="margin-top: 1rem;"></div>
+            </div>
+
+            <!-- COL 2: INVENTORY & KNOWLEDGE -->
+            <div class="panel-col">
+                <h2>2. Parts Inventory</h2>
+                <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem;">Select 3 to 5 parts to craft a lure.</div>
+                <div id="inventory-container"></div>
+                
+                <h2 style="margin-top: 2rem;">Pokedex Progress</h2>
+                <div id="pokedex-container"></div>
+            </div>
+
+            <!-- COL 3: CRAFTING BENCH -->
+            <div class="panel-col">
+                <h2>3. Crafting Bench</h2>
+                <button class="btn primary" id="btn-craft" disabled>Craft Lure (Requires 3-5 Parts)</button>
+                <div id="lure-container" style="margin-top: 1rem;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { generateFishData } from './js/data/fish_data_generator.js';
+        import { DissectionEngine } from './js/data/fish_dissection.js';
+        import { LureCrafter } from './js/fishing/lure_crafter.js';
+
+        let currentFish = null;
+        let inventory =[];
+        let selectedIndices = new Set();
+        let pokedex = {}; // Stores Knowledge XP per family for simplicity in harness
+
+        const statSlider = document.getElementById('stat-slider');
+        const statVal = document.getElementById('stat-val');
+        statSlider.addEventListener('input', (e) => statVal.innerText = e.target.value);
+
+        // Helper: Format stats with +/-
+        function fmt(val) {
+            if (val > 0) return `<span class="stat-val pos">+${val}</span>`;
+            if (val < 0) return `<span class="stat-val neg">${val}</span>`;
+            return `<span class="stat-val">0</span>`;
+        }
+
+        // --- CATCH LOGIC ---
+        document.getElementById('btn-catch').addEventListener('click', () => {
+            currentFish = generateFishData();
+            
+            const cont = document.getElementById('catch-container');
+            cont.innerHTML = `
+                <div class="fish-card">
+                    <img src="${currentFish.art.imageDataUrl}" />
+                    <b style="color: var(--accent); font-size:1.1rem; display:block; text-align:center;">${currentFish.identity.name}</b>
+                    <div style="text-align:center; font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">${currentFish.identity.rarity} ${currentFish.identity.family} | Size: ${currentFish.physical.sizeTier}</div>
+                    
+                    <div style="font-size:0.8rem; border-top:1px solid var(--border); padding-top:0.5rem;">
+                        <div style="color:var(--warn); margin-bottom:0.3rem;"><b>Hidden Lure Preferences</b></div>
+                        <div class="stat-line">Color (Cold/Warm) <span>${currentFish.lurePrefs.color}</span></div>
+                        <div class="stat-line">Sound (Silent/Loud) <span>${currentFish.lurePrefs.sound}</span></div>
+                        <div class="stat-line">Light (Dark/Shiny) <span>${currentFish.lurePrefs.light}</span></div>
+                        <div class="stat-line">Weight (Light/Heavy) <span>${currentFish.lurePrefs.weight}</span></div>
+                    </div>
+
+                    <button class="btn danger" id="btn-dissect">🔪 Dissect Fish</button>
+                </div>
+            `;
+
+            document.getElementById('btn-dissect').addEventListener('click', handleDissect);
+        });
+
+        // --- DISSECT LOGIC ---
+        function handleDissect() {
+            if (!currentFish) return;
+            
+            const lvl = parseInt(statSlider.value);
+            const result = DissectionEngine.dissect(currentFish, lvl);
+            
+            // Add parts to inventory
+            inventory.push(...result.parts);
+            
+            // Add to Pokedex
+            const fam = currentFish.identity.family;
+            if (!pokedex[fam]) pokedex[fam] = 0;
+            pokedex[fam] += result.knowledgeGain;
+
+            // Clear catch
+            currentFish = null;
+            document.getElementById('catch-container').innerHTML = '<p class="muted">Fish dissected. Catch another.</p>';
+            
+            updateInventoryUI();
+            updatePokedexUI();
+        }
+
+        // --- INVENTORY UI ---
+        function updateInventoryUI() {
+            const cont = document.getElementById('inventory-container');
+            cont.innerHTML = '';
+            
+            inventory.forEach((part, index) => {
+                const card = document.createElement('div');
+                card.className = `part-card ${selectedIndices.has(index) ? 'selected' : ''}`;
+                
+                let statsHtml = '';
+                if (part.stats.color !== 0) statsHtml += `<div class="stat-line">Color ${fmt(part.stats.color)}</div>`;
+                if (part.stats.sound !== 0) statsHtml += `<div class="stat-line">Sound ${fmt(part.stats.sound)}</div>`;
+                if (part.stats.light !== 0) statsHtml += `<div class="stat-line">Light ${fmt(part.stats.light)}</div>`;
+                if (part.stats.weight !== 0) statsHtml += `<div class="stat-line">Weight ${fmt(part.stats.weight)}</div>`;
+
+                card.innerHTML = `
+                    <div style="flex-grow:1;">
+                        <b style="font-size:0.9rem;">${part.name}</b>
+                        <div style="margin-top:0.3rem;">${statsHtml}</div>
+                    </div>
+                `;
+
+                card.addEventListener('click', () => {
+                    if (selectedIndices.has(index)) {
+                        selectedIndices.delete(index);
+                    } else {
+                        if (selectedIndices.size < 5) selectedIndices.add(index);
+                    }
+                    updateInventoryUI();
+                    
+                    const craftBtn = document.getElementById('btn-craft');
+                    craftBtn.disabled = selectedIndices.size < 3;
+                });
+                
+                cont.appendChild(card);
+            });
+        }
+
+        // --- POKEDEX UI ---
+        function updatePokedexUI() {
+            const cont = document.getElementById('pokedex-container');
+            cont.innerHTML = '';
+            
+            for (const [family, xp] of Object.entries(pokedex)) {
+                // Mock max XP threshold per family
+                const maxXP = 200; 
+                const pct = Math.min(100, (xp / maxXP) * 100);
+                
+                cont.innerHTML += `
+                    <div style="margin-bottom:0.8rem;">
+                        <div class="stat-line"><b style="text-transform:capitalize;">${family} Knowledge</b> <span>${xp}/${maxXP} XP</span></div>
+                        <div class="progress-bar"><div class="progress-fill" style="width: ${pct}%;"></div></div>
+                        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.2rem;">
+                            ${pct >= 100 ? '<span style="color:var(--glow)">Full Biology Unlocked!</span>' : 'Dissect more to unlock lure preferences.'}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // --- CRAFT LOGIC ---
+        document.getElementById('btn-craft').addEventListener('click', () => {
+            const selectedParts = Array.from(selectedIndices).map(i => inventory[i]);
+            const lvl = parseInt(statSlider.value);
+            
+            const finalLure = LureCrafter.craft(selectedParts, lvl);
+            
+            // Remove used parts from inventory
+            inventory = inventory.filter((_, i) => !selectedIndices.has(i));
+            selectedIndices.clear();
+            updateInventoryUI();
+            document.getElementById('btn-craft').disabled = true;
+
+            // Display Lure
+            const cont = document.getElementById('lure-container');
+            cont.innerHTML = `
+                <div class="lure-card">
+                    <img src="${finalLure.imageDataUrl}" />
+                    <b style="color: var(--accent); font-size:1.1rem; display:block; text-align:center;">${finalLure.name}</b>
+                    <div style="text-align:center; font-size:0.8rem; color:var(--muted); margin-bottom:1rem;">Durability: ${finalLure.durability}/${finalLure.maxDurability} Casts</div>
+                    
+                    <div style="font-size:0.8rem; border-top:1px solid var(--border); padding-top:0.5rem;">
+                        <div style="color:var(--ink); margin-bottom:0.3rem;"><b>Final Lure Stats (Clamped at ±100)</b></div>
+                        <div class="stat-line">Color <span>${fmt(finalLure.stats.color)}</span></div>
+                        <div class="stat-line">Sound <span>${fmt(finalLure.stats.sound)}</span></div>
+                        <div class="stat-line">Light <span>${fmt(finalLure.stats.light)}</span></div>
+                        <div class="stat-line">Weight <span>${fmt(finalLure.stats.weight)}</span></div>
+                    </div>
+                </div>
+            `;
+        });
+    </script>
+</body>
+</html>

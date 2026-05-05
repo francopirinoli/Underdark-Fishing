@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bestiary & Data Harness - Underdark Fishing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .control-bar {
+            background: var(--panel); 
+            border: 1px solid var(--border);
+            padding: 1rem; 
+            border-radius: 0.5rem; 
+            display: flex; 
+            gap: 1.5rem;
+            align-items: center; 
+            flex-wrap: wrap; 
+            margin-bottom: 1.5rem;
+        }
+        .control-bar label { 
+            font-size: 0.9rem; 
+            color: var(--accent-2); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 0.4rem;
+        }
+        .control-bar select, .control-bar input {
+            background: var(--bg-2); 
+            border: 1px solid var(--border); 
+            color: var(--ink);
+            padding: 0.5rem; 
+            border-radius: 0.25rem; 
+            font-family: inherit; 
+            font-size: 0.9rem;
+        }
+        .btn {
+            background: var(--panel-2); 
+            border: 1px solid var(--border); 
+            color: var(--ink);
+            padding: 0.6rem 1.2rem; 
+            border-radius: 0.25rem; 
+            cursor: pointer; 
+            font-family: inherit;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn.primary { 
+            background: linear-gradient(180deg, #22D3EE, #0E7490); 
+            color: #020617; 
+            font-weight: bold; 
+            border-color: var(--accent); 
+        }
+        .btn:hover { border-color: var(--accent); filter: brightness(1.1); }
+        
+        .sprites { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); /* Wider cards to fit data */
+            gap: 1.5rem; 
+        }
+        .sprite-card { 
+            background: var(--panel-2); 
+            border: 1px solid var(--border); 
+            border-radius: 0.375rem; 
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Card Header */
+        .card-header {
+            padding: 0.75rem;
+            text-align: center;
+            border-bottom: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .card-header b { font-size: 1.1rem; font-family: 'Cinzel', serif; letter-spacing: 0.05em; display: block;}
+        .card-header .family { font-size: 0.75rem; text-transform: uppercase; color: var(--muted); letter-spacing: 0.1em; margin-top: 0.2rem;}
+
+        /* Rarity Colors */
+        .rarity-Common b { color: var(--ink); }
+        .rarity-Uncommon b { color: #22C55E; }
+        .rarity-Rare b { color: #3B82F6; }
+        .rarity-Legendary b { color: #F59E0B; text-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+        .rarity-Boss b { color: #DC2626; text-shadow: 0 0 8px rgba(220, 38, 38, 0.6); }
+
+        .sprite-card img { 
+            width: 50%; 
+            margin: 1rem auto;
+            image-rendering: pixelated; 
+            background: #020617; 
+            border-radius: 0.25rem; 
+            border: 1px solid #1E293B; 
+            display: block;
+        }
+
+        /* Data Sections */
+        .data-section {
+            padding: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.8rem;
+        }
+        .section-title {
+            color: var(--accent-2);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        .tag {
+            display: inline-block; padding: 0.15rem 0.4rem; border-radius: 0.2rem; 
+            background: var(--bg); border: 1px solid var(--border); margin: 0.1rem;
+            color: var(--ink);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+        .stat-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            padding: 0.4rem;
+            border-radius: 0.25rem;
+            text-align: center;
+        }
+        .stat-box span { display: block; color: var(--muted); font-size: 0.65rem; text-transform: uppercase;}
+        .stat-box b { color: var(--accent); font-size: 0.95rem; }
+
+        /* Preference Bar */
+        .pref-container { margin-bottom: 0.5rem; }
+        .pref-labels { display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--muted); margin-bottom: 0.2rem; }
+        .pref-labels b { color: var(--ink); font-size: 0.75rem; }
+        .pref-track {
+            position: relative; height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 3px;
+        }
+        .pref-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); }
+        .pref-marker {
+            position: absolute; top: -3px; bottom: -3px; width: 4px; background: var(--accent); border-radius: 2px;
+            box-shadow: 0 0 5px var(--accent); transform: translateX(-50%);
+        }
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>📚 Master Bestiary & Data Harness</h1>
+            <a href="index.html" class="btn">← Back to Hub</a>
+        </div>
+        <p class="muted">Visualizes the "Absolute Truth" data generated for fish species, including physical traits, minigame combat stats, and exact lure preference axes.</p>
+        
+        <div class="control-bar">
+            <label>Family
+                <select id="family">
+                    <option value="Any">Random (Any)</option>
+                    <option value="fish">Standard Fish</option>
+                    <option value="ray">Ray / Flatfish</option>
+                    <option value="shark">Shark / Predator</option>
+                    <option value="cephalopod">Cephalopod</option>
+                    <option value="crustacean">Crustacean</option>
+                    <option value="deepsea">Deep Sea Horror</option>
+                    <option value="eel">Eel / Serpentine</option>
+                    <option value="jellyfish">Jellyfish / Cnidarian</option>
+                </select>
+            </label>
+            <label>Rarity Tier
+                <select id="rarity">
+                    <option value="Any">Random (Weighted)</option>
+                    <option value="Common">Common</option>
+                    <option value="Uncommon">Uncommon</option>
+                    <option value="Rare">Rare</option>
+                    <option value="Legendary">Legendary</option>
+                    <option value="Boss">Boss</option>
+                </select>
+            </label>
+            <label>Seed <input id="seed" type="number" value="" placeholder="Random"/></label>
+            <label>Count <input id="count" type="number" value="8" min="1" max="96" style="width:5rem"/></label>
+            <button class="btn primary" id="gen-btn" style="margin-top: 1.3rem;">Generate Species</button>
+        </div>
+
+        <div id="sprites" class="sprites"></div>
+    </div>
+
+    <!-- ES Module Script -->
+    <script type="module">
+        import { createRng } from './js/util/rng.js';
+        
+        // Import the Master Data Generator instead of individual art generators
+        import { generateFishData } from './js/data/fish_data_generator.js';
+
+        // Helper to draw the preference sliders (-100 to 100)
+        function makePrefBar(label, value, leftText, rightText) {
+            // Convert -100 to 100 into a percentage (0% to 100%)
+            const percent = Math.max(0, Math.min(100, (value + 100) / 2));
+            return `
+                <div class="pref-container">
+                    <div class="pref-labels">
+                        <span>${leftText}</span>
+                        <b>${label} (${value})</b>
+                        <span>${rightText}</span>
+                    </div>
+                    <div class="pref-track">
+                        <div class="pref-center"></div>
+                        <div class="pref-marker" style="left: ${percent}%;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('gen-btn').addEventListener('click', () => {
+            const familySelect = document.getElementById('family').value;
+            const raritySelect = document.getElementById('rarity').value;
+            
+            const baseSeedInput = document.getElementById('seed').value;
+            const baseSeed = baseSeedInput ? parseInt(baseSeedInput) : Date.now();
+            const count = Math.min(96, parseInt(document.getElementById('count').value) || 8);
+            
+            const container = document.getElementById('sprites');
+            container.innerHTML = ''; 
+            
+            for (let i = 0; i < count; i++) {
+                const seed = (baseSeed + i * 333) >>> 0;
+                
+                // Set up options based on UI
+                const options = { seed: seed };
+                if (familySelect !== 'Any') options.family = familySelect;
+                if (raritySelect !== 'Any') options.rarity = raritySelect;
+
+                // 1. Generate Master Data Object
+                const fish = generateFishData(options);
+                
+                // 2. Build Card HTML
+                const card = document.createElement('div');
+                card.className = `sprite-card`;
+                
+                // Format biomes
+                const biomeTags = fish.environment.biomes.map(b => `<span class="tag" style="text-transform: capitalize;">${b}</span>`).join('');
+
+                card.innerHTML = `
+                    <div class="card-header rarity-${fish.identity.rarity}">
+                        <b>${fish.identity.name}</b>
+                        <div class="family">${fish.identity.rarity} ${fish.identity.family}</div>
+                    </div>
+                    
+                    <img src="${fish.art.imageDataUrl}" alt="${fish.identity.name}" />
+                    
+                    <div class="data-section">
+                        <div class="section-title">Environment & Biology</div>
+                        <div style="margin-bottom: 0.5rem;">${biomeTags}</div>
+                        <span class="tag">${fish.environment.depthPref}</span>
+                        <span class="tag">${fish.environment.activeHours}</span>
+                        <span class="tag">Temp: ${fish.environment.tempPref}°</span>
+                    </div>
+
+                    <div class="data-section">
+                        <div class="section-title">Lure Preferences (Tolerance: ±${(fish.lurePrefs.tolerance * 100).toFixed(0)}%)</div>
+                        ${makePrefBar('Color', fish.lurePrefs.color, 'Cold/Blue', 'Warm/Red')}
+                        ${makePrefBar('Sound', fish.lurePrefs.sound, 'Silent', 'Loud')}
+                        ${makePrefBar('Light', fish.lurePrefs.light, 'Pitch Dark', 'Bright/Shiny')}
+                        ${makePrefBar('Weight', fish.lurePrefs.weight, 'Feather-light', 'Heavy/Sinking')}
+                    </div>
+
+                    <div class="data-section">
+                        <div class="section-title">Minigame Combat Stats</div>
+                        <div class="stats-grid">
+                            <div class="stat-box"><span>Stamina</span><b>${fish.combat.stamina}</b></div>
+                            <div class="stat-box"><span>Speed</span><b>${fish.combat.speed}</b></div>
+                            <div class="stat-box"><span>Aggression</span><b>${(fish.combat.aggression * 100).toFixed(0)}%</b></div>
+                            <div class="stat-box"><span>Hook Window</span><b>${fish.combat.hookWindowMs}ms</b></div>
+                        </div>
+                    </div>
+
+                    <div class="data-section" style="background: rgba(0,0,0,0.2);">
+                        <div class="stats-grid">
+                            <div class="stat-box" style="border:none; background:transparent;">
+                                <span>Size Tier</span><b style="color:var(--ink);">${fish.physical.sizeTier}</b>
+                            </div>
+                            <div class="stat-box" style="border:none; background:transparent;">
+                                <span>Weight Range</span><b style="color:var(--ink);">${fish.physical.weightRange.min} - ${fish.physical.weightRange.max} kg</b>
+                            </div>
+                            <div class="stat-box" style="border:none; background:transparent;">
+                                <span>Base Value</span><b style="color:#FBBF24;">${fish.economy.baseValue}g</b>
+                            </div>
+                            <div class="stat-box" style="border:none; background:transparent;">
+                                <span>Base XP</span><b style="color:#A78BFA;">${fish.economy.baseXp} XP</b>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            }
+        });
+
+        // Trigger an initial generation on page load
+        document.getElementById('gen-btn').click();
+    </script>
+</body>
+</html>

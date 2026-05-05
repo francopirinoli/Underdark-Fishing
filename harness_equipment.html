@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment Harness - Underdark Fishing</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .control-bar { background: var(--panel); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .control-bar label { font-size: 0.9rem; color: var(--accent-2); display: flex; flex-direction: column; gap: 0.4rem;}
+        .control-bar select, .control-bar input { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); padding: 0.5rem; border-radius: 0.25rem; font-family: inherit; font-size: 0.9rem; }
+        .btn { background: linear-gradient(180deg, #22D3EE, #0E7490); color: #020617; font-weight: bold; border: 1px solid var(--accent); padding: 0.6rem 1.2rem; border-radius: 0.25rem; cursor: pointer; font-family: inherit; text-decoration: none;}
+        .btn:hover { filter: brightness(1.1); }
+        
+        .grid-output { display: grid; gap: 1rem; }
+        .item-card { background: var(--panel-2); border: 1px solid var(--border); padding: 0.75rem; border-radius: 0.375rem; text-align: center; }
+        .item-card img { width: 100%; image-rendering: pixelated; background: #0b1226; border-radius: 0.25rem; border: 1px solid #1E293B; }
+        
+        /* Container for Side-by-Side comparisons */
+        .comparison-card { display: flex; flex-direction: column; gap: 0.5rem; background: var(--panel); border: 1px solid var(--border); padding: 1rem; border-radius: 0.5rem;}
+        .comparison-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        
+        .tag { display: inline-block; padding: 0.1rem 0.3rem; border-radius: 0.2rem; background: var(--bg); border: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; margin-right: 0.25rem;}
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 1400px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>🛡️ Equipment & Event Harness</h1>
+            <a href="index.html" style="background: var(--panel-2); color: var(--ink); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 0.25rem; text-decoration: none;">← Back to Hub</a>
+        </div>
+        
+        <div class="control-bar">
+            <label>Item Type
+                <select id="item-type">
+                    <option value="chest">Treasure Chest / Mimic</option>
+                    <option value="boat">Boat / Hull</option>
+                    <option value="rod">Fishing Rod</option>
+                    <option value="lure">Lure / Components</option>
+                </select>
+            </label>
+            <label id="chest-state-label">State Variations
+                <select id="chest-state">
+                    <option value="side_by_side">Side-by-Side (Normal vs Mimic)</option>
+                    <option value="random">Random (Chance of Mimic)</option>
+                    <option value="normal">Normal Only</option>
+                    <option value="mimic">Mimic Only</option>
+                </select>
+            </label>
+            <label>Seed <input id="seed" type="number" value="" placeholder="Random"/></label>
+            <label>Count <input id="count" type="number" value="6" min="1" max="96" style="width:5rem"/></label>
+            <button class="btn" id="gen-btn" style="margin-top: 1.3rem;">Generate</button>
+        </div>
+
+        <div id="output" class="grid-output"></div>
+    </div>
+
+    <script type="module">
+        import { createRng } from './js/util/rng.js';
+        
+        import { generateChest } from './js/art/chest_generator.js';
+        import { generateBoatData } from './js/data/boat_data_generator.js'; // Crucial: Imports the DATA layer, not just the ART
+        import { generateRodData } from './js/data/rod_data_generator.js'; 
+        import { generateLure } from './js/art/lure_generator.js';
+
+        const GENERATORS = {
+            'chest': generateChest,
+            'boat': generateBoatData,
+            'rod': generateRodData, 
+            'lure': generateLure
+        };
+
+        // UI Toggle for specific options
+        document.getElementById('item-type').addEventListener('change', (e) => {
+            document.getElementById('chest-state-label').style.display = e.target.value === 'chest' ? 'flex' : 'none';
+        });
+
+        document.getElementById('gen-btn').addEventListener('click', () => {
+            const type = document.getElementById('item-type').value;
+            const state = document.getElementById('chest-state').value;
+            
+            const baseSeedInput = document.getElementById('seed').value;
+            const baseSeed = baseSeedInput ? parseInt(baseSeedInput) : Date.now();
+            const count = Math.min(96, parseInt(document.getElementById('count').value) || 6);
+            
+            const container = document.getElementById('output');
+            container.innerHTML = ''; 
+
+            const generator = GENERATORS[type];
+            if (!generator) return;
+
+            // Expand grid size dynamically based on what we are looking at
+            if (type === 'boat') {
+                container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(400px, 1fr))'; // Extra wide for big boat images
+            } else if (type === 'chest' && state === 'side_by_side') {
+                container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(320px, 1fr))';
+            } else {
+                container.style.gridTemplateColumns = 'repeat(auto-fill, minmax(220px, 1fr))';
+            }
+
+            for (let i = 0; i < count; i++) {
+                const seed = (baseSeed + i * 111) >>> 0;
+                const rng = createRng(seed);
+                
+                // === 1. CHEST LOGIC ===
+                if (type === 'chest') {
+                    if (state === 'side_by_side') {
+                        const normalRng = createRng(seed); 
+                        const normal = generator({ rng: normalRng, isMimic: false });
+                        
+                        const mimicRng = createRng(seed); 
+                        const mimic = generator({ rng: mimicRng, isMimic: true });
+
+                        const wrap = document.createElement('div');
+                        wrap.className = 'comparison-card';
+                        wrap.innerHTML = `
+                            <div style="font-weight:bold; text-align:center; color: var(--accent); font-size:0.9rem;">Seed: ${seed}</div>
+                            <div class="comparison-row">
+                                <div class="item-card">
+                                    <img src="${normal.imageDataUrl}" alt="${normal.name}" />
+                                    <b>${normal.name}</b>
+                                </div>
+                                <div class="item-card" style="border-color: #9F1239;">
+                                    <img src="${mimic.imageDataUrl}" alt="${mimic.name}" />
+                                    <b style="color: #FCA5A5;">${mimic.name}</b>
+                                </div>
+                            </div>
+                            <div style="text-align:center;"><span class="tag">Material: ${normal.data.material}</span><span class="tag">Trim: ${normal.data.trim}</span></div>
+                        `;
+                        container.appendChild(wrap);
+                    } else {
+                        let isMimic = false;
+                        if (state === 'mimic') isMimic = true;
+                        if (state === 'random') isMimic = rng.chance(0.2); 
+
+                        const result = generator({ rng, isMimic });
+                        const card = document.createElement('div');
+                        card.className = 'item-card';
+                        if (result.data.isMimic) card.style.borderColor = '#9F1239';
+                        
+                        const tags = Object.keys(result.data).map(key => `<span class="tag">${key}: ${result.data[key]}</span>`).join('');
+                        card.innerHTML = `
+                            <img src="${result.imageDataUrl}" alt="${result.name}" />
+                            <b style="color: ${result.data.isMimic ? '#FCA5A5' : 'var(--ink)'}">${result.name}</b>
+                            <div>${tags}</div>
+                        `;
+                        container.appendChild(card);
+                    }
+                } 
+                // === 2. BOAT LOGIC (RPG Tooltip) ===
+                else if (type === 'boat') {
+                    const result = generator({ seed }); // Use the data generator
+                    
+                    const wrap = document.createElement('div');
+                    wrap.className = 'comparison-card';
+                    
+                    let rarityColor = 'var(--ink)';
+                    if (result.identity.rarity === 'Uncommon') rarityColor = '#22C55E';
+                    if (result.identity.rarity === 'Rare') rarityColor = '#3B82F6';
+                    if (result.identity.rarity === 'Legendary') rarityColor = '#F59E0B';
+
+                    const formatStat = (val) => {
+                        return `<span style="font-weight:bold; float:right; color:var(--ink);">${val}</span>`;
+                    };
+
+                    wrap.innerHTML = `
+                        <div style="font-weight:bold; text-align:center; color: ${rarityColor}; font-family: 'Cinzel', serif; font-size:1.2rem; text-shadow: 0 0 5px ${rarityColor}40;">
+                            ${result.identity.name}
+                        </div>
+                        <div style="text-align:center; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.8rem; text-transform: uppercase;">
+                            ${result.art.boatType} Chassis
+                        </div>
+
+                        <div class="comparison-row" style="margin-bottom: 1rem;">
+                            <div class="item-card" style="padding: 0.25rem;">
+                                <span class="muted small" style="display:block; margin-bottom: 0.5rem;">Profile View</span>
+                                <img src="${result.art.profileDataUrl}" style="width: 100%; border:none; background: transparent;" />
+                            </div>
+                            <div class="item-card" style="padding: 0.25rem; display:flex; flex-direction:column; justify-content:center;">
+                                <span class="muted small" style="display:block; margin-bottom: 0.5rem;">Top-Down</span>
+                                <img src="${result.art.topDownDataUrl}" style="width: 100%; max-width: 160px; margin: 0 auto; display: block; border:none; background: transparent;" />
+                            </div>
+                        </div>
+
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+                            <span style="color: var(--muted);">Hull Integrity (HP)</span> ${formatStat(result.stats.maxHp)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+                            <span style="color: var(--muted);">Top Speed</span> ${formatStat(result.stats.speed)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+                            <span style="color: var(--muted);">Maneuverability</span> ${formatStat(result.stats.turnSpeed)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+                            <span style="color: var(--muted);">Cargo Space</span> ${formatStat(result.stats.cargoSpace)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem; display: flex; justify-content: space-between;">
+                            <span style="color: var(--muted);">Stealth Rating</span> ${formatStat(result.stats.stealth + 'x')}
+                        </div>
+
+                        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border);">
+                            <div style="color: #A78BFA; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.1rem;">🏮 Installed: ${result.upgrades.lantern.name}</div>
+                            <div style="color: var(--muted); font-size: 0.75rem; line-height: 1.2;">Illumination Radius: ${result.upgrades.lantern.lightRadius}px</div>
+                        </div>
+
+                        <div style="margin-top: auto; padding-top: 0.5rem; text-align: center; color: #FBBF24; font-weight: bold; font-size: 0.9rem;">
+                            💰 ${result.economy.value}g
+                        </div>
+                    `;
+                    container.appendChild(wrap);
+                }
+                // === 3. ROD LOGIC (RPG Tooltip) ===
+                else if (type === 'rod') {
+                    const result = generator({ rng });
+                    const card = document.createElement('div');
+                    card.className = 'item-card';
+                    card.style.textAlign = 'left';
+                    card.style.display = 'flex';
+                    card.style.flexDirection = 'column';
+
+                    let rarityColor = 'var(--ink)';
+                    if (result.identity.rarity === 'Uncommon') rarityColor = '#22C55E';
+                    if (result.identity.rarity === 'Rare') rarityColor = '#3B82F6';
+                    if (result.identity.rarity === 'Legendary') rarityColor = '#F59E0B';
+
+                    let traitsHtml = '';
+                    if (result.traits.length > 0) {
+                        traitsHtml = `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border);">`;
+                        result.traits.forEach(t => {
+                            traitsHtml += `<div style="color: #A78BFA; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.1rem;">✨ ${t.name}</div>
+                                           <div style="color: var(--muted); font-size: 0.75rem; margin-bottom: 0.4rem; line-height: 1.2;">${t.desc}</div>`;
+                        });
+                        traitsHtml += `</div>`;
+                    }
+
+                    const formatStat = (val, neutral, isMs = false) => {
+                        let color = 'var(--ink)';
+                        let prefix = val > 0 ? '+' : '';
+                        if (val > neutral) color = 'var(--glow)';
+                        if (val < neutral) color = 'var(--warn)';
+                        return `<span style="color: ${color}; font-weight:bold; float:right;">${prefix}${val}${isMs ? 'ms' : ''}</span>`;
+                    };
+
+                    card.innerHTML = `
+                        <div style="text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                            <img src="${result.art.imageDataUrl}" alt="${result.identity.name}" style="width: 120px; border: none; background: transparent;" />
+                            <b style="color: ${rarityColor}; display: block; font-family: 'Cinzel', serif; font-size: 1.1rem; text-shadow: 0 0 5px ${rarityColor}40;">${result.identity.name}</b>
+                        </div>
+                        
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--muted);">Power (Reel Spd)</span> ${formatStat(result.stats.power, 1.0)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--muted);">Max Tension</span> ${formatStat(result.stats.maxTension, 100)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--muted);">Flexibility</span> ${formatStat(result.stats.flexibility, 1.0)}
+                        </div>
+                        <div style="font-size: 0.85rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--muted);">Hook Window</span> ${formatStat(result.stats.sensitivity, 0, true)}
+                        </div>
+                        
+                        ${traitsHtml}
+                        
+                        <div style="margin-top: auto; padding-top: 0.5rem; text-align: center; color: #FBBF24; font-weight: bold; font-size: 0.9rem;">
+                            💰 ${result.economy.value}g
+                        </div>
+                    `;
+                    container.appendChild(card);
+                }
+                // === 4. LURE LOGIC ===
+                else if (type === 'lure') {
+                    const result = generator({ rng });
+                    const card = document.createElement('div');
+                    card.className = 'item-card';
+                    
+                    const tags = result.data.components.map(comp => `<span class="tag">${comp.replace(/_/g, ' ')}</span>`).join('');
+                    card.innerHTML = `
+                        <img src="${result.imageDataUrl}" alt="${result.name}" />
+                        <b style="color: var(--ink)">${result.name}</b>
+                        <div style="margin-top: 0.5rem;">${tags}</div>
+                    `;
+                    container.appendChild(card);
+                }
+            }
+        });
+
+        // Trigger on load
+        document.getElementById('gen-btn').click();
+    </script>
+</body>
+</html>
