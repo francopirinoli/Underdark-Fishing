@@ -123,7 +123,7 @@ export const ExplorationRenderer = {
         };
     },
 
-    render(engine, lightRadius, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null) {
+    render(engine, lightRadius, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, fisherman = null) {
         if (!this.offscreenMap || !this.boatImage) return;
 
         const playerPxX = engine.x * this.TILE_SIZE;
@@ -172,6 +172,28 @@ export const ExplorationRenderer = {
 
         const activeLights =[];
         activeLights.push({ x: screenBoatX, y: screenBoatY, radius: lightRadius });
+
+                // --- NEW: DRAW WANDERING FISHERMAN ---
+        if (fisherman && fisherman.img && !isFishingPhase) {
+            const fx = (fisherman.x * this.TILE_SIZE) - this.camX;
+            const fy = (fisherman.y * this.TILE_SIZE) - this.camY;
+            
+            // Add a gentle floating bob and wobble
+            const bob = Math.sin(Date.now() / 400) * 2;
+            const rot = Math.sin(Date.now() / 800) * 0.05;
+            
+            const fbw = fisherman.img.width * BOAT_VISUAL_SCALE;
+            const fbh = fisherman.img.height * BOAT_VISUAL_SCALE;
+
+            this.ctx.save();
+            this.ctx.translate(fx, fy + bob);
+            this.ctx.rotate(rot);
+            this.ctx.drawImage(fisherman.img, -fbw / 2, -fbh / 2, fbw, fbh);
+            this.ctx.restore();
+
+            // Give the fisherman a faint, warm lantern glow
+            activeLights.push({ x: fx, y: fy + bob, radius: 100, color: 'rgba(251, 191, 36, 0.4)' });
+        }
 
         if (this.dockPositions.length > 0) {
             const firstDock = this.dockPositions[0];

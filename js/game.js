@@ -19,6 +19,8 @@ import { generateGlobalMap } from './exploration/global_map.js';
 import { generateLocalMap, TILE, LOCAL_MAP_SIZE } from './exploration/local_map.js';
 import { BIOMES } from './exploration/biomes.js';
 import { generateFishData, generateFishInstance, getFishPoolForNode } from './data/fish_data_generator.js';
+import { generateBoatData } from './data/boat_data_generator.js'; // <-- NEW
+import { MerchantGenerator } from './economy/merchant_generator.js'; // <-- NEW
 
 // Engines & Renderers
 import { ExplorationEngine } from './exploration/exploration_engine.js';
@@ -33,6 +35,7 @@ import { GrimoireUI } from './ui/grimoire_ui.js';
 import { MenuUI } from './ui/menu_ui.js';
 import { HubUI } from './ui/hub_ui.js';
 import { PauseUI } from './ui/pause_ui.js';
+import { EncounterUI } from './ui/encounter_ui.js';
 
 // Events
 import { EventManager } from './events/event_manager.js';
@@ -40,7 +43,7 @@ import { generateChest } from './art/chest_generator.js';
 
 // --- GAME STATE ---
 let currentSaveSlot = 1; // <-- ADD THIS LINE
-const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5 };
+const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5, ENCOUNTER: 6 }; // <-- ADDED 6
 let currentState = STATE.MENU;
 let stateBeforePause = STATE.EXPLORATION;
 
@@ -51,6 +54,7 @@ let currentLocalMap, currentBiome;
 let currentLocalFishPool =[];
 let lastTime = 0;
 let currentLocalChest = null; 
+let currentLocalFisherman = null; 
 
 // World State
 let discoveredNodes =[];
@@ -109,6 +113,16 @@ async function initGameSystems() {
     HubUI.init({
         onSave: () => saveCurrentState(),
         onDepart: () => resumeFromHub()
+    });
+
+    // NEW: Init Encounter UI
+    EncounterUI.init({
+        onSave: () => saveCurrentState(),
+        onLeave: () => {
+            currentState = STATE.EXPLORATION;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
     });
 
     // NEW: Init Pause UI
@@ -234,8 +248,7 @@ function loadLocalNode(entryDir) {
     // Ensure the node tracks its discovered fish species
     if (!targetNode.discoveredSpecies) targetNode.discoveredSpecies =[];
 
-    // NEW: Generate the Local Ecosystem using the global helper
-    // This replaces all the old manual loop logic!
+    // Generate the Local Ecosystem using the global helper
     currentLocalFishPool = getFishPoolForNode(world.seed, globalX, globalY, currentBiome.id);
 
     let spawnX = LOCAL_MAP_SIZE / 2, spawnY = LOCAL_MAP_SIZE / 2;
@@ -252,14 +265,11 @@ function loadLocalNode(entryDir) {
         hazardDodgeChance: effStats.exploration.hazardDodgeChance
     };
 
-    ExplorationRenderer.buildMapCache(currentLocalMap, currentBiome);
-    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity);
-        // NEW: Check if this node has an active treasure event
+    // --- 1. SPAWN TREASURE CHEST ---
     currentLocalChest = null;
     if (EventManager.Treasure.hasChest(globalX, globalY)) {
         const rng = createRng(world.seed + globalX * 10 + globalY * 100 + gameDay);
         const waterTiles =[];
-        // Scan for a valid deep water spot
         for (let y = 10; y < LOCAL_MAP_SIZE - 10; y += 4) { 
             for (let x = 10; x < LOCAL_MAP_SIZE - 10; x += 4) {
                 if (currentLocalMap.grid[y][x] === TILE.DEEP_WATER) waterTiles.push({x, y});
@@ -268,6 +278,40 @@ function loadLocalNode(entryDir) {
         if (waterTiles.length > 0) currentLocalChest = rng.pick(waterTiles);
     }
 
+    // --- 2. SPAWN WANDERING FISHERMAN ---
+    currentLocalFisherman = null;
+    if (EventManager.Fisherman.hasFisherman(globalX, globalY)) {
+        const fRng = createRng(world.seed + globalX * 7 + globalY * 11 + gameDay);
+        const deepWaters =[];
+        
+        for (let y = 20; y < LOCAL_MAP_SIZE - 20; y += 5) { 
+            for (let x = 20; x < LOCAL_MAP_SIZE - 20; x += 5) {
+                if (currentLocalMap.grid[y][x] === TILE.DEEP_WATER) deepWaters.push({x, y});
+            }
+        }
+        
+        if (deepWaters.length > 0) {
+            const pos = fRng.pick(deepWaters);
+            const npc = generateNPCData({ seed: fRng.next() * 10000 });
+            const boat = generateBoatData({ seed: fRng.next() * 10000 });
+            const fullInv = MerchantGenerator.generateInventory(fRng.next() * 10000, currentBiome.id, player.stats.bartering);
+            
+            const boatImg = new Image();
+            boatImg.src = boat.art.topDownDataUrl;
+
+            currentLocalFisherman = {
+                x: pos.x, y: pos.y, npc: npc, boat: boat, img: boatImg,
+                inventory: fullInv.slice(0, fRng.int(2, 4)) 
+            };
+        }
+    }
+
+    // --- 3. INIT ENGINES ---
+    ExplorationRenderer.buildMapCache(currentLocalMap, currentBiome);
+    
+    // NEW: Pass currentLocalFisherman into the Engine!
+    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity, currentLocalFisherman);
+    
     HUD.cacheMinimap(currentLocalMap);
 
     ExplorationEngine.onDamage = (amount) => {
@@ -311,6 +355,21 @@ function loadLocalNode(entryDir) {
     MusicEngine.playBiome(currentBiome.id, createRng(world.seed + globalX + globalY));
 }
 
+// --- ENCOUNTER INTERACTION ---
+
+function enterEncounter() {
+    ExplorationEngine.velocity = 0; 
+    keys.forward = keys.backward = keys.left = keys.right = false; 
+
+    currentState = STATE.ENCOUNTER;
+    document.getElementById('interact-prompt').style.display = 'none';
+    
+    // Open the UI, passing in the local fish pool so they can give a relevant hint
+    EncounterUI.open({ player, world, globalX, globalY }, currentLocalFisherman, currentLocalFishPool);
+    
+    saveCurrentState();
+}
+
 // --- HUB INTERACTION ---
 
 function enterHub() {
@@ -336,7 +395,7 @@ function resumeFromHub() {
 // --- MASTER LOOP ---
 
 function gameLoop(timestamp) {
-    if (currentState === STATE.MENU || currentState === STATE.HUB || currentState === STATE.PAUSE) return;
+    if (currentState === STATE.MENU || currentState === STATE.HUB || currentState === STATE.PAUSE || currentState === STATE.ENCOUNTER) return;
 
     const dt = Math.min((timestamp - lastTime) / 1000, 0.1); 
     lastTime = timestamp;
@@ -367,22 +426,35 @@ function gameLoop(timestamp) {
 
         ExplorationEngine.update(dt, keys);
         
-        // --- INTERACTION CHECK ---
+// --- INTERACTION CHECK ---
         let canInteract = false;
         let interactMsg = "";
+        let interactAction = null; // NEW: Tells the engine what function to run on [E]
         const tx = Math.floor(ExplorationEngine.x);
         const ty = Math.floor(ExplorationEngine.y);
         
+        // 1. Check for Settlement Docks
         const searchRadius = 3; 
         for (let y = Math.max(0, ty - searchRadius); y <= Math.min(LOCAL_MAP_SIZE - 1, ty + searchRadius); y++) {
             for (let x = Math.max(0, tx - searchRadius); x <= Math.min(LOCAL_MAP_SIZE - 1, tx + searchRadius); x++) {
                 if (currentLocalMap.grid[y][x] === TILE.DOCK) {
                     canInteract = true;
                     interactMsg = "Press [E] to Dock";
+                    interactAction = enterHub;
                     break;
                 }
             }
             if (canInteract) break;
+        }
+
+        // 2. Check for Wandering Fishermen (Generous 12-tile radius)
+        if (!canInteract && currentLocalFisherman) {
+            const distToFisherman = Math.hypot(tx - currentLocalFisherman.x, ty - currentLocalFisherman.y);
+            if (distToFisherman < 12) {
+                canInteract = true;
+                interactMsg = `Press [E] to hail ${currentLocalFisherman.npc.name}`;
+                interactAction = enterEncounter; // We will define this function next
+            }
         }
 
         const prompt = document.getElementById('interact-prompt');
@@ -391,7 +463,7 @@ function gameLoop(timestamp) {
             prompt.innerText = interactMsg;
             if (keys.actionJustPressed) {
                 keys.actionJustPressed = false;
-                enterHub();
+                if (interactAction) interactAction(); // Trigger the specific action
             }
         } else {
             prompt.style.display = 'none';
@@ -401,10 +473,11 @@ function gameLoop(timestamp) {
 
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // --- NEW: Pass currentLocalChest to Renderer ---
-        ExplorationRenderer.render(ExplorationEngine, lightRad, mouse, false,[], currentLocalChest);
+        // Pass currentLocalFisherman to the renderer
+        ExplorationRenderer.render(ExplorationEngine, lightRad, mouse, false,[], currentLocalChest, currentLocalFisherman);
         HUD.drawMinimap(ExplorationEngine.x, ExplorationEngine.y);
-    } 
+    }
+
     else if (currentState === STATE.FISHING) {
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
@@ -487,14 +560,24 @@ function gameLoop(timestamp) {
 
 function handleAttemptCast() {
     const effStats = PlayerEngine.getEffectiveStats(player);
-    const screenBoatX = ExplorationRenderer.VIEW_W / 2;
-    const screenBoatY = ExplorationRenderer.VIEW_H / 2;
-    const dx = mouse.mouseX - screenBoatX, dy = mouse.mouseY - screenBoatY;
+    
+    // CRITICAL FIX: Get the true on-screen position of the boat, accounting for the UI sidebar and map edges
+    const playerPxX = ExplorationEngine.x * ExplorationRenderer.TILE_SIZE;
+    const playerPxY = ExplorationEngine.y * ExplorationRenderer.TILE_SIZE;
+    const screenBoatX = playerPxX - ExplorationRenderer.camX;
+    const screenBoatY = playerPxY - ExplorationRenderer.camY;
+
+    const dx = mouse.mouseX - screenBoatX;
+    const dy = mouse.mouseY - screenBoatY;
     const dist = Math.hypot(dx, dy);
     
     mouse.maxDist = 100 + (player.stats.fishing * 30);
     const finalDist = Math.min(dist, mouse.maxDist) * mouse.chargePct;
-    const targetWorld = ExplorationRenderer.screenToWorld(screenBoatX + (dx / dist) * finalDist, screenBoatY + (dy / dist) * finalDist);
+    
+    const targetWorld = ExplorationRenderer.screenToWorld(
+        screenBoatX + (dx / dist) * finalDist, 
+        screenBoatY + (dy / dist) * finalDist
+    );
     
     const tx = Math.floor(targetWorld.x), ty = Math.floor(targetWorld.y);
 
@@ -503,13 +586,14 @@ function handleAttemptCast() {
         if ([TILE.WATER, TILE.DEEP_WATER, TILE.FLORA].includes(tId)) {
             ExplorationEngine.velocity = 0;
             
+            // 1. Calculate Depth
             const castRng = createRng(Date.now());
             let maxDepth = 20;
             if (tId === TILE.DEEP_WATER) maxDepth = castRng.int(50, 85);
             else if (tId === TILE.FLORA) maxDepth = castRng.int(20, 35);
             else maxDepth = castRng.int(12, 22);
 
-            // 1. Generate Normal Fish Pool
+            // 2. Generate Local Fish Pool as INSTANCES
             let castPool = Array.from({length: 10}, (_, i) => {
                 let pool = currentLocalFishPool; 
                 if (tId === TILE.DEEP_WATER) {
@@ -520,19 +604,22 @@ function handleAttemptCast() {
                 return generateFishInstance(template, createRng(Date.now() + i));
             });
 
-            // 2. Apply Stealth Filter
+            // 3. APPLY STEALTH & NOISE FILTER
             const noiseLevel = ExplorationEngine.currentNoise || 0;
             const spookFactor = noiseLevel / 100;
+
             castPool = castPool.filter(fish => {
                 const courage = fish.combat.aggression + (fish.identity.rarity === 'Boss' ? 2 : 0);
-                return !(Math.random() < spookFactor && courage < 0.6);
+                if (Math.random() < spookFactor && courage < 0.6) {
+                    return false; // Spooked!
+                }
+                return true;
             });
 
-            // 3. Add Chest if in generous radius
+            // 4. Add Chest if in generous radius
             if (currentLocalChest) {
                 const distToChest = Math.hypot(tx - currentLocalChest.x, ty - currentLocalChest.y);
                 if (distToChest < 60) {
-                    // NEW: Create a specific seed for this chest and save it
                     const chestSeed = Date.now();
                     const chestArt = generateChest({ rng: createRng(chestSeed), isMimic: false });
                     
@@ -540,11 +627,12 @@ function handleAttemptCast() {
                         id: 'treasure_chest',
                         identity: { name: 'Sunken Chest', family: 'Treasure', rarity: 'Rare' },
                         art: chestArt, 
-                        chestSeed: chestSeed, // <-- ADDED: Pass the seed forward
-                        combat: { stamina: 120, speed: 60, aggression: 0, hookWindowMs: 2500 },
+                        chestSeed: chestSeed,
+                        combat: { stamina: 120, speed: 60, aggression: 0, hookWindowMs: 2500 }, // 0 Aggression = INANIMATE behavior
                         physical: { sizeTier: 'Medium', weightRange: {min: 50, max: 100} },
+                        // Set lure prefs to perfectly match the player's lure, guaranteeing a 100% bite match score
                         lurePrefs: { color: effStats.activeLure.color, sound: effStats.activeLure.sound, light: effStats.activeLure.light, weight: effStats.activeLure.weight, tolerance: 1.0 }, 
-                        environment: { depthPref: 'Bottom-feeder' },
+                        environment: { depthPref: 'Bottom-feeder' }, // MUST SCROLL TO BOTTOM
                         actualWeight: 75.0,
                         instanceId: `inst_${Date.now()}`,
                         invType: 'chest_encounter'
@@ -552,6 +640,7 @@ function handleAttemptCast() {
                 }
             }
 
+            // 5. Check if we spooked everything
             if (castPool.length === 0) {
                 HUD.logAction("Your boat was too noisy. All fish fled!", "danger");
                 SFX.playError();
@@ -561,6 +650,7 @@ function handleAttemptCast() {
                 return; 
             }
 
+            // 6. Proceed to Fishing Minigame
             currentState = STATE.FISHING;
             document.getElementById('z50-action').style.display = 'flex';
             document.getElementById('z50-action').style.background = 'transparent';
