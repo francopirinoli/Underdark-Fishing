@@ -7,6 +7,7 @@
 import { createRng } from '../util/rng.js';
 import { generateRodData } from '../data/rod_data_generator.js';
 import { generateBoatData } from '../data/boat_data_generator.js';
+import { generateLurePart } from '../art/lure_generator.js'; // <-- NEW IMPORT
 
 // --- INVENTORY DATABASES ---
 
@@ -78,13 +79,19 @@ export const MerchantGenerator = {
             const stock = part.rarity === 'Common' ? rng.int(3, 8) : 
                           part.rarity === 'Uncommon' ? rng.int(1, 3) : 1;
             
-            // Assign dummy stats to the merchant parts (Crafting engine expects these)
-            part.stats = { 
+            // Generate standard merchant formatting
+            const formattedPart = formatItem(part, stock);
+            
+            // Assign dummy stats to the merchant parts
+            formattedPart.stats = { 
                 color: rng.int(-20, 20), sound: rng.int(-20, 20), 
                 light: rng.int(-20, 20), weight: rng.int(-20, 20) 
             };
+            
+            // Generate Art!
+            formattedPart.imageDataUrl = generateLurePart({ visualId: part.visualId, rng });
 
-            inventory.push(formatItem(part, stock));
+            inventory.push(formattedPart);
         }
 
         // 3. Equipment (Rods)

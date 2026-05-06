@@ -11,6 +11,16 @@ import { generateLure } from '../art/lure_generator.js';
 const MAX_LEVEL = 10;
 const MAX_STAT_VALUE = 5; 
 
+// NEW: Lore-friendly Stat Descriptions
+export const STAT_DESCRIPTIONS = {
+    fishing: "Increases Reeling Power, Reaction Window, and Cast Distance.",
+    stamina: "Increases Max Stamina and Stamina Regeneration while resting.",
+    driving: "Improves Boat Speed, Boat Stealth, and Collision Evasion chance.",
+    lureCrafting: "Increases Point Budget when dissecting parts and Lure Durability.",
+    bartering: "Improves prices at settlements. Buy items for cheaper, and Sell items for more profit.",
+    intelligence: "Increases general XP, Bestiary XP, and improves Lantern Fuel efficiency."
+};
+
 const XP_CURVE = {
     1: 100, 2: 250, 3: 450, 4: 700, 5: 1000,
     6: 1400, 7: 1900, 8: 2500, 9: 3200, 10: Infinity
@@ -147,9 +157,10 @@ export const PlayerEngine = {
         let effectiveBoatStealth = boatStealth * (1 + (stats.driving * 0.1));
         let hazardDodgeChance = stats.driving * 0.04;
 
-        // --- 3. ECONOMY & CRAFTING STATS ---
-        let storeDiscount = stats.bartering * 0.1; 
-        let sellBonus = 1 + (stats.bartering * 0.1);
+// --- 3. ECONOMY & CRAFTING STATS ---
+        let storeDiscount = stats.bartering * 0.08; // Fixed 8%
+        let sellBonus = 1 + (stats.bartering * 0.08); // Fixed 8%
+        let fuelEfficiencyMult = 1 - (stats.intelligence * 0.10); // 10% less fuel drain per level
         let dissectionBudgetMult = 1 + (stats.lureCrafting * 0.2);
         let lureDurabilityMult = 1 + (stats.lureCrafting * 0.2);
         let knowledgeXpMult = 1 + (stats.intelligence * 0.2);
@@ -176,7 +187,8 @@ export const PlayerEngine = {
                 speed: Number(effectiveBoatSpeed.toFixed(2)),
                 stealth: Number(effectiveBoatStealth.toFixed(2)),
                 hazardDodgeChance: Number(hazardDodgeChance.toFixed(2)),
-                cargoSpace: boatCargo 
+                cargoSpace: boatCargo,
+                fuelEfficiencyMult: Number(Math.max(0.1, fuelEfficiencyMult).toFixed(2)) // Added
             },
             economy: {
                 discountMultiplier: Number((1 - storeDiscount).toFixed(2)), 

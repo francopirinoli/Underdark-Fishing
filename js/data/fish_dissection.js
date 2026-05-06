@@ -4,6 +4,7 @@
  */
 
 import { createRng } from '../util/rng.js';
+import { generateLurePart } from '../art/lure_generator.js'; // <-- NEW IMPORT
 
 // Base budgets based on fish rarity
 const RARITY_BUDGETS = {
@@ -90,7 +91,8 @@ export const DissectionEngine = {
                 visualId: visualId,
                 rarity: fish.identity.rarity,
                 stats: partStats,
-                basePrice: PART_PRICES[fish.identity.rarity] // <--- NEW: Add sell value
+                basePrice: PART_PRICES[fish.identity.rarity],
+                imageDataUrl: generateLurePart({ visualId: visualId, rng: rng }) // <-- GENERATES ART HERE
             });
         }
 

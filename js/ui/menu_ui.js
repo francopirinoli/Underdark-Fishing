@@ -4,46 +4,26 @@
  */
 
 import { SFX } from '../audio/sfx_generator.js';
-import { generateNPCData, generateName } from '../data/npc_data_generator.js'; // <-- Updated
+import { generateNPCData, generateName } from '../data/npc_data_generator.js';
 import { SaveManager } from '../util/save_manager.js';
-import { createRng } from '../util/rng.js'; // <-- Added
+import { createRng } from '../util/rng.js';
+import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils.js'; // Added
+import { STAT_DESCRIPTIONS } from '../data/player_data.js'; // Added
 
 export const MenuUI = {
     ccStats: { fishing: 1, stamina: 1, driving: 1, lureCrafting: 1, bartering: 1, intelligence: 1 },
     ccPoints: 3,
     ccIdentity: null,
     callbacks: null,
+    selectedSlot: 1, // NEW: Tracks which slot we are creating a character for
 
-    /**
-     * Wires up the Main Menu UI events.
-     * @param {Object} callbacks - Contains onNewGame(playerData, stats) and onLoadGame()
-     */
     init(callbacks) {
         this.callbacks = callbacks;
 
-        // Start Screen Buttons
-        const btnLoad = document.getElementById('btn-load-game');
-        if (SaveManager.hasSave()) {
-            btnLoad.disabled = false;
-            btnLoad.onclick = () => {
-                SFX.playUISelect();
-                this.callbacks.onLoadGame();
-            };
-        }
-
-        document.getElementById('btn-new-game').onclick = () => {
-            SFX.playUISelect();
-            this.showCharacterCreator();
-        };
-
         document.getElementById('cc-race').onchange = () => this.updateCCPortrait();
         document.getElementById('cc-gender').onchange = () => this.updateCCPortrait();
-        document.getElementById('btn-cc-reroll').onclick = () => { 
-            SFX.playUIHover(); 
-            this.updateCCPortrait(); 
-        };
+        document.getElementById('btn-cc-reroll').onclick = () => { SFX.playUIHover(); this.updateCCPortrait(); };
         
-        // --- NEW: Random Name Button ---
         document.getElementById('btn-cc-random-name').onclick = () => {
             SFX.playUIHover();
             const race = document.getElementById('cc-race').value;
@@ -54,22 +34,17 @@ export const MenuUI = {
         
         document.getElementById('btn-embark').onclick = () => {
             SFX.playCatchSuccess();
-            
             const playerData = {
                 name: document.getElementById('cc-name').value,
                 race: document.getElementById('cc-race').value,
                 gender: document.getElementById('cc-gender').value,
                 portraitData: this.ccIdentity.imageDataUrl
             };
-            
-            // [FIX]: Pass the remaining unspent points
-            this.callbacks.onNewGame(playerData, { ...this.ccStats }, this.ccPoints);
+            // Pass the selected slot back to game.js
+            this.callbacks.onNewGame(this.selectedSlot, playerData, { ...this.ccStats }, this.ccPoints);
         };
     },
 
-    /**
-     * Displays the initial Start Screen.
-     */
     showMainMenu() {
         const menus = document.getElementById('z200-menus');
         const screenStart = document.getElementById('screen-start');
@@ -78,6 +53,61 @@ export const MenuUI = {
         menus.style.display = 'flex';
         screenStart.style.display = 'flex';
         screenChar.style.display = 'none';
+
+        // Render Save Slots dynamically
+        const container = document.getElementById('save-slots-container');
+        container.innerHTML = '';
+
+        for (let i = 1; i <= 3; i++) {
+            const info = SaveManager.getSaveInfo(i);
+            const wrapper = document.createElement('div');
+            wrapper.style.display = 'flex';
+            wrapper.style.flexDirection = 'column';
+            wrapper.style.gap = '0.5rem';
+
+            const btn = document.createElement('button');
+            btn.className = 'menu-btn';
+            btn.style.width = '240px';
+            btn.style.margin = '0';
+            btn.style.padding = '1rem';
+
+            if (info) {
+                btn.innerHTML = `
+                    <div style="display:flex; align-items:center; gap: 1rem; text-align: left;">
+                        <img src="${info.portrait}" style="width: 48px; height: 48px; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; image-rendering: pixelated;">
+                        <div>
+                            <span style="color:var(--cyan-glow); font-size:1.4rem;">${info.name}</span><br>
+                            <span style="color:var(--gold-warn); font-size:1rem;">Day ${info.day} - ${info.gold}g</span><br>
+                            <span style="color:var(--text-muted); font-size:0.9rem;">Slot ${i}</span>
+                        </div>
+                    </div>
+                `;
+                btn.onclick = () => { SFX.playUISelect(); this.callbacks.onLoadGame(i); };
+                
+                const delBtn = document.createElement('button');
+
+                delBtn.className = 'menu-btn';
+                delBtn.style.cssText = 'width: 100%; margin: 0; padding: 0.4rem; font-size: 1rem; border-color: var(--red-danger); color: var(--red-danger);';
+                delBtn.innerText = 'Delete Save';
+                delBtn.onclick = () => {
+                    SFX.playError();
+                    SaveManager.deleteSave(i);
+                    this.showMainMenu();
+                };
+                
+                wrapper.appendChild(btn);
+                wrapper.appendChild(delBtn);
+            } else {
+                btn.innerHTML = `<span style="color:var(--text-main); font-size:1.6rem;">Slot ${i}</span><br><br><span style="color:var(--text-muted); font-size:1.1rem;">- Empty -</span>`;
+                btn.onclick = () => { 
+                    SFX.playUISelect(); 
+                    this.selectedSlot = i;
+                    this.showCharacterCreator(); 
+                };
+                wrapper.appendChild(btn);
+            }
+            container.appendChild(wrapper);
+        }
     },
 
     /**
@@ -149,6 +179,11 @@ export const MenuUI = {
                     this.renderCCStats(); 
                 }
             };
+
+            // Add Hover Events for Tooltips
+            row.addEventListener('mouseenter', (e) => showStatTooltip(displayNames[key], STAT_DESCRIPTIONS[key], e));
+            row.addEventListener('mousemove', moveStatTooltip);
+            row.addEventListener('mouseleave', hideStatTooltip);
             
             list.appendChild(row);
         }

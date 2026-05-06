@@ -35,6 +35,7 @@ import { HubUI } from './ui/hub_ui.js';
 import { PauseUI } from './ui/pause_ui.js';
 
 // --- GAME STATE ---
+let currentSaveSlot = 1; // <-- ADD THIS LINE
 const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5 };
 let currentState = STATE.MENU;
 let stateBeforePause = STATE.EXPLORATION;
@@ -88,8 +89,8 @@ async function initGameSystems() {
     document.getElementById('z10-hud').appendChild(interactPrompt);
 
     MenuUI.init({
-        onNewGame: (playerData, stats, points) => startNewDescent(playerData, stats, points),
-        onLoadGame: () => loadExistingDescent()
+        onNewGame: (slot, playerData, stats, points) => startNewDescent(slot, playerData, stats, points),
+        onLoadGame: (slot) => loadExistingDescent(slot)
     });
 
     GrimoireUI.init({
@@ -116,7 +117,8 @@ async function initGameSystems() {
 
 // --- STATE MANAGEMENT (NEW/LOAD) ---
 
-function startNewDescent(identityData, stats, points) {
+function startNewDescent(slot, identityData, stats, points) {
+    currentSaveSlot = slot;
     player = PlayerEngine.createPlayer(identityData);
     player.stats = stats;
     player.availablePoints = points;
@@ -141,8 +143,9 @@ function startNewDescent(identityData, stats, points) {
     enterWorld();
 }
 
-function loadExistingDescent() {
-    const data = SaveManager.loadGame();
+function loadExistingDescent(slot) {
+    currentSaveSlot = slot;
+    const data = SaveManager.loadGame(slot);
     if (!data) return;
 
     player = data.player;
@@ -156,6 +159,15 @@ function loadExistingDescent() {
     globalY = data.globalY;
     gameDay = data.gameDay;
     gameTimeMinutes = data.gameTimeMinutes;
+
+    // NEW: Re-inject saved Node Ecology into the regenerated world
+    const nodeEcology = data.nodeEcology || {};
+    for (const key in nodeEcology) {
+        const [x, y] = key.split(',');
+        if (world.nodes[y] && world.nodes[y][x]) {
+            world.nodes[y][x].discoveredSpecies = nodeEcology[key];
+        }
+    }
 
     enterWorld();
 }
@@ -172,7 +184,17 @@ function enterWorld() {
 }
 
 function saveCurrentState() {
-    SaveManager.saveGame(player, world.seed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes);
+    // Extract the ecology dictionary from the nodes
+    const nodeEcology = {};
+    for (let y = 0; y < world.height; y++) {
+        for (let x = 0; x < world.width; x++) {
+            const node = world.nodes[y][x];
+            if (node.discoveredSpecies && node.discoveredSpecies.length > 0) {
+                nodeEcology[`${x},${y}`] = node.discoveredSpecies;
+            }
+        }
+    }
+    SaveManager.saveGame(currentSaveSlot, player, world.seed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes, nodeEcology);
 }
 
 // --- NODE LOADING ---
@@ -294,8 +316,11 @@ function gameLoop(timestamp) {
     HUD.update(player, gameDay, gameTimeMinutes);
 
     if (currentState === STATE.EXPLORATION) {
+        const effStats = PlayerEngine.getEffectiveStats(player); // Grab effective stats for exploration
+
         if (player.vitals.fuel > 0) {
-            player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * dt * 0.1;
+            const fuelMult = effStats.exploration.fuelEfficiencyMult; // Apply Intelligence Buff
+            player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
         }
 
         gameTimeMinutes += dt; 
@@ -355,15 +380,17 @@ function gameLoop(timestamp) {
             const effStats = PlayerEngine.getEffectiveStats(player);
             if (player.inventory.length < effStats.exploration.cargoSpace) {
                 
-                const rng = createRng(Date.now());
-                const caughtFish = generateFishInstance(FishingEngine.fishData, rng);
+                // IT IS ALREADY AN INSTANCE! Do not call generateFishInstance here.
+                const caughtFish = FishingEngine.fishData; 
                 
                 // 1. Add to Inventory
                 player.inventory.push(caughtFish);
                 
-                // 2. Track in Bestiary
+                // 2. Track in Bestiary (Using the clean species template!)
                 if (!player.bestiary[caughtFish.id]) {
-                    player.bestiary[caughtFish.id] = { xp: 0, caught: 0, speciesData: FishingEngine.fishData };
+                    const template = currentLocalFishPool.find(f => f.id === caughtFish.id) || caughtFish;
+                    // Deep clone the template so it stays pure
+                    player.bestiary[caughtFish.id] = { xp: 0, caught: 0, speciesData: JSON.parse(JSON.stringify(template)) };
                 }
                 player.bestiary[caughtFish.id].caught++;
 
@@ -417,22 +444,58 @@ function handleAttemptCast() {
         if ([TILE.WATER, TILE.DEEP_WATER, TILE.FLORA].includes(tId)) {
             ExplorationEngine.velocity = 0;
             
+            // 1. Calculate Depth
             const castRng = createRng(Date.now());
             let maxDepth = 20;
             if (tId === TILE.DEEP_WATER) maxDepth = castRng.int(50, 85);
             else if (tId === TILE.FLORA) maxDepth = castRng.int(20, 35);
             else maxDepth = castRng.int(12, 22);
 
-            const castPool = Array.from({length: 10}, (_, i) => generateFishData({
-                seed: Date.now() + i,
-                family: (tId === TILE.DEEP_WATER) ? 'deepsea' : null
-            }));
+            // 2. Generate Local Fish Pool as INSTANCES
+            let castPool = Array.from({length: 10}, (_, i) => {
+                let pool = currentLocalFishPool; // The biological templates for this lake
+                
+                // If fishing in deep water, force deepsea templates if available
+                if (tId === TILE.DEEP_WATER) {
+                    const ds = pool.filter(f => f.identity.family === 'deepsea');
+                    if (ds.length > 0) pool = ds;
+                }
+                
+                const template = castRng.pick(pool);
+                // Create a dynamic Rarity Instance right now!
+                return generateFishInstance(template, createRng(Date.now() + i));
+            });
 
+            // 3. APPLY STEALTH & NOISE FILTER
+            const noiseLevel = ExplorationEngine.currentNoise || 0;
+            const spookFactor = noiseLevel / 100; // 0.0 to 1.0
+
+            castPool = castPool.filter(fish => {
+                // Skittish fish (low aggression) flee easily. Bosses rarely flee.
+                const courage = fish.combat.aggression + (fish.identity.rarity === 'Boss' ? 2 : 0);
+                // If random roll is less than the noise, and the fish isn't brave, it runs away
+                if (Math.random() < spookFactor && courage < 0.6) {
+                    return false; // Spooked!
+                }
+                return true;
+            });
+
+            // 4. Check if we spooked everything
+            if (castPool.length === 0) {
+                HUD.logAction("Your boat was too noisy. All fish fled!", "danger");
+                SFX.playError();
+                mouse.isCharging = false;
+                mouse.chargePct = 0;
+                ExplorationEngine.velocity = 0;
+                return; // Abort the cast entirely
+            }
+
+            // 5. Proceed to Fishing Minigame
             currentState = STATE.FISHING;
             document.getElementById('z50-action').style.display = 'flex';
             document.getElementById('z50-action').style.background = 'transparent';
 
-            FishingEngine.startCast(effStats, player.stats.stamina, currentLocalFishPool, maxDepth);
+            FishingEngine.startCast(effStats, player.stats.stamina, castPool, maxDepth);
             
             FishingRenderer.open({ lureDataUrl: player.gear.lure.imageDataUrl || '', biome: currentBiome, tileId: tId });
             HUD.logAction(`Line cast to ${maxDepth}m. Scroll to sink.`);
@@ -442,7 +505,9 @@ function handleAttemptCast() {
                     if (!FishingEngine.evaluateBite()) handleEndFishing("Nothing bit.", "danger");
                 }
             }, 6000);
-        } else HUD.logAction("You hit land.");
+        } else {
+            HUD.logAction("You hit land.");
+        }
     }
 }
 
@@ -451,6 +516,30 @@ function handleEndFishing(msg, type) {
     FishingRenderer.close();
     document.getElementById('z50-action').style.display = 'none';
     currentState = STATE.EXPLORATION;
+
+    // --- LURE DURABILITY DEGRADATION ---
+    const lure = player.gear.lure;
+    if (lure && lure.invType === 'lure' && lure.durability > 0) {
+        
+        // Line Snaps = -3 durability. Caught fish = -1 durability.
+        if (FishingEngine.phase === 'SNAPPED') {
+            lure.durability -= 3;
+        } else if (FishingEngine.phase === 'CAUGHT') {
+            lure.durability -= 1;
+        }
+        
+        if (lure.durability <= 0) {
+            HUD.logAction(`Your ${lure.name} broke!`, "danger");
+            SFX.playLineSnap();
+            // Revert to a basic bare hook fallback
+            player.gear.lure = {
+                name: 'Bare Hook',
+                stats: { color: 0, sound: 0, light: 0, weight: 0 },
+                durability: 0, maxDurability: 0,
+                imageDataUrl: '' // Clears the image for the HUD
+            };
+        }
+    }
 }
 
 function handleDeath() {

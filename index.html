@@ -24,47 +24,60 @@
         </div>
 
         <!-- ========================================== -->
-        <!-- Z-10 | THE HUD (Vitals, Minimap, Logs)     -->
+        <!-- Z-10 | THE SIDEBAR HUD                     -->
         <!-- ========================================== -->
         <div id="z10-hud">
-            <!-- Top Row -->
-            <div class="hud-top">
-                <!-- Vitals -->
-                <div class="hud-panel">
-                    <div class="vital-row">
-                        <span class="vital-label">HULL</span>
-                        <div class="vital-bar-track"><div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div></div>
-                    </div>
-                    <div class="vital-row">
-                        <span class="vital-label">FUEL</span>
-                        <div class="vital-bar-track"><div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 80%;"></div></div>
-                    </div>
-                    <div style="font-size: 1.2rem; margin-top: 0.5rem; color: #E2E8F0;">
-                        🍖 <span id="hud-rations">12</span> Rations
+            <!-- Navigation & Time -->
+            <div class="hud-panel" style="text-align: center; padding: 0.8rem;">
+                <div class="clock-text" id="hud-clock" style="font-size: 1.6rem;">Day 1 - 08:00</div>
+                <div id="minimap-container" style="margin: 0.5rem auto 0 auto; width: 200px; height: 200px;">
+                    <canvas id="minimap-canvas" width="200" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Vitals -->
+            <div class="hud-panel" style="padding: 1rem 0.8rem;">
+                <div class="vital-row">
+                    <span class="vital-label" style="font-size:0.9rem; width:50px;">HULL</span>
+                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div></div>
+                </div>
+                <div class="vital-row">
+                    <span class="vital-label" style="font-size:0.9rem; width:50px;">FUEL</span>
+                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 80%;"></div></div>
+                </div>
+                <div class="vital-row">
+                    <span class="vital-label" style="font-size:0.9rem; width:50px;">NOISE</span>
+                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill" id="hud-noise-bar" style="width: 0%; background: var(--green-safe); transition: width 0.1s linear, background-color 0.2s;"></div></div>
+                </div>
+                <div class="vital-row" style="margin-bottom: 0; margin-top: 0.8rem;">
+                    <span class="vital-label" style="font-size:0.9rem; width:50px;">FOOD</span>
+                    <div style="flex-grow:1; text-align:right; font-weight:bold; color:var(--text-main); font-size:1.1rem;"><span id="hud-rations" style="color:var(--cyan-glow);">12</span> rations</div>
+                </div>
+            </div>
+
+            <!-- Loadout Quick View -->
+            <div class="hud-panel" style="padding: 0.8rem; display: flex; flex-direction: column; gap: 0.8rem;">
+                <!-- Rod -->
+                <div style="display: flex; align-items: center; gap: 0.8rem;">
+                    <img id="hud-rod-img" src="" style="width: 32px; height: 32px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
+                    <div style="display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
+                        <div style="font-size: 1rem; color: var(--cyan-glow); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-rod-name">Pine Caster</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">Equipped Rod</div>
                     </div>
                 </div>
-
-                <!-- Navigation -->
-                <div class="nav-box">
-                    <div class="hud-panel clock-text" id="hud-clock">Day 1 - 08:00</div>
-                    <div id="minimap-container">
-                        <canvas id="minimap-canvas" width="150" height="150"></canvas>
+                <!-- Lure -->
+                <div style="display: flex; align-items: center; gap: 0.8rem;">
+                    <img id="hud-lure-img" src="" style="width: 32px; height: 32px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
+                    <div style="display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
+                        <div style="font-size: 1rem; color: var(--gold-warn); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-lure-name">Bare Hook</div>
+                        <div style="font-size: 0.8rem; color: var(--text-main);" id="hud-lure-durability">Durability: ∞</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Bottom Row -->
-            <div class="hud-bottom">
-                <!-- Action Log -->
-                <div class="action-log" id="hud-log">
-                    <!-- Logs injected here via JS -->
-                </div>
-
-                <!-- Loadout Quick View -->
-                <div class="hud-panel" style="text-align: right;">
-                    <div style="font-size: 1.2rem; color: var(--cyan-glow);" id="hud-rod-name">Pine Caster</div>
-                    <div style="font-size: 1rem; color: var(--text-muted);" id="hud-lure-name">Bare Hook</div>
-                </div>
+            <!-- Action Log -->
+            <div class="action-log" id="hud-log">
+                <!-- Logs injected here via JS -->
             </div>
         </div>
 
@@ -266,10 +279,21 @@
                 <div id="grim-page-bestiary" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
                     <!-- Left: Grid of Discovered Fish -->
                     <div style="flex: 2; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
-                        <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: baseline;">
-                            <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Bestiary</h2>
-                            <span style="color: var(--text-muted); font-size: 1.2rem;">Discovered: <span id="grim-bestiary-count" style="color: var(--text-main);">0</span></span>
+                        
+                        <!-- ADDED SORT DROPDOWN HERE -->
+                        <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Bestiary</h2>
+                                <span style="color: var(--text-muted); font-size: 1.2rem;">Discovered: <span id="grim-bestiary-count" style="color: var(--text-main);">0</span></span>
+                            </div>
+                            <select id="grim-bestiary-sort" style="background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.5rem; border-radius: 4px; font-family: inherit; font-size: 1.1rem; cursor: pointer;">
+                                <option value="recent">Most Recent</option>
+                                <option value="alpha">Alphabetical</option>
+                                <option value="family">By Family</option>
+                                <option value="caught">Most Caught</option>
+                            </select>
                         </div>
+                        
                         <div id="grim-bestiary-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;">
                             <!-- Bestiary slots injected here -->
                         </div>
@@ -327,25 +351,55 @@
         <!-- Z-150 | PAUSE MENU & SETTINGS              -->
         <!-- ========================================== -->
         <div id="z150-pause" style="display: none; position: absolute; inset: 0; z-index: 150; background: rgba(2, 6, 23, 0.85); backdrop-filter: blur(4px); flex-direction: column; align-items: center; justify-content: center;">
-            <div class="hud-panel" style="width: 450px; text-align: center; border-color: var(--cyan-glow); box-shadow: 0 0 30px rgba(34, 211, 238, 0.2);">
-                <h1 style="color: var(--cyan-glow); font-size: 3.5rem; margin-top: 0; margin-bottom: 1.5rem; letter-spacing: 0.05em;">PAUSED</h1>
+            
+            <!-- Removed .hud-panel to prevent transparency issues, using strict modal styling -->
+            <div style="background: var(--panel-base); border: 2px solid var(--cyan-glow); padding: 2.5rem; border-radius: 8px; width: 640px; box-shadow: 0 0 40px rgba(34, 211, 238, 0.15);">
+                
+                <h1 style="color: var(--cyan-glow); font-size: 3.5rem; margin-top: 0; margin-bottom: 2rem; letter-spacing: 0.05em; text-align: center;">PAUSED</h1>
 
-                <div style="margin-bottom: 1.5rem; text-align: left;">
-                    <label style="color: var(--text-main); font-size: 1.4rem; display: flex; justify-content: space-between;">
-                        Music Volume <span id="lbl-vol-music" style="color: var(--cyan-glow);">50%</span>
-                    </label>
-                    <input type="range" id="slider-vol-music" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                <!-- Split Layout: Audio (Left) | Controls (Right) -->
+                <div style="display: flex; gap: 3rem; margin-bottom: 2.5rem;">
+                    
+                    <!-- AUDIO COLUMN -->
+                    <div style="flex: 1;">
+                        <h2 style="font-size: 1.8rem; color: var(--text-main); margin-top: 0; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.5rem;">Audio</h2>
+                        
+                        <div style="margin-bottom: 1.5rem; margin-top: 1rem;">
+                            <label style="color: var(--text-muted); font-size: 1.2rem; display: flex; justify-content: space-between;">
+                                Music <span id="lbl-vol-music" style="color: var(--cyan-glow);">50%</span>
+                            </label>
+                            <input type="range" id="slider-vol-music" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                        </div>
+                        
+                        <div style="margin-bottom: 1.5rem;">
+                            <label style="color: var(--text-muted); font-size: 1.2rem; display: flex; justify-content: space-between;">
+                                SFX <span id="lbl-vol-sfx" style="color: var(--cyan-glow);">50%</span>
+                            </label>
+                            <input type="range" id="slider-vol-sfx" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                        </div>
+                    </div>
+
+                    <!-- CONTROLS COLUMN -->
+                    <div style="flex: 1;">
+                        <h2 style="font-size: 1.8rem; color: var(--text-main); margin-top: 0; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.5rem;">Controls</h2>
+                        
+                        <ul style="list-style: none; padding: 0; margin: 1rem 0 0 0; font-size: 1.2rem; color: var(--text-muted); line-height: 1.6;">
+                            <li><b style="color: var(--gold-warn);">W A S D</b> - Steer Boat</li>
+                            <li><b style="color: var(--gold-warn);">Mouse</b> - Aim Cast</li>
+                            <li><b style="color: var(--gold-warn);">Hold Click</b> - Charge Cast</li>
+                            <li><b style="color: var(--gold-warn);">Scroll</b> - Adjust Lure Depth</li>
+                            <li><b style="color: var(--gold-warn);">Hold Space</b> - Reel In</li>
+                            <li><b style="color: var(--gold-warn);">E</b> - Interact / Dock</li>
+                            <li><b style="color: var(--gold-warn);">TAB</b> - Open Grimoire</li>
+                        </ul>
+                    </div>
                 </div>
 
-                <div style="margin-bottom: 2.5rem; text-align: left;">
-                    <label style="color: var(--text-main); font-size: 1.4rem; display: flex; justify-content: space-between;">
-                        SFX Volume <span id="lbl-vol-sfx" style="color: var(--cyan-glow);">50%</span>
-                    </label>
-                    <input type="range" id="slider-vol-sfx" min="0" max="100" value="50" style="width: 100%; cursor: pointer; margin-top: 0.5rem;" />
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: 1.5rem;">
+                    <button class="menu-btn" id="btn-quit-to-menu" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; border-color: var(--red-danger); color: var(--red-danger);">Save & Quit</button>
+                    <button class="menu-btn" id="btn-resume-game" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; border-color: var(--green-safe); color: var(--green-safe);">Resume</button>
                 </div>
-
-                <button class="menu-btn" id="btn-resume-game" style="width: 100%; margin-bottom: 0.8rem; font-size: 1.6rem; padding: 0.8rem;">Resume</button>
-                <button class="menu-btn" id="btn-quit-to-menu" style="width: 100%; font-size: 1.6rem; padding: 0.8rem; border-color: var(--red-danger); color: var(--red-danger);">Save & Quit to Menu</button>
             </div>
         </div>
 
@@ -356,8 +410,11 @@
             <!-- START SCREEN -->
             <div id="screen-start" style="display: flex; flex-direction: column; align-items: center;">
                 <h1 class="menu-title">UNDERDARK<br>FISHING</h1>
-                <button class="menu-btn" id="btn-new-game">New Descent</button>
-                <button class="menu-btn" id="btn-load-game" disabled>Continue</button>
+                
+                <h2 style="color: var(--text-muted); font-size: 1.5rem; margin-bottom: 1rem;">Select a Save Slot</h2>
+                <div id="save-slots-container" style="display: flex; gap: 1.5rem; justify-content: center;">
+                    <!-- Buttons injected via JS -->
+                </div>
             </div>
 
             <!-- CHARACTER CREATOR -->
@@ -410,10 +467,16 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
+<!-- ========================================== -->
         <!-- FLOATING TOOLTIPS                          -->
         <!-- ========================================== -->
         <div id="shop-tooltip" style="display: none;"></div>
+        
+        <!-- NEW: Stat Explanation Tooltip -->
+        <div id="stat-tooltip" style="display: none; position: absolute; background: rgba(15, 23, 42, 0.95); border: 2px solid var(--cyan-glow); padding: 1rem; border-radius: 8px; pointer-events: none; z-index: 4000; min-width: 280px; max-width: 320px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); backdrop-filter: blur(4px);">
+            <b id="tt-stat-name" style="color: var(--cyan-glow); font-size: 1.5rem; display: block; margin-bottom: 0.5rem; text-transform: uppercase;">Stat Name</b>
+            <div id="tt-stat-desc" style="color: var(--text-main); font-size: 1.2rem; line-height: 1.3;">Description goes here</div>
+        </div>
 
     </div>
 

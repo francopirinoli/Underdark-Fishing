@@ -5,11 +5,12 @@
  */
 
 import { SFX } from '../audio/sfx_generator.js';
-import { PlayerEngine } from '../data/player_data.js';
+import { PlayerEngine, STAT_DESCRIPTIONS } from '../data/player_data.js'; // Updated
 import { renderGlobalMap } from '../exploration/map_renderer.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { DissectionEngine } from '../data/fish_dissection.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
+import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils.js'; // Added
 
 export const GrimoireUI = {
     selectedMapNode: null,
@@ -199,6 +200,11 @@ export const GrimoireUI = {
                     if (this.callbacks.onSave) this.callbacks.onSave(); 
                 }
             };
+
+            // Add Hover Events for Tooltips
+            row.addEventListener('mouseenter', (e) => showStatTooltip(displayNames[key], STAT_DESCRIPTIONS[key], e));
+            row.addEventListener('mousemove', moveStatTooltip);
+            row.addEventListener('mouseleave', hideStatTooltip);
             
             statsList.appendChild(row);
         }
@@ -602,12 +608,14 @@ export const GrimoireUI = {
         `;
         
         const lureImg = lure.imageDataUrl ? `<img src="${lure.imageDataUrl}" />` : `<div style="width:96px;height:96px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);">Bare Hook</div>`;
-        
+        const durText = lure.maxDurability > 0 ? `Durability: ${lure.durability}/${lure.maxDurability}` : `Durability: ∞`;
+
         const fmtP = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
         document.querySelector('#loadout-lure .slot-content').innerHTML = `
             ${lureImg}
             <div class="loadout-details">
                 <b>${lure.name}</b>
+                <span style="color:var(--text-main); margin-bottom:0.2rem; display:block;">${durText}</span>
                 <span>Color:${fmtP(lure.stats.color)} Sound:${fmtP(lure.stats.sound)} Light:${fmtP(lure.stats.light)} Weight:${fmtP(lure.stats.weight)}</span>
             </div>
         `;
@@ -639,11 +647,21 @@ export const GrimoireUI = {
 
     // --- BESTIARY & QUESTS ---
     
-    renderBestiary() {
+renderBestiary() {
         const player = this.gameState.player;
-        const bestiaryEntries = Object.values(player.bestiary);
+        let bestiaryEntries = Object.values(player.bestiary);
         
         document.getElementById('grim-bestiary-count').innerText = bestiaryEntries.length;
+        
+        // SORTING LOGIC
+        const sortMode = document.getElementById('grim-bestiary-sort').value;
+        if (sortMode === 'alpha') {
+            bestiaryEntries.sort((a, b) => a.speciesData.identity.name.localeCompare(b.speciesData.identity.name));
+        } else if (sortMode === 'family') {
+            bestiaryEntries.sort((a, b) => a.speciesData.identity.family.localeCompare(b.speciesData.identity.family));
+        } else if (sortMode === 'caught') {
+            bestiaryEntries.sort((a, b) => b.caught - a.caught);
+        }
         
         const grid = document.getElementById('grim-bestiary-grid');
         grid.innerHTML = '';
@@ -658,6 +676,12 @@ export const GrimoireUI = {
         
         document.getElementById('grim-bestiary-details').style.display = 'none';
         document.getElementById('grim-bestiary-empty').style.display = 'flex';
+
+        // Attach event listener to dropdown
+        const sortSelect = document.getElementById('grim-bestiary-sort');
+        if (!sortSelect.onchange) {
+            sortSelect.onchange = () => this.renderBestiary();
+        }
     },
 
     showBestiaryDetails(entry, slotEl) {
@@ -671,9 +695,11 @@ export const GrimoireUI = {
         
         document.getElementById('grim-bestiary-img').src = fish.art.imageDataUrl;
         document.getElementById('grim-bestiary-name').innerText = fish.identity.name;
-        document.getElementById('grim-bestiary-sub').innerText = `${fish.identity.rarity} ${fish.identity.family}`;
+        // FIXED: Replaced undefined rarity with 'Species' text
+        document.getElementById('grim-bestiary-sub').innerText = `Species: ${fish.identity.family}`;
         
         const xp = entry.xp;
+
         let level = 1;
         let nextXp = 100;
         

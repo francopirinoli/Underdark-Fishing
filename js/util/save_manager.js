@@ -1,37 +1,44 @@
 /**
  * js/util/save_manager.js
- * Handles serializing the game state to browser localStorage.
+ * Handles serializing the game state to browser localStorage with 3 Save Slots.
  */
 
-const SAVE_KEY = 'underdark_fishing_save';
+const PREFIX = 'underdark_fishing_save_';
 
 export const SaveManager = {
-    /**
-     * Checks if a save file exists.
-     * @returns {boolean}
-     */
-    hasSave() {
-        return localStorage.getItem(SAVE_KEY) !== null;
+    
+    getSaveInfo(slot) {
+        try {
+            const dataStr = localStorage.getItem(PREFIX + slot);
+            if (!dataStr) return null;
+            const data = JSON.parse(dataStr);
+            return {
+                day: data.gameDay || 1,
+                gold: data.player?.vitals?.gold || 0,
+                name: data.player?.identity?.name || "Unknown Angler",
+                portrait: data.player?.identity?.portraitData || ""
+            };
+        } catch (e) {
+            return null;
+        }
     },
 
-    /**
-     * Saves the entire game state.
-     */
-    saveGame(player, worldSeed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes =[]) {
+    saveGame(slot, player, worldSeed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes =[], nodeEcology = {}) {
         const saveData = {
-            version: '1.1', // Bumped version
+            version: '1.2',
             player: player,
             worldSeed: worldSeed,
             globalX: globalX,
             globalY: globalY,
             gameDay: gameDay,
             gameTimeMinutes: gameTimeMinutes,
-            discoveredNodes: discoveredNodes // NEW: Fog of War tracking
+            discoveredNodes: discoveredNodes,
+            nodeEcology: nodeEcology // NEW: Tracks fish discovered per node
         };
         
         try {
-            localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-            console.log("💾 Game Saved Successfully.");
+            localStorage.setItem(PREFIX + slot, JSON.stringify(saveData));
+            console.log(`💾 Game Saved Successfully to Slot ${slot}.`);
             return true;
         } catch (e) {
             console.error("Failed to save game:", e);
@@ -39,21 +46,15 @@ export const SaveManager = {
         }
     },
 
-    /**
-     * Loads the game state.
-     * @returns {Object|null}
-     */
-    loadGame() {
+    loadGame(slot) {
         try {
-            const dataStr = localStorage.getItem(SAVE_KEY);
+            const dataStr = localStorage.getItem(PREFIX + slot);
             if (!dataStr) return null;
-            
             const data = JSON.parse(dataStr);
             
-            // Backwards compatibility for older saves
-            if (!data.discoveredNodes) {
-                data.discoveredNodes = [`${data.globalX},${data.globalY}`];
-            }
+            // Backwards compatibility
+            if (!data.discoveredNodes) data.discoveredNodes = [`${data.globalX},${data.globalY}`];
+            if (!data.nodeEcology) data.nodeEcology = {};
             
             return data;
         } catch (e) {
@@ -62,10 +63,7 @@ export const SaveManager = {
         }
     },
 
-    /**
-     * Wipes the current save.
-     */
-    deleteSave() {
-        localStorage.removeItem(SAVE_KEY);
+    deleteSave(slot) {
+        localStorage.removeItem(PREFIX + slot);
     }
 };

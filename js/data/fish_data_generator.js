@@ -96,50 +96,28 @@ const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
  * Generates the BASE SPECIES archetype.
  * This represents the "Pokedex entry" of the fish, not an individual catch.
  */
+/**
+ * Generates the BASE SPECIES archetype.
+ * This represents the biological template, completely decoupled from Rarity.
+ */
 export function generateFishData(options = {}) {
     const seed = options.seed || Date.now();
     const rng = createRng(seed);
 
-    // 1. Determine Valid Families based on Biome
     let availableFamilies = Object.keys(ART_GENERATORS);
     if (options.biomeId && options.biomeId !== 'abyssal') {
-        // Deepsea Horrors ONLY spawn in Abyssal biomes
         availableFamilies = availableFamilies.filter(f => f !== 'deepsea');
     }
     const family = options.family || rng.pick(availableFamilies);
-    
-    // 2. Determine Rarity
-    let rarityObj;
-    if (options.rarity) {
-        rarityObj = RARITY_TIERS.find(r => r.name.toLowerCase() === options.rarity.toLowerCase());
-    } else {
-        let roll = rng.int(1, 100);
-        let cumulative = 0;
-        for (const tier of RARITY_TIERS) {
-            cumulative += tier.weight;
-            if (roll <= cumulative) {
-                rarityObj = tier;
-                break;
-            }
-        }
-    }
-    
-    if (family === 'deepsea' && rarityObj.weight > 15) {
-        rarityObj = RARITY_TIERS[2]; // Force Deepsea to Rare or higher
-    }
-
     const arch = ARCHETYPES[family];
 
-    // 3. Generate Pixel Art & Name
     const artResult = ART_GENERATORS[family]({ rng });
 
-    // 4. Environmental Stats
     let biomes =[];
     if (family === 'deepsea') {
         biomes.push('abyssal');
     } else if (options.biomeId) {
         biomes.push(options.biomeId);
-        // 30% chance to also be native to a random secondary biome
         if (rng.chance(0.3)) {
             const sec = rng.pick(Object.keys(BIOME_TEMPS));
             if (sec !== options.biomeId) biomes.push(sec);
@@ -153,54 +131,42 @@ export function generateFishData(options = {}) {
     const depthPref = rng.pick(arch.depths);
     const activeHours = rng.pick(['Diurnal', 'Nocturnal', 'Crepuscular', 'Always Active']);
 
-    // 5. Lure Preferences (-100 to 100)
     const prefColor = clamp(Math.round(arch.prefBias.color + rng.float(-30, 30)), -100, 100);
     const prefSound = clamp(Math.round(arch.prefBias.sound + rng.float(-30, 30)), -100, 100);
     const prefLight = clamp(Math.round(arch.prefBias.light + rng.float(-30, 30)), -100, 100);
     const prefWeight = clamp(Math.round(arch.prefBias.weight + rng.float(-30, 30)), -100, 100);
 
-    // 6. Physical Properties
     const sizeTier = rng.pick(arch.sizes);
     const weightBrackets = {
-        'Tiny': { min: 0.1, max: 2.5 },
-        'Small': { min: 2.0, max: 8.0 },
-        'Medium': { min: 7.0, max: 25.0 },
-        'Large': { min: 20.0, max: 150.0 },
-        'Massive': { min: 120.0, max: 800.0 }
+        'Tiny': { min: 0.1, max: 2.5 }, 'Small': { min: 2.0, max: 8.0 },
+        'Medium': { min: 7.0, max: 25.0 }, 'Large': { min: 20.0, max: 150.0 }, 'Massive': { min: 120.0, max: 800.0 }
     };
     
-    let minW = Number((weightBrackets[sizeTier].min * rarityObj.statMult * rng.float(0.9, 1.1)).toFixed(2));
-    let maxW = Number((weightBrackets[sizeTier].max * rarityObj.statMult * rng.float(0.9, 1.1)).toFixed(2));
+    // Set base biological weights
+    let minW = weightBrackets[sizeTier].min;
+    let maxW = weightBrackets[sizeTier].max;
 
-    // 7. Combat / Minigame Stats
-    const stamina = Math.round(arch.baseStamina * rarityObj.statMult * rng.float(0.85, 1.15));
-    const speed = Math.round(arch.baseSpeed * rarityObj.statMult * rng.float(0.85, 1.15));
-    let aggression = Number(clamp(arch.baseAggro * (rarityObj.name === 'Boss' ? 2.0 : 1.0) * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
-    const hookWindowMs = Math.max(250, Math.round(1500 * rarityObj.hookMod * rng.float(0.9, 1.1)));
+    // Base Combat stats (Unscaled)
+    const stamina = Math.round(arch.baseStamina * rng.float(0.85, 1.15));
+    const speed = Math.round(arch.baseSpeed * rng.float(0.85, 1.15));
+    let aggression = Number(clamp(arch.baseAggro * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
+    const hookWindowMs = 1500; // Base generic window
 
-    // 8. Economy
+    // Base Economy
     const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
-    const baseValue = Math.round(rarityObj.valBase * sizeEconMod[sizeTier] * rng.float(0.9, 1.2));
-    const baseXp = Math.round(rarityObj.xpBase * sizeEconMod[sizeTier] * rng.float(0.9, 1.2));
+    const baseValue = Math.round(10 * sizeEconMod[sizeTier]); // Base value of a common
+    const baseXp = Math.round(10 * sizeEconMod[sizeTier]);
 
     return {
-        id: `sp_${family}_${seed}`, // This acts as the unique SPECIES ID
+        id: `sp_${family}_${seed}`, 
         seed: seed,
-        
         identity: {
-            name: artResult.name,
-            family: family,
-            rarity: rarityObj.name
+            name: artResult.name, // Just the species name (e.g., "Ghostly Guppy")
+            family: family
         },
-        
-        art: {
-            imageDataUrl: artResult.imageDataUrl,
-            palette: artResult.data.palette,
-            metadata: artResult.data
-        },
-        
+        art: { imageDataUrl: artResult.imageDataUrl, palette: artResult.data.palette, metadata: artResult.data },
         environment: { biomes, depthPref, tempPref, activeHours },
-        lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: rarityObj.tolerance },
+        lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: 0.8 }, // Base tolerance
         physical: { sizeTier, weightRange: { min: minW, max: maxW } },
         combat: { stamina, speed, aggression, hookWindowMs },
         economy: { baseValue: Math.max(1, baseValue), baseXp: Math.max(5, baseXp) }
@@ -208,21 +174,42 @@ export function generateFishData(options = {}) {
 }
 
 /**
- * NEW: Generates an INDIVIDUAL caught fish based on a Species template.
- * Rolls a unique weight and assigns an instance ID so you can have multiple in your cargo.
+ * Generates an INDIVIDUAL caught fish. 
+ * Rolls a specific Rarity, applying heavy combat and economy multipliers.
  */
 export function generateFishInstance(speciesData, rng) {
-    // Deep clone the species data so we don't accidentally mutate the master template
-    const fishInstance = JSON.parse(JSON.stringify(speciesData));
+    const instance = JSON.parse(JSON.stringify(speciesData));
     
-    // Roll the specific weight for this catch
-    const minW = fishInstance.physical.weightRange.min;
-    const maxW = fishInstance.physical.weightRange.max;
-    fishInstance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
+    // Roll Rarity Dynamically
+    let rarityObj;
+    let roll = rng.int(1, 100);
+    let cumulative = 0;
+    for (const tier of RARITY_TIERS) {
+        cumulative += tier.weight;
+        if (roll <= cumulative) { rarityObj = tier; break; }
+    }
     
-    // Assign a unique instance ID for inventory tracking
-    fishInstance.instanceId = `inst_${rng.int(1000000, 9999999)}`;
-    fishInstance.invType = 'fish';
+    // Apply Rarity Multipliers to the Instance
+    instance.identity.rarity = rarityObj.name;
+    instance.identity.name = `${rarityObj.name} ${speciesData.identity.name}`;
+    
+    instance.combat.stamina = Math.round(instance.combat.stamina * rarityObj.statMult);
+    instance.combat.speed = Math.round(Math.min(120, instance.combat.speed * Math.pow(rarityObj.statMult, 0.5))); // Speed scales slower
+    instance.combat.aggression = rarityObj.name === 'Boss' ? 1.0 : instance.combat.aggression;
+    instance.combat.hookWindowMs = Math.max(250, Math.round(instance.combat.hookWindowMs * rarityObj.hookMod));
+    
+    instance.lurePrefs.tolerance = rarityObj.tolerance;
 
-    return fishInstance;
+    instance.economy.baseValue = Math.round(instance.economy.baseValue * (rarityObj.valBase / 10)); // Scale to rarity base
+    instance.economy.baseXp = Math.round(instance.economy.baseXp * (rarityObj.xpBase / 10));
+    
+    // Roll the specific weight for this catch (boosted by rarity)
+    const minW = instance.physical.weightRange.min * rarityObj.statMult;
+    const maxW = instance.physical.weightRange.max * rarityObj.statMult;
+    instance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
+    
+    instance.instanceId = `inst_${rng.int(1000000, 9999999)}`;
+    instance.invType = 'fish';
+
+    return instance;
 }

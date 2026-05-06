@@ -107,7 +107,6 @@ export function generateLure(options = {}) {
                 }
                 break;
 
-            case 'iron_sinker':
             case 'lead_sinker':
                 // Heavy metal cylinder
                 compH = 7;
@@ -293,4 +292,182 @@ export function generateLure(options = {}) {
         imageDataUrl: offscreenCanvas.toDataURL(),
         data: { components: components }
     };
+}
+
+/**
+ * Generates a standalone pixel-art image of a single lure component.
+ */
+export function generateLurePart(options = {}) {
+    const rng = options.rng || { 
+        next: Math.random, int: (min, max) => Math.floor(Math.random() * (max - min + 1)) + min, 
+        chance: (p) => Math.random() < p, pick: (arr) => arr[Math.floor(Math.random() * arr.length)] 
+    };
+
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = CANVAS_SIZE;
+    offscreenCanvas.height = CANVAS_SIZE;
+    const ctx = offscreenCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
+
+    function overPixel(x, y, hexColor) {
+        x = Math.round(x); y = Math.round(y);
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) grid[y][x] = hexColor;
+    }
+
+    const comp = options.visualId;
+    const cx = 32;
+    let currentY = 28; // Centered
+    let compH = 0;
+
+    switch (comp) {
+        case 'phosphor_cap':
+            compH = 6;
+            for (let y = 0; y < compH; y++) {
+                const w = y < 2 ? 2 + y : 5 - Math.floor((y-2)*1.5);
+                for(let x = -w; x <= w; x++) {
+                    let c = '#65A30D';
+                    if (x > w - 1 || y === compH - 1) c = '#365314';
+                    if (x < -w + 1) c = '#A3E635';
+                    if ((x+y)%3 === 0) c = '#FEF08A';
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+        case 'iron_sinker':
+        case 'lead_sinker':
+            compH = 7;
+            const isIron = comp === 'iron_sinker';
+            const mat = isIron ? MATERIALS.IRON : MATERIALS.STEEL;
+            const w = isIron ? 3 : 4; 
+            for (let y = 0; y < compH; y++) {
+                for(let x = -w; x <= w; x++) {
+                    let c = mat.base;
+                    if (x > w - 1 || y === 0 || y === compH - 1) c = mat.shadow;
+                    if (x === -w + 1) c = mat.highlight;
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+        case 'glow_bulb':
+            compH = 8;
+            for (let y = 0; y < compH; y++) {
+                const bw = Math.floor(4 * Math.sin((y / (compH-1)) * Math.PI));
+                for(let x = -bw; x <= bw; x++) {
+                    let c = '#22D3EE';
+                    if (x > bw - 1 || y > compH - 2) c = '#0369A1';
+                    if (x === -1 && y === 2) c = '#FFFFFF';
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+        case 'rattler_bells':
+            compH = 5;
+            for(let side of [-1, 1]) {
+                const bx = cx + (side * 2); // Brought closer together
+                overPixel(bx, currentY, MATERIALS.GOLD.highlight);
+                overPixel(bx - 1, currentY + 1, MATERIALS.GOLD.base); overPixel(bx + 1, currentY + 1, MATERIALS.GOLD.base); overPixel(bx, currentY + 1, MATERIALS.GOLD.base);
+                overPixel(bx - 1, currentY + 2, MATERIALS.GOLD.base); overPixel(bx + 1, currentY + 2, MATERIALS.GOLD.base);
+                overPixel(bx, currentY + 2, '#000000'); 
+                overPixel(bx - 1, currentY + 3, MATERIALS.GOLD.shadow); overPixel(bx + 1, currentY + 3, MATERIALS.GOLD.shadow); overPixel(bx, currentY + 3, MATERIALS.GOLD.shadow);
+            }
+            break;
+        case 'chilifish_oil':
+            compH = 5; // Drawn as a small, teardrop droplet
+            for (let y = 0; y < compH; y++) {
+                const dw = y === 0 ? 0 : y === compH - 1 ? 1 : 2;
+                for(let x = -dw; x <= dw; x++) {
+                    let c = '#DC2626';
+                    if (x === dw) c = '#991B1B';
+                    if (x === -dw && y === 2) c = '#FCA5A5';
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+        case 'spinner':
+            compH = 2; 
+            for (let y = 0; y < 7; y++) {
+                const spoonW = y < 2 || y > 5 ? 0 : 1;
+                for (let x = -spoonW; x <= spoonW; x++) {
+                    let c = MATERIALS.SILVER.base;
+                    if (x === spoonW) c = MATERIALS.SILVER.shadow;
+                    if (x === -spoonW && y === 3) c = '#FFFFFF';
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+        case 'cave_crawler_leg':
+            compH = 4;
+            overPixel(cx - 1, currentY + 1, '#78350F');
+            overPixel(cx, currentY + 2, '#78350F');
+            overPixel(cx + 1, currentY + 1, '#451A03'); 
+            overPixel(cx + 2, currentY, '#FBBF24'); 
+            break;
+        default:
+            compH = 5;
+            const pal = 
+                comp === 'mushroom_stalk' ? { b: '#C084FC', s: '#7E22CE', h: '#E9D5FF' } :
+                comp === 'bone_dust' ? { b: '#E7E5E4', s: '#A8A29E', h: '#FAFAF9' } :
+                comp === 'myconid_spore' ? { b: '#4ADE80', s: '#166534', h: '#A3E635' } :
+                comp === 'jelly_bell' ? { b: '#F472B6', s: '#BE185D', h: '#FBCFE8' } :
+                { b: '#E11D48', s: '#881337', h: '#FDA4AF' }; // fish gut
+                
+            for (let y = 0; y < compH; y++) {
+                const blobW = rng.int(2, 4);
+                for(let x = -blobW; x <= blobW; x++) {
+                    let c = pal.b;
+                    if (x > blobW - 1 || y === compH - 1) c = pal.s;
+                    if (x === -blobW + 1 && y === 1) c = pal.h;
+                    if ((comp === 'bone_dust' || comp === 'myconid_spore') && rng.chance(0.3)) c = pal.s;
+                    overPixel(cx + x, currentY + y, c);
+                }
+            }
+            break;
+    }
+
+    if (comp === 'wraith_silk' || comp === 'rat_tail') {
+        const isSilk = comp === 'wraith_silk';
+        const trailLen = isSilk ? 12 : 8;
+        const trailCol = isSilk ? '#818CF8' : '#A1A1AA';
+        const trailShad = isSilk ? '#3730A3' : '#3F3F46';
+        let tx = cx;
+        for(let y = 0; y < trailLen; y++) {
+            tx += rng.pick([-1, 0, 1]);
+            if (isSilk) {
+                overPixel(tx - 1, currentY + compH + y, trailCol);
+                overPixel(tx, currentY + compH + y, trailShad);
+                overPixel(tx + 1, currentY + compH + y, trailCol);
+            } else {
+                if (y < 4) overPixel(tx - 1, currentY + compH + y, trailShad);
+                overPixel(tx, currentY + compH + y, trailCol);
+            }
+        }
+    }
+
+    // Outline Pass
+    const outlineGrid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            if (grid[y][x] === null) {
+                if ((y > 0 && grid[y - 1][x] !== null && grid[y - 1][x] !== '#22D3EE') || 
+                    (y < GRID_SIZE - 1 && grid[y + 1][x] !== null && grid[y + 1][x] !== '#22D3EE') || 
+                    (x > 0 && grid[y][x - 1] !== null && grid[y][x - 1] !== '#22D3EE') || 
+                    (x < GRID_SIZE - 1 && grid[y][x + 1] !== null && grid[y][x + 1] !== '#22D3EE')) {
+                    outlineGrid[y][x] = '#020617'; 
+                }
+            }
+        }
+    }
+
+    // Render Pass
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            let colorCode = outlineGrid[y][x] || grid[y][x];
+            if (grid[y][x] === '#22D3EE' || grid[y][x] === '#FEF08A') colorCode = grid[y][x]; 
+            if (colorCode) drawScaledRect(ctx, x, y, 1, 1, colorCode, DISPLAY_SCALE);
+        }
+    }
+
+    return offscreenCanvas.toDataURL();
 }

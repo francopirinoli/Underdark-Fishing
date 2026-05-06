@@ -129,16 +129,28 @@ export const ExplorationRenderer = {
         const playerPxX = engine.x * this.TILE_SIZE;
         const playerPxY = engine.y * this.TILE_SIZE;
 
-        this.camX = playerPxX - (this.VIEW_W / 2);
+        // The UI sidebar takes up exactly 256px on the right.
+        const VISIBLE_W = this.VIEW_W - 256; 
+
+        // Center the camera on the boat within the visible space
+        this.camX = playerPxX - (VISIBLE_W / 2);
         this.camY = playerPxY - (this.VIEW_H / 2);
 
-        const maxCamX = this.offscreenMap.width - this.VIEW_W;
-        const maxCamY = this.offscreenMap.height - this.VIEW_H;
+        // Clamp camera so we don't draw outside the bounds of the generated map
+        const maxCamX = Math.max(0, this.offscreenMap.width - VISIBLE_W);
+        const maxCamY = Math.max(0, this.offscreenMap.height - this.VIEW_H);
+        
         this.camX = Math.max(0, Math.min(this.camX, maxCamX));
         this.camY = Math.max(0, Math.min(this.camY, maxCamY));
 
         this.ctx.clearRect(0, 0, this.VIEW_W, this.VIEW_H);
-        this.ctx.drawImage(this.offscreenMap, this.camX, this.camY, this.VIEW_W, this.VIEW_H, 0, 0, this.VIEW_W, this.VIEW_H);
+        
+        // Draw the map only within the visible area, leaving the right side empty for the UI
+        this.ctx.drawImage(
+            this.offscreenMap, 
+            this.camX, this.camY, VISIBLE_W, this.VIEW_H, 
+            0, 0, VISIBLE_W, this.VIEW_H
+        );
 
         const screenBoatX = playerPxX - this.camX;
         const screenBoatY = playerPxY - this.camY;
@@ -224,40 +236,57 @@ export const ExplorationRenderer = {
         this.ctx.stroke();
     },
 
+    lightCache: {}, // NEW: Cache pre-rendered light circles
+
+    _getLightCanvas(radius) {
+        const key = radius.toString();
+        if (this.lightCache[key]) return this.lightCache[key];
+
+        const c = document.createElement('canvas');
+        c.width = radius * 2;
+        c.height = radius * 2;
+        const ctx = c.getContext('2d');
+
+        const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 1.0)');   
+        gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.7)'); 
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.0)');   
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(radius, radius, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        this.lightCache[key] = c;
+        return c;
+    },
+
     _drawLighting(sources) {
         const lw = this.lightCanvas.width;
         const lh = this.lightCanvas.height;
         const ls = this.lightScale;
 
+        // CRITICAL FIX: Clear the canvas first so the darkness doesn't stack every frame!
         this.lightCtx.clearRect(0, 0, lw, lh);
-        this.lightCtx.fillStyle = 'rgba(2, 6, 23, 0.97)'; 
+
+        this.lightCtx.globalCompositeOperation = 'source-over';
+        this.lightCtx.fillStyle = 'rgba(2, 6, 23, 0.95)'; 
         this.lightCtx.fillRect(0, 0, lw, lh);
 
         this.lightCtx.globalCompositeOperation = 'destination-out';
         
         sources.forEach(src => {
-            // Apply optimization scale
+            const r = src.radius * ls;
             const x = src.x * ls;
             const y = src.y * ls;
-            const r = src.radius * ls;
 
-            // Failsafe against invalid gradient dimensions
             if (r > 0 && isFinite(x) && isFinite(y) && isFinite(r)) {
-                const gradient = this.lightCtx.createRadialGradient(x, y, 0, x, y, r);
-                gradient.addColorStop(0, 'rgba(0, 0, 0, 1.0)');   
-                gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.7)'); 
-                gradient.addColorStop(1, 'rgba(0, 0, 0, 0.0)');   
-                
-                this.lightCtx.fillStyle = gradient;
-                this.lightCtx.beginPath();
-                this.lightCtx.arc(x, y, r, 0, Math.PI * 2);
-                this.lightCtx.fill();
+                const img = this._getLightCanvas(r);
+                this.lightCtx.drawImage(img, x - r, y - r);
             }
         });
 
         this.lightCtx.globalCompositeOperation = 'source-over';
-        
-        // Stretch the optimized shadow map over the main canvas
         this.ctx.drawImage(this.lightCanvas, 0, 0, lw, lh, 0, 0, this.VIEW_W, this.VIEW_H);
     }
 };

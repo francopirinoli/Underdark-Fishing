@@ -91,47 +91,59 @@ body, html {
     image-rendering: pixelated;
 }
 
-/* Z-10 | THE HUD */
+/* Z-10 | THE SIDEBAR HUD */
 #z10-hud {
     position: absolute;
-    inset: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 256px; /* Exactly covers the empty void */
+    background: #020617; /* Solid black/navy background */
+    border-left: 2px solid var(--panel-border);
     z-index: 10;
-    pointer-events: none; /* Let clicks pass through to the world */
-    padding: 1.5rem;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    padding: 1rem;
+    gap: 1rem;
+    pointer-events: auto; /* Catch clicks so we don't accidentally click the map through the UI */
 }
 
 /* HUD Panels */
 .hud-panel {
-    background: rgba(15, 23, 42, 0.85); /* Semi-transparent navy */
+    background: rgba(15, 23, 42, 0.95); /* Opaque to hide the void */
     border: 2px solid var(--panel-border);
-    padding: 1rem;
     border-radius: 4px;
-    pointer-events: auto; /* Re-enable clicks for UI elements */
-    backdrop-filter: blur(4px);
 }
-
-.hud-top { display: flex; justify-content: space-between; align-items: flex-start; }
-.hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
 
 /* Vital Bars */
 .vital-row { display: flex; align-items: center; margin-bottom: 0.5rem; }
-.vital-label { width: 60px; font-size: 1.2rem; color: var(--text-muted); text-transform: uppercase; }
-.vital-bar-track { flex-grow: 1; height: 16px; background: var(--bg-void); border: 1px solid var(--panel-border); width: 150px; }
+.vital-label { color: var(--text-muted); text-transform: uppercase; }
+.vital-bar-track { flex-grow: 1; background: var(--bg-void); border: 1px solid var(--panel-border); }
 .vital-bar-fill { height: 100%; transition: width 0.2s; }
 .fill-hp { background: var(--green-safe); }
 .fill-fuel { background: var(--gold-warn); }
 
 /* Minimap & Clock */
-.nav-box { text-align: right; }
 .clock-text { font-size: 1.5rem; color: var(--cyan-glow); margin-bottom: 0.5rem; text-shadow: 0 0 5px rgba(34, 211, 238, 0.4); }
-#minimap-container { width: 150px; height: 150px; background: var(--bg-void); border: 2px solid var(--panel-border); }
+#minimap-container { background: rgba(0, 0, 0, 0.8); border: 2px solid var(--panel-border); }
 
 /* Action Log */
-.action-log { width: 350px; height: 100px; font-size: 1.2rem; display: flex; flex-direction: column; justify-content: flex-end; }
-.log-msg { margin-top: 0.2rem; animation: fadeOut 4s forwards; }
+.action-log { 
+    flex: 1; 
+    width: 100%; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: flex-end; 
+    overflow: hidden;
+    padding-bottom: 0.5rem;
+}
+.log-msg { 
+    margin-top: 0.4rem; 
+    font-size: 1.05rem; 
+    line-height: 1.2;
+    animation: fadeOut 5s forwards; 
+    word-wrap: break-word; /* Fixes long text cutting off */
+}
 
 @keyframes fadeOut {
     0% { opacity: 1; }
