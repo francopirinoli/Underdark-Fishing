@@ -213,3 +213,22 @@ export function generateFishInstance(speciesData, rng) {
 
     return instance;
 }
+
+/**
+ * Predictably generates the exact ecosystem of species for a specific Map Node.
+ */
+export function getFishPoolForNode(worldSeed, nodeX, nodeY, biomeId) {
+    const poolRng = createRng(worldSeed + nodeX * 100 + nodeY * 1000);
+    const numSpecies = poolRng.int(6, 12);
+    const pool =[];
+    let hasDeepsea = false;
+    for (let i = 0; i < numSpecies; i++) {
+        let opts = { seed: poolRng.next() * 1000000, biomeId: biomeId };
+        if (biomeId === 'abyssal' && !hasDeepsea) {
+            opts.family = 'deepsea';
+            hasDeepsea = true;
+        }
+        pool.push(generateFishData(opts));
+    }
+    return pool;
+}

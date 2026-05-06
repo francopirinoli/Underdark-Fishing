@@ -1,23 +1,28 @@
 /**
  * js/exploration/map_renderer.js
  * Takes the raw data from global_map and local_map and paints them to Canvas.
- * Local Map renderer optimized using ImageData for 512x512 instantaneous rendering.
- * V2 - Added Fog of War rendering.
  */
 
 import { TILE } from './local_map.js';
 
-export function renderGlobalMap(canvas, globalMap, biomes, selectedNode) {
+export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[]) {
     const ctx = canvas.getContext('2d');
     const tileW = canvas.width / globalMap.width;
     const tileH = canvas.height / globalMap.height;
     
+    // Extract a Set of exact Node strings "x,y" that contain active quest targets
+    const questNodes = new Set();
+    activeQuests.forEach(q => {
+        if (q.targetNode) questNodes.add(`${q.targetNode.x},${q.targetNode.y}`);
+    });
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Pass 1: Backgrounds & Fog of War
+    // Pass 1: Backgrounds, Fog of War, & Quest Borders
     for (let y = 0; y < globalMap.height; y++) {
         for (let x = 0; x < globalMap.width; x++) {
             const node = globalMap.nodes[y][x];
+            const isQuestTarget = questNodes.has(`${x},${y}`);
             
             if (node.isDiscovered) {
                 ctx.fillStyle = biomes[node.biomeId].globalColor;
@@ -28,9 +33,15 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode) {
             ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             
             // Grid border
-            ctx.strokeStyle = 'rgba(2, 6, 23, 0.4)'; 
-            ctx.lineWidth = 1;
-            ctx.strokeRect(x * tileW, y * tileH, tileW, tileH);
+            if (isQuestTarget) {
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; // Golden border for quests
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x * tileW + 1, y * tileH + 1, tileW - 2, tileH - 2);
+            } else {
+                ctx.strokeStyle = 'rgba(2, 6, 23, 0.4)'; 
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x * tileW, y * tileH, tileW, tileH);
+            }
         }
     }
     
@@ -41,6 +52,7 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode) {
             const node = globalMap.nodes[y][x];
             const cx = x * tileW + tileW / 2;
             const cy = y * tileH + tileH / 2;
+            const isQuestTarget = questNodes.has(`${x},${y}`);
             
             if (node.isDiscovered) {
                 // Draw Exits
@@ -59,14 +71,31 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode) {
                     ctx.arc(cx, cy, tileW * 0.25, 0, Math.PI * 2);
                     ctx.fill();
                 }
+
+                // Discovered Quest Marker (Top Right Corner)
+                if (isQuestTarget) {
+                    ctx.fillStyle = '#FBBF24';
+                    ctx.font = `bold ${tileH * 0.5}px "Courier New", monospace`;
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('!', x * tileW + tileW - 4, y * tileH + 4);
+                }
             } else {
-                // Draw Question Mark for Fog of War
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-                // Use default font or VT323 if loaded
-                ctx.font = `${tileH * 0.6}px "Courier New", monospace`; 
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('?', cx, cy + 2); // +2 for visual centering
+                if (isQuestTarget) {
+                    // Undiscovered Quest Marker (Centered Gold !)
+                    ctx.fillStyle = '#FBBF24';
+                    ctx.font = `bold ${tileH * 0.6}px "Courier New", monospace`; 
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('!', cx, cy + 2);
+                } else {
+                    // Standard Fog of War (?)
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.font = `${tileH * 0.6}px "Courier New", monospace`; 
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('?', cx, cy + 2); 
+                }
             }
         }
     }
@@ -90,7 +119,6 @@ export function renderLocalMap(canvas, localMap, biome) {
     const w = localMap.width;
     const h = localMap.height;
     
-    // Resize the canvas internal buffer to exactly match the 512x512 grid for 1:1 pixel rendering
     if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
@@ -100,16 +128,10 @@ export function renderLocalMap(canvas, localMap, biome) {
     const data = imgData.data;
     
     const pal = biome.palette;
-    
     const colors = {
-        [TILE.WATER]: hexToRgb(pal.water),
-        [TILE.DEEP_WATER]: hexToRgb(pal.deepWater),
-        [TILE.LAND]: hexToRgb(pal.land),[TILE.ROCK]: hexToRgb(pal.rock),
-        [TILE.FLORA]: hexToRgb(pal.flora),
-        [TILE.DOCK]: hexToRgb('#78350F')
+        [TILE.WATER]: hexToRgb(pal.water),[TILE.DEEP_WATER]: hexToRgb(pal.deepWater),
+        [TILE.LAND]: hexToRgb(pal.land), [TILE.ROCK]: hexToRgb(pal.rock),[TILE.FLORA]: hexToRgb(pal.flora), [TILE.DOCK]: hexToRgb('#78350F')
     };
-    
-    // Fallback error color (magenta)
     const errColor =[255, 0, 255]; 
 
     let i = 0;
@@ -117,13 +139,8 @@ export function renderLocalMap(canvas, localMap, biome) {
         for (let x = 0; x < w; x++) {
             const tileId = localMap.grid[y][x];
             const[r, g, b] = colors[tileId] || errColor;
-            
-            data[i++] = r;
-            data[i++] = g;
-            data[i++] = b;
-            data[i++] = 255; // Alpha channel
+            data[i++] = r; data[i++] = g; data[i++] = b; data[i++] = 255;
         }
     }
-    
     ctx.putImageData(imgData, 0, 0);
 }

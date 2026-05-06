@@ -8,10 +8,11 @@ import { getRandomInRange, clamp } from '../util/utils.js';
 
 // [FIX]: Added selfDrain to behaviors. Negative means regen, positive means burning energy.
 const BEHAVIORS = {
-    HOLD:   { pullMult: 0.2, catchable: true,  stamDrainMult: 1.0, selfDrain: -6 }, 
-    RUN:    { pullMult: 1.0, catchable: true,  stamDrainMult: 1.2, selfDrain: 6 }, 
-    THRASH: { pullMult: 1.8, catchable: false, stamDrainMult: 3.5, selfDrain: 18 }, 
-    BURST:  { pullMult: 3.5, catchable: false, stamDrainMult: 1.0, selfDrain: 12 }  
+    HOLD:     { pullMult: 0.2, catchable: true,  stamDrainMult: 1.0, selfDrain: -6 }, 
+    RUN:      { pullMult: 1.0, catchable: true,  stamDrainMult: 1.2, selfDrain: 6 }, 
+    THRASH:   { pullMult: 1.8, catchable: false, stamDrainMult: 3.5, selfDrain: 18 }, 
+    BURST:    { pullMult: 3.5, catchable: false, stamDrainMult: 1.0, selfDrain: 12 },
+    INANIMATE:{ pullMult: 0.8, catchable: true,  stamDrainMult: 0.8, selfDrain: 0 } // NEW: For Treasures
 };
 
 export const FishingEngine = {
@@ -107,6 +108,17 @@ export const FishingEngine = {
             return false;
         }
 
+        // --- NEW: ABSOLUTE PRIORITY FOR CHESTS ---
+        // If the player hit the right depth and the chest is here, it ALWAYS bites.
+        const chestCandidate = validCandidates.find(c => c.fish.invType === 'chest_encounter');
+        if (chestCandidate) {
+            this.fishData = chestCandidate.fish;
+            this.phase = 'BITE';
+            this.hookTimerMs = this.fishData.combat.hookWindowMs + this.playerStats.minigame.hookWindowMs;
+            return true;
+        }
+
+        // Normal Fish Fallback Selection
         validCandidates.sort((a, b) => b.matchScore - a.matchScore);
 
         let selectedCandidate = validCandidates[0];
@@ -174,6 +186,12 @@ export const FishingEngine = {
     },
 
     _updateFishAI(dt) {
+        // NEW: Inanimate objects like chests never change state
+        if (this.fishData.combat.aggression === 0) {
+            this.ai.state = 'INANIMATE';
+            return;
+        }
+
         if (this.fishStamina <= 0) {
             this.ai.state = 'HOLD';
             this.ai.timer = 1.0;

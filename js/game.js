@@ -15,10 +15,10 @@ import { SFX } from './audio/sfx_generator.js';
 // Data & Generation
 import { PlayerEngine } from './data/player_data.js';
 import { generateNPCData } from './data/npc_data_generator.js';
-import { generateFishData, generateFishInstance } from './data/fish_data_generator.js';
 import { generateGlobalMap } from './exploration/global_map.js';
 import { generateLocalMap, TILE, LOCAL_MAP_SIZE } from './exploration/local_map.js';
 import { BIOMES } from './exploration/biomes.js';
+import { generateFishData, generateFishInstance, getFishPoolForNode } from './data/fish_data_generator.js';
 
 // Engines & Renderers
 import { ExplorationEngine } from './exploration/exploration_engine.js';
@@ -34,6 +34,10 @@ import { MenuUI } from './ui/menu_ui.js';
 import { HubUI } from './ui/hub_ui.js';
 import { PauseUI } from './ui/pause_ui.js';
 
+// Events
+import { EventManager } from './events/event_manager.js';
+import { generateChest } from './art/chest_generator.js';
+
 // --- GAME STATE ---
 let currentSaveSlot = 1; // <-- ADD THIS LINE
 const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5 };
@@ -46,6 +50,7 @@ let globalX, globalY;
 let currentLocalMap, currentBiome;
 let currentLocalFishPool =[];
 let lastTime = 0;
+let currentLocalChest = null; 
 
 // World State
 let discoveredNodes =[];
@@ -85,8 +90,11 @@ async function initGameSystems() {
 
     const interactPrompt = document.createElement('div');
     interactPrompt.id = 'interact-prompt';
-    interactPrompt.style.cssText = "position:absolute; bottom: 80px; left: 50%; transform: translateX(-50%); font-size: 1.6rem; color: var(--gold-warn); background: rgba(15, 23, 42, 0.9); padding: 0.5rem 1.5rem; border: 2px solid var(--panel-border); border-radius: 6px; display: none; z-index: 40; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4); pointer-events: none;";
-    document.getElementById('z10-hud').appendChild(interactPrompt);
+    // Center it in the 1024px playable area (1280 total - 256 sidebar). 1024 / 2 = 512px from left.
+    interactPrompt.style.cssText = "position:absolute; bottom: 80px; left: 512px; transform: translateX(-50%); font-size: 1.6rem; color: var(--gold-warn); background: rgba(15, 23, 42, 0.9); padding: 0.5rem 1.5rem; border: 2px solid var(--panel-border); border-radius: 6px; display: none; z-index: 40; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4); pointer-events: none;";
+    
+    // CRITICAL FIX: Append to game-container, NOT z10-hud!
+    document.getElementById('game-container').appendChild(interactPrompt);
 
     MenuUI.init({
         onNewGame: (slot, playerData, stats, points) => startNewDescent(slot, playerData, stats, points),
@@ -94,7 +102,8 @@ async function initGameSystems() {
     });
 
     GrimoireUI.init({
-        onSave: () => saveCurrentState()
+        onSave: () => saveCurrentState(),
+        onDeath: () => handleDeath() // <-- NEW: Allow Grimoire to kill the player
     });
 
     HubUI.init({
@@ -122,12 +131,16 @@ function startNewDescent(slot, identityData, stats, points) {
     player = PlayerEngine.createPlayer(identityData);
     player.stats = stats;
     player.availablePoints = points;
-    player.inventory =[];
+    player.inventory = [];
     player.activeQuests =[];
     player.bestiary = {}; 
     player.vitals.hp = player.gear.boat.stats.maxHp;
 
+    // 1. GENERATE THE WORLD FIRST
     world = generateGlobalMap(Date.now(),[]);
+    
+    // 2. NOW WE CAN CALL THE EVENT MANAGER (because world.seed exists)
+    EventManager.onNewDay(1, world.seed);
     
     let startNode = world.nodes.flat().find(n => n.hasSettlement) || world.nodes[world.startY][world.startX];
     
@@ -136,7 +149,7 @@ function startNewDescent(slot, identityData, stats, points) {
     gameDay = 1;
     gameTimeMinutes = 8 * 60;
 
-    discoveredNodes = [`${globalX},${globalY}`];
+    discoveredNodes =[`${globalX},${globalY}`];
     world.nodes[globalY][globalX].isDiscovered = true;
 
     saveCurrentState();
@@ -160,7 +173,6 @@ function loadExistingDescent(slot) {
     gameDay = data.gameDay;
     gameTimeMinutes = data.gameTimeMinutes;
 
-    // NEW: Re-inject saved Node Ecology into the regenerated world
     const nodeEcology = data.nodeEcology || {};
     for (const key in nodeEcology) {
         const [x, y] = key.split(',');
@@ -168,6 +180,9 @@ function loadExistingDescent(slot) {
             world.nodes[y][x].discoveredSpecies = nodeEcology[key];
         }
     }
+
+    // Load the saved Treasure Chests
+    EventManager.loadSaveData(data.eventData);
 
     enterWorld();
 }
@@ -184,7 +199,6 @@ function enterWorld() {
 }
 
 function saveCurrentState() {
-    // Extract the ecology dictionary from the nodes
     const nodeEcology = {};
     for (let y = 0; y < world.height; y++) {
         for (let x = 0; x < world.width; x++) {
@@ -194,7 +208,20 @@ function saveCurrentState() {
             }
         }
     }
-    SaveManager.saveGame(currentSaveSlot, player, world.seed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes, nodeEcology);
+    
+    // Pass EventManager.getSaveData() into the save file!
+    SaveManager.saveGame(
+        currentSaveSlot, 
+        player, 
+        world.seed, 
+        globalX, 
+        globalY, 
+        gameDay, 
+        gameTimeMinutes, 
+        discoveredNodes, 
+        nodeEcology,
+        EventManager.getSaveData() 
+    );
 }
 
 // --- NODE LOADING ---
@@ -207,21 +234,9 @@ function loadLocalNode(entryDir) {
     // Ensure the node tracks its discovered fish species
     if (!targetNode.discoveredSpecies) targetNode.discoveredSpecies =[];
 
-    // Generate the Local Ecosystem (Fish Pool)
-    const poolRng = createRng(world.seed + globalX * 100 + globalY * 1000);
-    const numSpecies = poolRng.int(6, 12);
-    currentLocalFishPool =[];
-    
-    // Force at least one deepsea horror if it's an abyssal node
-    let hasDeepsea = false;
-    for (let i = 0; i < numSpecies; i++) {
-        let opts = { seed: poolRng.next() * 1000000, biomeId: currentBiome.id };
-        if (currentBiome.id === 'abyssal' && !hasDeepsea) {
-            opts.family = 'deepsea';
-            hasDeepsea = true;
-        }
-        currentLocalFishPool.push(generateFishData(opts));
-    }
+    // NEW: Generate the Local Ecosystem using the global helper
+    // This replaces all the old manual loop logic!
+    currentLocalFishPool = getFishPoolForNode(world.seed, globalX, globalY, currentBiome.id);
 
     let spawnX = LOCAL_MAP_SIZE / 2, spawnY = LOCAL_MAP_SIZE / 2;
     const EDGE_OFFSET = 15;
@@ -239,7 +254,20 @@ function loadLocalNode(entryDir) {
 
     ExplorationRenderer.buildMapCache(currentLocalMap, currentBiome);
     ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity);
-    
+        // NEW: Check if this node has an active treasure event
+    currentLocalChest = null;
+    if (EventManager.Treasure.hasChest(globalX, globalY)) {
+        const rng = createRng(world.seed + globalX * 10 + globalY * 100 + gameDay);
+        const waterTiles =[];
+        // Scan for a valid deep water spot
+        for (let y = 10; y < LOCAL_MAP_SIZE - 10; y += 4) { 
+            for (let x = 10; x < LOCAL_MAP_SIZE - 10; x += 4) {
+                if (currentLocalMap.grid[y][x] === TILE.DEEP_WATER) waterTiles.push({x, y});
+            }
+        }
+        if (waterTiles.length > 0) currentLocalChest = rng.pick(waterTiles);
+    }
+
     HUD.cacheMinimap(currentLocalMap);
 
     ExplorationEngine.onDamage = (amount) => {
@@ -262,7 +290,7 @@ function loadLocalNode(entryDir) {
                 player.vitals.rations = 0;
                 player.vitals.hp -= 20;
                 HUD.logAction("Starving! Hull took 20 damage.", 'danger');
-                if (player.vitals.hp <= 0) handleDeath(); // Step 3 death condition added here
+                if (player.vitals.hp <= 0) handleDeath();
             } else {
                 HUD.logAction(`Sailed ${dir.toUpperCase()} into new region.`);
             }
@@ -316,15 +344,21 @@ function gameLoop(timestamp) {
     HUD.update(player, gameDay, gameTimeMinutes);
 
     if (currentState === STATE.EXPLORATION) {
-        const effStats = PlayerEngine.getEffectiveStats(player); // Grab effective stats for exploration
+        const effStats = PlayerEngine.getEffectiveStats(player);
 
         if (player.vitals.fuel > 0) {
-            const fuelMult = effStats.exploration.fuelEfficiencyMult; // Apply Intelligence Buff
+            const fuelMult = effStats.exploration.fuelEfficiencyMult;
             player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
         }
 
+        // --- NEW: TIME & DAY ROLLOVER (Events) ---
         gameTimeMinutes += dt; 
-        if (gameTimeMinutes >= 24 * 60) { gameTimeMinutes -= 24 * 60; gameDay++; }
+        if (gameTimeMinutes >= 24 * 60) { 
+            gameTimeMinutes -= 24 * 60; 
+            gameDay++; 
+            EventManager.onNewDay(gameDay, world.seed);
+            HUD.logAction("A new day begins. The Darklake shifts...", "safe");
+        }
 
         if (mouse.isCharging) {
             mouse.chargePct = Math.min(1.0, mouse.chargePct + dt * 1.5);
@@ -366,12 +400,16 @@ function gameLoop(timestamp) {
         keys.actionJustPressed = false;
 
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
-        ExplorationRenderer.render(ExplorationEngine, lightRad, mouse, false,[]);
+        
+        // --- NEW: Pass currentLocalChest to Renderer ---
+        ExplorationRenderer.render(ExplorationEngine, lightRad, mouse, false,[], currentLocalChest);
         HUD.drawMinimap(ExplorationEngine.x, ExplorationEngine.y);
     } 
     else if (currentState === STATE.FISHING) {
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
-        ExplorationRenderer.render(ExplorationEngine, lightRad, null, true,[]);
+        
+        // --- NEW: Pass currentLocalChest to Renderer ---
+        ExplorationRenderer.render(ExplorationEngine, lightRad, null, true,[], currentLocalChest);
         
         FishingEngine.update(dt, isReeling);
         FishingRenderer.update(FishingEngine, dt, isReeling);
@@ -380,39 +418,60 @@ function gameLoop(timestamp) {
             const effStats = PlayerEngine.getEffectiveStats(player);
             if (player.inventory.length < effStats.exploration.cargoSpace) {
                 
-                // IT IS ALREADY AN INSTANCE! Do not call generateFishInstance here.
                 const caughtFish = FishingEngine.fishData; 
                 
-                // 1. Add to Inventory
-                player.inventory.push(caughtFish);
-                
-                // 2. Track in Bestiary (Using the clean species template!)
-                if (!player.bestiary[caughtFish.id]) {
-                    const template = currentLocalFishPool.find(f => f.id === caughtFish.id) || caughtFish;
-                    // Deep clone the template so it stays pure
-                    player.bestiary[caughtFish.id] = { xp: 0, caught: 0, speciesData: JSON.parse(JSON.stringify(template)) };
+                // --- PROCESS TREASURE CHEST CATCH ---
+                if (caughtFish.invType === 'chest_encounter') {
+                    player.inventory.push({
+                        id: `chest_${Date.now()}`,
+                        instanceId: `inst_${Date.now()}`,
+                        invType: 'chest',
+                        name: 'Sunken Chest',
+                        art: caughtFish.art, 
+                        imageDataUrl: caughtFish.art.imageDataUrl,
+                        chestSeed: caughtFish.chestSeed // <-- ADDED: Save it to the inventory item
+                    });
+                    
+                    EventManager.Treasure.clearChest(globalX, globalY); 
+                    currentLocalChest = null;
+                    handleEndFishing("You hauled up a Sunken Chest!", "safe");
+                    saveCurrentState();
                 }
-                player.bestiary[caughtFish.id].caught++;
 
-                // 3. Mark Node Discovery
-                const targetNode = world.nodes[globalY][globalX];
-                if (!targetNode.discoveredSpecies.includes(caughtFish.id)) {
-                    targetNode.discoveredSpecies.push(caughtFish.id);
-                }
-
-                // 4. Update Quest Progress
-                player.activeQuests.forEach(q => {
-                    if (q.targetSpeciesId === caughtFish.id) {
-                        if (q.type === 'hunt' && q.currentAmount < q.requiredAmount) {
-                            q.currentAmount++;
-                        } else if (q.type === 'trophy' && caughtFish.actualWeight > q.currentBestWeight) {
-                            q.currentBestWeight = caughtFish.actualWeight;
-                        }
+                // --- PROCESS NORMAL FISH CATCH ---
+                else {
+                    player.inventory.push(caughtFish);
+                    
+                    if (!player.bestiary[caughtFish.id]) {
+                        const template = currentLocalFishPool.find(f => f.id === caughtFish.id) || caughtFish;
+                        player.bestiary[caughtFish.id] = { xp: 0, caught: 0, speciesData: JSON.parse(JSON.stringify(template)) };
                     }
-                });
+                    player.bestiary[caughtFish.id].caught++;
 
-                handleEndFishing(`Caught a ${caughtFish.identity.name} (${caughtFish.actualWeight}kg)!`, "safe");
-                saveCurrentState();
+                    const targetNode = world.nodes[globalY][globalX];
+                    if (!targetNode.discoveredSpecies.includes(caughtFish.id)) {
+                        targetNode.discoveredSpecies.push(caughtFish.id);
+                    }
+
+                    player.activeQuests.forEach(q => {
+                        if (q.targetSpeciesId === caughtFish.id) {
+                            if (q.type === 'hunt' && q.currentAmount < q.requiredAmount) {
+                                q.currentAmount++;
+                            } else if (q.type === 'trophy' && caughtFish.actualWeight > q.currentBestWeight) {
+                                q.currentBestWeight = caughtFish.actualWeight;
+                            }
+                        }
+                        if (q.type === 'bounty' && !q.isComplete) {
+                            if (caughtFish.identity.rarity === 'Boss' && globalX === q.targetNode.x && globalY === q.targetNode.y) {
+                                q.isComplete = true;
+                                HUD.logAction(`Bounty Complete: ${q.title}!`, "safe");
+                            }
+                        }
+                    });
+
+                    handleEndFishing(`Caught a ${caughtFish.identity.name} (${caughtFish.actualWeight}kg)!`, "safe");
+                    saveCurrentState();
+                }
             } else {
                 handleEndFishing(`Cargo full! Released ${FishingEngine.fishData.identity.name}.`, "danger");
             }
@@ -444,53 +503,64 @@ function handleAttemptCast() {
         if ([TILE.WATER, TILE.DEEP_WATER, TILE.FLORA].includes(tId)) {
             ExplorationEngine.velocity = 0;
             
-            // 1. Calculate Depth
             const castRng = createRng(Date.now());
             let maxDepth = 20;
             if (tId === TILE.DEEP_WATER) maxDepth = castRng.int(50, 85);
             else if (tId === TILE.FLORA) maxDepth = castRng.int(20, 35);
             else maxDepth = castRng.int(12, 22);
 
-            // 2. Generate Local Fish Pool as INSTANCES
+            // 1. Generate Normal Fish Pool
             let castPool = Array.from({length: 10}, (_, i) => {
-                let pool = currentLocalFishPool; // The biological templates for this lake
-                
-                // If fishing in deep water, force deepsea templates if available
+                let pool = currentLocalFishPool; 
                 if (tId === TILE.DEEP_WATER) {
                     const ds = pool.filter(f => f.identity.family === 'deepsea');
                     if (ds.length > 0) pool = ds;
                 }
-                
                 const template = castRng.pick(pool);
-                // Create a dynamic Rarity Instance right now!
                 return generateFishInstance(template, createRng(Date.now() + i));
             });
 
-            // 3. APPLY STEALTH & NOISE FILTER
+            // 2. Apply Stealth Filter
             const noiseLevel = ExplorationEngine.currentNoise || 0;
-            const spookFactor = noiseLevel / 100; // 0.0 to 1.0
-
+            const spookFactor = noiseLevel / 100;
             castPool = castPool.filter(fish => {
-                // Skittish fish (low aggression) flee easily. Bosses rarely flee.
                 const courage = fish.combat.aggression + (fish.identity.rarity === 'Boss' ? 2 : 0);
-                // If random roll is less than the noise, and the fish isn't brave, it runs away
-                if (Math.random() < spookFactor && courage < 0.6) {
-                    return false; // Spooked!
-                }
-                return true;
+                return !(Math.random() < spookFactor && courage < 0.6);
             });
 
-            // 4. Check if we spooked everything
+            // 3. Add Chest if in generous radius
+            if (currentLocalChest) {
+                const distToChest = Math.hypot(tx - currentLocalChest.x, ty - currentLocalChest.y);
+                if (distToChest < 60) {
+                    // NEW: Create a specific seed for this chest and save it
+                    const chestSeed = Date.now();
+                    const chestArt = generateChest({ rng: createRng(chestSeed), isMimic: false });
+                    
+                    castPool.push({
+                        id: 'treasure_chest',
+                        identity: { name: 'Sunken Chest', family: 'Treasure', rarity: 'Rare' },
+                        art: chestArt, 
+                        chestSeed: chestSeed, // <-- ADDED: Pass the seed forward
+                        combat: { stamina: 120, speed: 60, aggression: 0, hookWindowMs: 2500 },
+                        physical: { sizeTier: 'Medium', weightRange: {min: 50, max: 100} },
+                        lurePrefs: { color: effStats.activeLure.color, sound: effStats.activeLure.sound, light: effStats.activeLure.light, weight: effStats.activeLure.weight, tolerance: 1.0 }, 
+                        environment: { depthPref: 'Bottom-feeder' },
+                        actualWeight: 75.0,
+                        instanceId: `inst_${Date.now()}`,
+                        invType: 'chest_encounter'
+                    });
+                }
+            }
+
             if (castPool.length === 0) {
                 HUD.logAction("Your boat was too noisy. All fish fled!", "danger");
                 SFX.playError();
                 mouse.isCharging = false;
                 mouse.chargePct = 0;
                 ExplorationEngine.velocity = 0;
-                return; // Abort the cast entirely
+                return; 
             }
 
-            // 5. Proceed to Fishing Minigame
             currentState = STATE.FISHING;
             document.getElementById('z50-action').style.display = 'flex';
             document.getElementById('z50-action').style.background = 'transparent';

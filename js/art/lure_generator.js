@@ -296,6 +296,7 @@ export function generateLure(options = {}) {
 
 /**
  * Generates a standalone pixel-art image of a single lure component.
+ * Scaled up to fit the UI boxes better.
  */
 export function generateLurePart(options = {}) {
     const rng = options.rng || { 
@@ -303,22 +304,27 @@ export function generateLurePart(options = {}) {
         chance: (p) => Math.random() < p, pick: (arr) => arr[Math.floor(Math.random() * arr.length)] 
     };
 
+    // NEW SCALING: 32x32 Grid scaled by 8 = 256x256 image (2x bigger than before)
+    const PART_GRID_SIZE = 32;
+    const PART_SCALE = 8;
+    const PART_CANVAS_SIZE = PART_GRID_SIZE * PART_SCALE;
+
     const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = CANVAS_SIZE;
-    offscreenCanvas.height = CANVAS_SIZE;
+    offscreenCanvas.width = PART_CANVAS_SIZE;
+    offscreenCanvas.height = PART_CANVAS_SIZE;
     const ctx = offscreenCanvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    const grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
+    const grid = Array(PART_GRID_SIZE).fill(null).map(() => Array(PART_GRID_SIZE).fill(null));
 
     function overPixel(x, y, hexColor) {
         x = Math.round(x); y = Math.round(y);
-        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) grid[y][x] = hexColor;
+        if (x >= 0 && x < PART_GRID_SIZE && y >= 0 && y < PART_GRID_SIZE) grid[y][x] = hexColor;
     }
 
     const comp = options.visualId;
-    const cx = 32;
-    let currentY = 28; // Centered
+    const cx = 16; // Center of the 32 grid
+    let currentY = 8; // Start slightly higher
     let compH = 0;
 
     switch (comp) {
@@ -365,7 +371,7 @@ export function generateLurePart(options = {}) {
         case 'rattler_bells':
             compH = 5;
             for(let side of [-1, 1]) {
-                const bx = cx + (side * 2); // Brought closer together
+                const bx = cx + (side * 2); 
                 overPixel(bx, currentY, MATERIALS.GOLD.highlight);
                 overPixel(bx - 1, currentY + 1, MATERIALS.GOLD.base); overPixel(bx + 1, currentY + 1, MATERIALS.GOLD.base); overPixel(bx, currentY + 1, MATERIALS.GOLD.base);
                 overPixel(bx - 1, currentY + 2, MATERIALS.GOLD.base); overPixel(bx + 1, currentY + 2, MATERIALS.GOLD.base);
@@ -374,7 +380,7 @@ export function generateLurePart(options = {}) {
             }
             break;
         case 'chilifish_oil':
-            compH = 5; // Drawn as a small, teardrop droplet
+            compH = 5; 
             for (let y = 0; y < compH; y++) {
                 const dw = y === 0 ? 0 : y === compH - 1 ? 1 : 2;
                 for(let x = -dw; x <= dw; x++) {
@@ -411,7 +417,7 @@ export function generateLurePart(options = {}) {
                 comp === 'bone_dust' ? { b: '#E7E5E4', s: '#A8A29E', h: '#FAFAF9' } :
                 comp === 'myconid_spore' ? { b: '#4ADE80', s: '#166534', h: '#A3E635' } :
                 comp === 'jelly_bell' ? { b: '#F472B6', s: '#BE185D', h: '#FBCFE8' } :
-                { b: '#E11D48', s: '#881337', h: '#FDA4AF' }; // fish gut
+                { b: '#E11D48', s: '#881337', h: '#FDA4AF' }; 
                 
             for (let y = 0; y < compH; y++) {
                 const blobW = rng.int(2, 4);
@@ -446,14 +452,14 @@ export function generateLurePart(options = {}) {
     }
 
     // Outline Pass
-    const outlineGrid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
-    for (let y = 0; y < GRID_SIZE; y++) {
-        for (let x = 0; x < GRID_SIZE; x++) {
+    const outlineGrid = Array(PART_GRID_SIZE).fill(null).map(() => Array(PART_GRID_SIZE).fill(null));
+    for (let y = 0; y < PART_GRID_SIZE; y++) {
+        for (let x = 0; x < PART_GRID_SIZE; x++) {
             if (grid[y][x] === null) {
                 if ((y > 0 && grid[y - 1][x] !== null && grid[y - 1][x] !== '#22D3EE') || 
-                    (y < GRID_SIZE - 1 && grid[y + 1][x] !== null && grid[y + 1][x] !== '#22D3EE') || 
+                    (y < PART_GRID_SIZE - 1 && grid[y + 1][x] !== null && grid[y + 1][x] !== '#22D3EE') || 
                     (x > 0 && grid[y][x - 1] !== null && grid[y][x - 1] !== '#22D3EE') || 
-                    (x < GRID_SIZE - 1 && grid[y][x + 1] !== null && grid[y][x + 1] !== '#22D3EE')) {
+                    (x < PART_GRID_SIZE - 1 && grid[y][x + 1] !== null && grid[y][x + 1] !== '#22D3EE')) {
                     outlineGrid[y][x] = '#020617'; 
                 }
             }
@@ -461,11 +467,11 @@ export function generateLurePart(options = {}) {
     }
 
     // Render Pass
-    for (let y = 0; y < GRID_SIZE; y++) {
-        for (let x = 0; x < GRID_SIZE; x++) {
+    for (let y = 0; y < PART_GRID_SIZE; y++) {
+        for (let x = 0; x < PART_GRID_SIZE; x++) {
             let colorCode = outlineGrid[y][x] || grid[y][x];
             if (grid[y][x] === '#22D3EE' || grid[y][x] === '#FEF08A') colorCode = grid[y][x]; 
-            if (colorCode) drawScaledRect(ctx, x, y, 1, 1, colorCode, DISPLAY_SCALE);
+            if (colorCode) drawScaledRect(ctx, x, y, 1, 1, colorCode, PART_SCALE);
         }
     }
 

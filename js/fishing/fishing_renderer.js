@@ -302,7 +302,6 @@ export const FishingRenderer = {
         // AI STATE & BORDER SHAKE
         const state = engine.ai.state;
         
-        // [FIX]: Organic, descriptive text instead of robotic tags
         let behaviorText = "";
         let behaviorColor = "";
 
@@ -318,6 +317,10 @@ export const FishingRenderer = {
         } else if (state === 'BURST') {
             behaviorText = "A sudden violent burst!";
             behaviorColor = '#DC2626';
+        } else if (state === 'INANIMATE') {
+            // NEW: Handle the Treasure Chest state!
+            behaviorText = "Heavy dead weight...";
+            behaviorColor = '#94A3B8';
         }
 
         this.elements.behavior.innerText = behaviorText;
@@ -455,7 +458,8 @@ export const FishingRenderer = {
                 else ctx.filter = 'none'; 
                 
                 // Shake Physics
-                if (engine.ai.state === 'HOLD') {
+                if (engine.ai.state === 'HOLD' || engine.ai.state === 'INANIMATE') {
+                    // NEW: Included INANIMATE here so the chest bobs slowly
                     fy += Math.sin(Date.now() / 300) * 5;
                 } else if (engine.ai.state === 'RUN') {
                     fx += (Math.random() - 0.5) * 8;
@@ -468,7 +472,7 @@ export const FishingRenderer = {
                 } else if (engine.ai.state === 'BURST') {
                     fy += 25; 
                 }
-            } 
+            }
             else if (engine.phase === 'CAUGHT') {
                 fy = LURE_Y; 
                 rotation = -Math.PI / 2; 

@@ -85,8 +85,9 @@ export const HubUI = {
 
         const dailySeed = townSeed + state.gameDay;
         this.currentShopInv = MerchantGenerator.generateInventory(dailySeed, node.biomeId, player.stats.bartering);
-        this.localFishPool = Array.from({length: 5}, (_, i) => generateFishData({ seed: dailySeed + i }));
-        this.currentQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, this.localFishPool, Object.keys(BIOMES));
+        
+        // Pass the entire world state so quests map perfectly to global nodes
+        this.currentQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, state.world);
         
         this.activeTab = 'market';
         this.marketMode = 'buy';
@@ -200,10 +201,21 @@ export const HubUI = {
 
                 const isDisabled = disableReason || !canAfford || !hasStock;
                 
+                // NEW: Grab the pixel art if it exists
+                let imgSrc = '';
+                if (item.type === 'rod') imgSrc = item.itemData.art.imageDataUrl;
+                else if (item.type === 'boat') imgSrc = item.itemData.art.profileDataUrl;
+                else if (item.type === 'part' || item.visualId) imgSrc = item.imageDataUrl;
+                
+                let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:48px; height:48px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
+
                 row.innerHTML = `
-                    <div class="shop-item-info">
-                        <b>${item.name}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
-                        <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
+                    <div style="display:flex; gap: 1rem; align-items:center;">
+                        ${imgHtml}
+                        <div class="shop-item-info">
+                            <b>${item.name}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
+                            <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
+                        </div>
                     </div>
                     <div class="shop-buy">
                         <span class="shop-price">${item.price}g</span>
@@ -440,10 +452,19 @@ export const HubUI = {
 
             const isDisabled = disableReason || !canAfford || !hasStock;
 
+            // NEW: Grab the pixel art if it exists
+            let imgSrc = '';
+            if (item.type === 'boat') imgSrc = item.itemData.art.profileDataUrl;
+            
+            let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:64px; height:64px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated; object-fit:contain;" />` : '';
+
             row.innerHTML = `
-                <div class="shop-item-info">
-                    <b>${item.name}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
-                    <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
+                <div style="display:flex; gap: 1rem; align-items:center;">
+                    ${imgHtml}
+                    <div class="shop-item-info">
+                        <b>${item.name}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
+                        <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
+                    </div>
                 </div>
                 <div class="shop-buy">
                     <span class="shop-price">${item.price}g</span>
@@ -560,12 +581,20 @@ export const HubUI = {
         const list = document.getElementById('hub-quest-list');
         
         let hasTurnIns = false;
+        
+        // --- 1. TURN IN COMPLETED QUESTS ---
         player.activeQuests.forEach((q, index) => {
             let isComplete = false;
             if (q.type === 'hunt') isComplete = q.currentAmount >= q.requiredAmount;
             else if (q.type === 'trophy') isComplete = q.currentBestWeight >= q.requiredWeight;
             else if (q.type === 'research') {
-                const curLvl = q.currentKnowledgeLevel || 1;
+                let curLvl = 0;
+                const bestiaryEntry = player.bestiary[q.targetSpeciesId];
+                if (bestiaryEntry) {
+                    if (bestiaryEntry.xp >= 250) curLvl = 3;
+                    else if (bestiaryEntry.xp >= 100) curLvl = 2;
+                    else curLvl = 1;
+                }
                 isComplete = curLvl >= q.requiredKnowledgeLevel;
             }
             else if (q.type === 'bounty') isComplete = q.isComplete;
@@ -620,15 +649,21 @@ export const HubUI = {
             }
         });
 
+        // --- 2. RENDER AVAILABLE QUESTS ---
         if (this.currentQuests.length === 0) {
             list.innerHTML = `<p style="color:var(--text-muted); font-size:1.2rem; grid-column: span 2; text-align: center;">No jobs posted today.</p>`;
             return;
         }
 
+        // CRITICAL FIX: The activeCount definition must exist here!
+        const activeCount = player.activeQuests.length;
+
         this.currentQuests.forEach(q => {
             const rng = createRng(Date.now() + q.difficulty);
             const flavor = DialogueGenerator.getQuestFlavor(q, rng);
+            
             const isAccepted = player.activeQuests.some(aq => aq.id === q.id);
+            const isFull = !isAccepted && activeCount >= 8;
 
             const card = document.createElement('div');
             card.style.cssText = "background: var(--bg-void); border: 1px solid var(--panel-border); padding: 1rem; border-radius: 4px; display: flex; flex-direction: column;";
@@ -637,6 +672,20 @@ export const HubUI = {
             if (q.rewards.item) {
                 const itemName = q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 rewardItemText = `<br/><span style="color:var(--cyan-glow); font-weight:bold;">+ ${q.rewards.item.qty}x ${itemName}</span>`;
+            }
+
+            let btnText = 'Accept Quest';
+            let btnStyle = '';
+            let btnDisabled = '';
+
+            if (isAccepted) {
+                btnText = 'Accepted';
+                btnStyle = 'border-color:var(--green-safe); color:var(--green-safe);';
+                btnDisabled = 'disabled';
+            } else if (isFull) {
+                btnText = 'Log Full (8/8)';
+                btnStyle = 'opacity:0.5; cursor:not-allowed; border-color:var(--panel-border); color:var(--text-muted);';
+                btnDisabled = 'disabled';
             }
 
             card.innerHTML = `
@@ -650,21 +699,19 @@ export const HubUI = {
                     ${rewardItemText}
                 </div>
                 
-                <button class="menu-btn btn-accept" style="width:100%; padding:0.4rem; margin:0; font-size:1.1rem; ${isAccepted ? 'border-color:var(--green-safe); color:var(--green-safe);' : ''}" ${isAccepted ? 'disabled' : ''}>
-                    ${isAccepted ? 'Accepted' : 'Accept Quest'}
+                <button class="menu-btn btn-accept" style="width:100%; padding:0.4rem; margin:0; font-size:1.1rem; ${btnStyle}" ${btnDisabled}>
+                    ${btnText}
                 </button>
             `;
             
-            card.querySelector('.btn-accept').onclick = (e) => {
-                SFX.playUISelect();
-                player.activeQuests.push(q);
-                e.target.innerText = 'Accepted';
-                e.target.disabled = true;
-                e.target.style.borderColor = 'var(--green-safe)';
-                e.target.style.color = 'var(--green-safe)';
-                if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderActiveTab();
-            };
+            if (!isAccepted && !isFull) {
+                card.querySelector('.btn-accept').onclick = () => {
+                    SFX.playUISelect();
+                    player.activeQuests.push(q);
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this.renderActiveTab(); 
+                };
+            }
             
             list.appendChild(card);
         });

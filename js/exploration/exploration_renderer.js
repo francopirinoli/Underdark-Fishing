@@ -123,7 +123,7 @@ export const ExplorationRenderer = {
         };
     },
 
-    render(engine, lightRadius, castState = null, isFishingPhase = false, secondaryLights =[]) {
+    render(engine, lightRadius, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null) {
         if (!this.offscreenMap || !this.boatImage) return;
 
         const playerPxX = engine.x * this.TILE_SIZE;
@@ -189,6 +189,30 @@ export const ExplorationRenderer = {
         });
 
         this._drawLighting(activeLights);
+
+        // --- NEW: Draw Subtle Treasure Glint ---
+        if (chestPos && !isFishingPhase) {
+            const cx = (chestPos.x * this.TILE_SIZE) - this.camX;
+            const cy = (chestPos.y * this.TILE_SIZE) - this.camY;
+            
+            // Using a high power of sine makes it stay at 0 mostly, then sharply spike to 1
+            const time = Date.now() / 400; // Speed of the cycle
+            const glint = Math.pow(Math.sin(time), 20); 
+            
+            if (glint > 0.1) {
+                this.ctx.fillStyle = `rgba(255, 255, 255, ${glint})`;
+                this.ctx.beginPath();
+                this.ctx.arc(cx, cy, 1 + glint * 2, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Add a tiny cross sparkle effect when it peaks
+                if (glint > 0.6) {
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${glint * 0.8})`;
+                    this.ctx.fillRect(cx - 3, cy, 6, 1);
+                    this.ctx.fillRect(cx, cy - 3, 1, 6);
+                }
+            }
+        }
     },
 
     _drawCastingReticle(boatX, boatY, castState) {

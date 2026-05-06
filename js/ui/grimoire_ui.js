@@ -5,12 +5,18 @@
  */
 
 import { SFX } from '../audio/sfx_generator.js';
-import { PlayerEngine, STAT_DESCRIPTIONS } from '../data/player_data.js'; // Updated
+import { PlayerEngine, STAT_DESCRIPTIONS } from '../data/player_data.js';
 import { renderGlobalMap } from '../exploration/map_renderer.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { DissectionEngine } from '../data/fish_dissection.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
-import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils.js'; // Added
+import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils.js';
+
+// --- NEW IMPORTS ---
+import { createRng } from '../util/rng.js'; 
+import { generateChest } from '../art/chest_generator.js'; 
+import { generateLurePart } from '../art/lure_generator.js'; 
+import { generateRodData } from '../data/rod_data_generator.js';
 
 export const GrimoireUI = {
     selectedMapNode: null,
@@ -97,10 +103,31 @@ export const GrimoireUI = {
     renderMap() {
         const canvas = document.getElementById('grim-map-canvas');
         const world = this.gameState.world;
+        const player = this.gameState.player;
+
+        // Filter for quests that are NOT complete yet
+        const incompleteQuests = player.activeQuests.filter(q => {
+            if (q.type === 'hunt') return q.currentAmount < q.requiredAmount;
+            if (q.type === 'trophy') return q.currentBestWeight < q.requiredWeight;
+            if (q.type === 'bounty') return !q.isComplete;
+            if (q.type === 'research') {
+                const entry = player.bestiary[q.targetSpeciesId];
+                let curLvl = 0;
+                if (entry) {
+                    if (entry.xp >= 250) curLvl = 3;
+                    else if (entry.xp >= 100) curLvl = 2;
+                    else curLvl = 1;
+                }
+                return curLvl < q.requiredKnowledgeLevel;
+            }
+            return true;
+        });
         
-        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode);
+        // Pass the incomplete quests to the map renderer
+        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests);
 
         document.getElementById('grim-map-coords').innerText = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}]`;
+
         const ecoContainer = document.getElementById('grim-map-ecology');
         ecoContainer.innerHTML = '';
         
@@ -272,7 +299,7 @@ export const GrimoireUI = {
                 let imgSrc = "";
                 
                 if (item.invType === 'fish') imgSrc = item.art.imageDataUrl;
-                else if (item.invType === 'part' || item.invType === 'lure') imgSrc = item.imageDataUrl || ''; 
+                else if (item.invType === 'part' || item.invType === 'lure' || item.invType === 'chest') imgSrc = item.imageDataUrl || '';
                 else if (item.invType === 'rod') imgSrc = item.art.imageDataUrl;
                 else if (item.invType === 'boat') imgSrc = item.art.profileDataUrl;
 
@@ -339,14 +366,6 @@ export const GrimoireUI = {
                 let knowledgeLevel = 1;
                 if (currentXp >= 250) knowledgeLevel = 3;
                 else if (currentXp >= 100) knowledgeLevel = 2;
-
-                if (player.activeQuests) {
-                    player.activeQuests.forEach(q => {
-                        if (q.type === 'research' && q.targetSpeciesId === item.id) {
-                            q.currentKnowledgeLevel = knowledgeLevel;
-                        }
-                    });
-                }
                 
                 result.parts.forEach(p => {
                     p.invType = 'part';
@@ -508,6 +527,100 @@ export const GrimoireUI = {
                 };
             }
         }
+
+        // 6. CHESTS (Treasure & Mimics)
+        else if (item.invType === 'chest') {
+            document.getElementById('grim-item-img').src = item.imageDataUrl;
+            document.getElementById('grim-item-img').style.display = 'block';
+            document.getElementById('grim-item-name').innerText = item.name;
+            document.getElementById('grim-item-name').style.color = 'var(--gold-warn)';
+            document.getElementById('grim-item-sub').innerText = `Unknown Contents`;
+            
+            document.getElementById('grim-item-stats').innerHTML = `
+                <div style="color:var(--text-muted); font-size:1.2rem; text-align:center; padding: 2rem 0;">
+                    A heavy, waterlogged chest pulled from the depths.<br><br>What could be inside?
+                </div>
+            `;
+            
+            btnAction.style.display = 'block';
+            btnAction.innerText = '🔓 Open Chest';
+            btnAction.style.borderColor = 'var(--gold-warn)';
+            btnAction.style.color = 'var(--gold-warn)';
+            
+            btnAction.onclick = () => {
+                const rng = createRng(Date.now());
+                const isMimic = rng.chance(0.3); // 30% chance for a mimic
+                
+                // Remove the chest from inventory immediately
+                player.inventory.splice(invIndex, 1);
+                btnAction.style.display = 'none';
+
+                if (isMimic) {
+                    SFX.playLineSnap(); // Crunch!
+                    
+                    // NEW: Use the original seed so the Mimic matches the chest perfectly!
+                    const mimicSeed = item.chestSeed || Date.now();
+                    const mimicArt = generateChest({ rng: createRng(mimicSeed), isMimic: true });
+                    
+                    document.getElementById('grim-item-img').src = mimicArt.imageDataUrl;
+                    document.getElementById('grim-item-name').innerText = 'Mimic!';
+                    document.getElementById('grim-item-name').style.color = 'var(--red-danger)';
+                    document.getElementById('grim-item-stats').innerHTML = `<div style="color:var(--red-danger); font-size:1.4rem; text-align:center; padding: 2rem 0;">It bit you!<br><br>Hull took 20 damage!</div>`;
+                    
+                    player.vitals.hp -= 20;
+                    
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this._refreshInventoryGridOnly();
+                    
+                    // If the mimic killed the player, wait 1.5s for them to read the text, then trigger death
+                    if (player.vitals.hp <= 0 && this.callbacks.onDeath) {
+                        setTimeout(() => {
+                            this.close();
+                            this.callbacks.onDeath();
+                        }, 1500); 
+                    }
+                } else {
+                    SFX.playGold();
+                    
+                    const goldFound = rng.int(150, 400);
+                    player.vitals.gold += goldFound;
+                    
+                    let lootHtml = `<div style="color:var(--green-safe); font-size:1.4rem; text-align:center; margin-bottom:1rem;">Found ${goldFound}g!</div>`;
+                    
+                    // Generate 2-3 Rare Parts
+                    const rareParts =['phosphor_cap', 'wraith_silk', 'myconid_spore', 'jelly_bell'];
+                    const numParts = rng.int(2, 3);
+                    for(let i=0; i<numParts; i++) {
+                        const pId = rng.pick(rareParts);
+                        const pName = pId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        player.inventory.push({
+                            id: `part_${rng.int(10000,99999)}`,
+                            invType: 'part',
+                            name: pName,
+                            visualId: pId,
+                            rarity: 'Rare',
+                            stats: { color: rng.int(-20,20), sound: rng.int(-20,20), light: rng.int(-20,20), weight: rng.int(-20,20) },
+                            imageDataUrl: generateLurePart({ visualId: pId, rng })
+                        });
+                        lootHtml += `<div style="color:var(--cyan-glow); font-size:1.2rem; text-align:center; margin-bottom:0.2rem;">+1x ${pName}</div>`;
+                    }
+                    
+                    // 15% Chance to find a Fishing Rod
+                    if (rng.chance(0.15)) {
+                        const rod = generateRodData({ seed: Date.now() });
+                        rod.invType = 'rod';
+                        player.inventory.push(rod);
+                        lootHtml += `<div style="color:var(--gold-warn); font-size:1.2rem; text-align:center; margin-top:0.8rem;">+ ${rod.identity.name}!</div>`;
+                    }
+                    
+                    document.getElementById('grim-item-stats').innerHTML = lootHtml;
+                    document.getElementById('grim-item-name').innerText = 'Treasure!';
+                    
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this._refreshInventoryGridOnly();
+                }
+            };
+        }
         
         SFX.playUISelect();
     },
@@ -572,6 +685,42 @@ export const GrimoireUI = {
             };
         } else {
             btnAction.style.display = 'none';
+        }
+    },
+
+    _refreshInventoryGridOnly() {
+        const player = this.gameState.player;
+        const effStats = PlayerEngine.getEffectiveStats(player);
+        const maxCargo = effStats.exploration.cargoSpace;
+        
+        document.getElementById('grim-inv-count').innerText = player.inventory.length;
+        document.getElementById('grim-inv-max').innerText = maxCargo;
+        
+        const grid = document.getElementById('grim-inv-grid');
+        grid.innerHTML = '';
+        
+        for (let i = 0; i < maxCargo; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            
+            if (i < player.inventory.length) {
+                const item = player.inventory[i];
+                let imgSrc = "";
+                
+                if (item.invType === 'fish') imgSrc = item.art.imageDataUrl;
+                else if (item.invType === 'part' || item.invType === 'lure' || item.invType === 'chest') imgSrc = item.imageDataUrl || ''; 
+                else if (item.invType === 'rod') imgSrc = item.art.imageDataUrl;
+                else if (item.invType === 'boat') imgSrc = item.art.profileDataUrl;
+
+                if (imgSrc) {
+                    slot.innerHTML = `<img src="${imgSrc}" />`;
+                } else {
+                    slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${item.name.substring(0,6)}</span>`;
+                }
+                
+                slot.onclick = () => this.showInventoryDetails(item, i, slot);
+            }
+            grid.appendChild(slot);
         }
     },
 
@@ -777,6 +926,12 @@ renderBestiary() {
         const list = document.getElementById('grim-quests-list');
         list.innerHTML = '';
         
+        // NEW: Update Header to show the 8 quest cap
+        const header = document.querySelector('#grim-page-quests h1');
+        if (header) {
+            header.innerText = `Active Quests (${player.activeQuests.length}/8)`;
+        }
+
         if (!player.activeQuests || player.activeQuests.length === 0) {
             document.getElementById('grim-quests-empty').style.display = 'flex';
             list.style.display = 'none';
@@ -810,8 +965,15 @@ renderBestiary() {
                     </div>
                 `;
             } else if (q.type === 'research') {
-                // [FIX]: Add fallback to 1 for older saves
-                const curLvl = q.currentKnowledgeLevel || 1; 
+                // Dynamically calculate current knowledge from the bestiary
+                let curLvl = 0;
+                const bestiaryEntry = player.bestiary[q.targetSpeciesId];
+                if (bestiaryEntry) {
+                    if (bestiaryEntry.xp >= 250) curLvl = 3;
+                    else if (bestiaryEntry.xp >= 100) curLvl = 2;
+                    else curLvl = 1; // Caught at least once
+                }
+                
                 isComplete = curLvl >= q.requiredKnowledgeLevel;
                 
                 progressHtml = `

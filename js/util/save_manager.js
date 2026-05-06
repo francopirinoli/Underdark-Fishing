@@ -23,9 +23,9 @@ export const SaveManager = {
         }
     },
 
-    saveGame(slot, player, worldSeed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes =[], nodeEcology = {}) {
+    saveGame(slot, player, worldSeed, globalX, globalY, gameDay, gameTimeMinutes, discoveredNodes =[], nodeEcology = {}, eventData = {}) {
         const saveData = {
-            version: '1.2',
+            version: '1.3',
             player: player,
             worldSeed: worldSeed,
             globalX: globalX,
@@ -33,7 +33,8 @@ export const SaveManager = {
             gameDay: gameDay,
             gameTimeMinutes: gameTimeMinutes,
             discoveredNodes: discoveredNodes,
-            nodeEcology: nodeEcology // NEW: Tracks fish discovered per node
+            nodeEcology: nodeEcology,
+            eventData: eventData // NEW: Tracks active events
         };
         
         try {
