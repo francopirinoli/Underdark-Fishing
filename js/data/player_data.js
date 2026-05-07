@@ -1,7 +1,7 @@
 /**
  * js/data/player_data.js
  * The Player Factory and Progression Engine.
- * V5 - Added Bestiary tracking for specific species knowledge.
+ * V6 - Added Safehouses array, Dynamic Upgrade Stat Calculations, and Hazard Immunities.
  */
 
 import { generateBoatData } from './boat_data_generator.js';
@@ -11,7 +11,6 @@ import { generateLure } from '../art/lure_generator.js';
 const MAX_LEVEL = 10;
 const MAX_STAT_VALUE = 5; 
 
-// NEW: Lore-friendly Stat Descriptions
 export const STAT_DESCRIPTIONS = {
     fishing: "Increases Reeling Power, Reaction Window, and Cast Distance.",
     stamina: "Increases Max Stamina and Stamina Regeneration while resting.",
@@ -34,19 +33,19 @@ export const PlayerEngine = {
         
         do { starterBoat = generateBoatData({ seed: Date.now() + ++attempts }); } 
         while (starterBoat.identity.rarity !== 'Common');
-        starterBoat.invType = 'boat'; // <--- NEW: Explicitly tag type
+        starterBoat.invType = 'boat'; 
 
         do { starterRod = generateRodData({ seed: Date.now() + ++attempts }); } 
         while (starterRod.identity.rarity !== 'Common');
-        starterRod.invType = 'rod';   // <--- NEW: Explicitly tag type
+        starterRod.invType = 'rod';   
 
         // Generate a baseline lure with art so it appears during the fishing minigame
         const starterLureArt = generateLure({ components: ['iron_sinker', 'fish_gut'] });
         const starterLure = {
             id: 'lure_starter',
             name: 'Basic Jig',
-            invType: 'lure',  // <--- NEW: Explicitly tag type
-            basePrice: 15,    // <--- NEW: Give it a sell value
+            invType: 'lure',  
+            basePrice: 15,    
             imageDataUrl: starterLureArt.imageDataUrl,
             stats: { color: 10, sound: 0, light: 0, weight: 10 },
             durability: 15,
@@ -78,8 +77,9 @@ export const PlayerEngine = {
             },
             availablePoints: 3,
             activeQuests:[],
-            bestiary: {}, // NEW: Tracks Knowledge XP per specific Species ID
+            bestiary: {},
             inventory:[],
+            safehouses: {}, // NEW: Dictionary keyed by map coords "x,y" containing stash, hangar, and aquarium
             gear: {
                 boat: starterBoat,
                 rod: starterRod,
@@ -129,16 +129,12 @@ export const PlayerEngine = {
         const boat = player.gear.boat;
         const lure = player.gear.lure;
 
+        // --- 1. MINIGAME PHYSICS STATS ---
         const rodPower = rod ? rod.stats.power : 0.5;
         const rodTension = rod ? rod.stats.maxTension : 50;
         const rodFlex = rod ? rod.stats.flexibility : 0.5;
         const rodSens = rod ? rod.stats.sensitivity : 0;
         
-        const boatSpeed = boat ? boat.stats.speed : 10; 
-        const boatStealth = boat ? boat.stats.stealth : 0.5;
-        const boatCargo = boat ? boat.stats.cargoSpace : 10; 
-
-        // --- 1. MINIGAME PHYSICS STATS ---
         let effectivePower = rodPower * (1 + (stats.fishing * 0.2));
         let effectiveHookWindow = rodSens + (stats.fishing * 100);
         let effectiveStamina = 50 + (stats.stamina * 30);
@@ -152,15 +148,66 @@ export const PlayerEngine = {
             });
         }
 
-        // --- 2. EXPLORATION & SURVIVAL STATS ---
-        let effectiveBoatSpeed = boatSpeed * (1 + (stats.driving * 0.1));
-        let effectiveBoatStealth = boatStealth * (1 + (stats.driving * 0.1));
+        // --- 2. EXPLORATION & BOAT UPGRADES ---
+        let effectiveMaxHp = boat ? boat.stats.maxHp : 50;
+        let effectiveSpeed = boat ? boat.stats.speed : 10; 
+        let effectiveAccel = boat ? boat.stats.acceleration : 10;
+        let effectiveStealth = boat ? boat.stats.stealth : 0.5;
+        let effectiveCargo = boat ? boat.stats.cargoSpace : 10; 
+        let collisionDamageMult = 1.0;
+        
+        // Hazard Immunities tracker
+        const immunities = { volcanic: false, crystal: false, abyssal: false, fungal: false, frozen: false };
+
+        if (boat && boat.upgrades) {
+            const upg = boat.upgrades;
+
+            // Plating Slot
+            if (upg.plating) {
+                if (upg.plating.id === 'upg_iron_plating') {
+                    effectiveMaxHp += 50;
+                    immunities.volcanic = true;
+                } else if (upg.plating.id === 'upg_acoustic_dampening') {
+                    effectiveStealth *= 1.30;
+                    immunities.crystal = true;
+                }
+            }
+
+            // Engine Slot
+            if (upg.engine) {
+                if (upg.engine.id === 'upg_overclocked_motor') {
+                    effectiveSpeed *= 1.20;
+                    immunities.abyssal = true;
+                } else if (upg.engine.id === 'upg_alchemical_filter') {
+                    effectiveAccel *= 1.15;
+                    immunities.fungal = true;
+                }
+            }
+
+            // Prow Slot
+            if (upg.prow) {
+                if (upg.prow.id === 'upg_icebreaker_prow') {
+                    collisionDamageMult = 0.5;
+                    immunities.frozen = true;
+                }
+            }
+
+            // Storage Slot
+            if (upg.storage && upg.storage.id === 'upg_cargo_net') {
+                effectiveCargo += 10;
+            }
+        }
+
+        // Apply Player "Driving" Stat Modifiers
+        effectiveSpeed *= (1 + (stats.driving * 0.1));
+        effectiveAccel *= (1 + (stats.driving * 0.1));
+        effectiveStealth *= (1 + (stats.driving * 0.1));
         let hazardDodgeChance = stats.driving * 0.04;
 
-// --- 3. ECONOMY & CRAFTING STATS ---
-        let storeDiscount = stats.bartering * 0.08; // Fixed 8%
-        let sellBonus = 1 + (stats.bartering * 0.08); // Fixed 8%
-        let fuelEfficiencyMult = 1 - (stats.intelligence * 0.10); // 10% less fuel drain per level
+        // --- 3. ECONOMY & CRAFTING STATS ---
+        let storeDiscount = stats.bartering * 0.08; 
+        let sellBonus = 1 + (stats.bartering * 0.08); 
+        let fuelEfficiencyMult = 1 - (stats.intelligence * 0.10); 
         let dissectionBudgetMult = 1 + (stats.lureCrafting * 0.2);
         let lureDurabilityMult = 1 + (stats.lureCrafting * 0.2);
         let knowledgeXpMult = 1 + (stats.intelligence * 0.2);
@@ -184,11 +231,15 @@ export const PlayerEngine = {
                 flexibility: Number(effectiveFlexibility.toFixed(2))
             },
             exploration: {
-                speed: Number(effectiveBoatSpeed.toFixed(2)),
-                stealth: Number(effectiveBoatStealth.toFixed(2)),
+                maxHp: Math.round(effectiveMaxHp),
+                speed: Number(effectiveSpeed.toFixed(2)),
+                acceleration: Number(effectiveAccel.toFixed(2)),
+                stealth: Number(effectiveStealth.toFixed(2)),
                 hazardDodgeChance: Number(hazardDodgeChance.toFixed(2)),
-                cargoSpace: boatCargo,
-                fuelEfficiencyMult: Number(Math.max(0.1, fuelEfficiencyMult).toFixed(2)) // Added
+                collisionDamageMult: Number(collisionDamageMult.toFixed(2)),
+                cargoSpace: effectiveCargo,
+                fuelEfficiencyMult: Number(Math.max(0.1, fuelEfficiencyMult).toFixed(2)),
+                immunities: immunities // Exposing hazard immunities to the physics engine
             },
             economy: {
                 discountMultiplier: Number((1 - storeDiscount).toFixed(2)), 

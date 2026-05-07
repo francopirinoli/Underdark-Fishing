@@ -2,12 +2,13 @@
  * js/economy/merchant_generator.js
  * Generates dynamic shop inventories for settlements.
  * Handles consumables, randomized lure components, and equipment generation.
+ * V2 - Expanded Boat Upgrades with strict slot assignments and hazard immunities.
  */
 
 import { createRng } from '../util/rng.js';
 import { generateRodData } from '../data/rod_data_generator.js';
 import { generateBoatData } from '../data/boat_data_generator.js';
-import { generateLurePart } from '../art/lure_generator.js'; // <-- NEW IMPORT
+import { generateLurePart } from '../art/lure_generator.js';
 
 // --- INVENTORY DATABASES ---
 
@@ -17,11 +18,16 @@ const CONSUMABLES =[
     { id: 'cons_repair_kit', name: 'Hull Repair Kit', type: 'consumable', basePrice: 25, desc: 'Restores 25 HP to your boat in the field.' }
 ];
 
+// NEW: Expanded Upgrades with strict Slot assignments and Hazard Immunities
 const BOAT_UPGRADES =[
-    { id: 'upg_lantern_kero', name: 'Kerosene Lantern', type: 'upgrade', basePrice: 500, desc: 'Increases light radius to 350px.' },
-    { id: 'upg_lantern_magic', name: 'Magic Orb Lantern', type: 'upgrade', basePrice: 1500, desc: 'Increases light radius to 500px.' },
-    { id: 'upg_cargo_net', name: 'Cargo Netting', type: 'upgrade', basePrice: 300, desc: 'Increases boat storage by +10 slots.' },
-    { id: 'upg_iron_plating', name: 'Iron Plating', type: 'upgrade', basePrice: 800, desc: 'Increases boat Max HP by +50.' }
+    { id: 'upg_lantern_kero', name: 'Kerosene Lantern', slot: 'lantern', type: 'upgrade', basePrice: 500, desc: 'Increases light radius to 350px.' },
+    { id: 'upg_lantern_magic', name: 'Magic Orb Lantern', slot: 'lantern', type: 'upgrade', basePrice: 1500, desc: 'Increases light radius to 500px.' },
+    { id: 'upg_cargo_net', name: 'Cargo Netting', slot: 'storage', type: 'upgrade', basePrice: 300, desc: 'Increases boat storage by +10 slots.' },
+    { id: 'upg_iron_plating', name: 'Iron Plating', slot: 'plating', type: 'upgrade', basePrice: 800, desc: '+50 Hull HP. Grants immunity to Volcanic boiling waters.' },
+    { id: 'upg_acoustic_dampening', name: 'Acoustic Dampening', slot: 'plating', type: 'upgrade', basePrice: 900, desc: '+30% Stealth. Grants immunity to Crystal shatter-storms.' },
+    { id: 'upg_overclocked_motor', name: 'Overclocked Motor', slot: 'engine', type: 'upgrade', basePrice: 1200, desc: '+20% Top Speed. Grants immunity to Abyssal whirlpools.' },
+    { id: 'upg_alchemical_filter', name: 'Alchemical Filter', slot: 'engine', type: 'upgrade', basePrice: 1100, desc: '+15% Acceleration. Grants immunity to Fungal spore storms.' },
+    { id: 'upg_icebreaker_prow', name: 'Icebreaker Prow', slot: 'prow', type: 'upgrade', basePrice: 1000, desc: '-50% Collision Damage. Grants immunity to Frozen ice floes.' }
 ];
 
 // Master list of all lure parts available to be sold (No Boss/Legendary items allowed in shops)
@@ -128,8 +134,8 @@ export const MerchantGenerator = {
             }
         }
 
-        // 5. Boat Upgrades (1 or 2 available per shop)
-        const numUpgrades = rng.int(1, 2);
+        // 5. Boat Upgrades (Increased to 2-4 available per shop for better access to hazard immunities)
+        const numUpgrades = rng.int(2, 4);
         const shuffledUpgrades = [...BOAT_UPGRADES].sort(() => rng.float(-1, 1));
         for (let i = 0; i < numUpgrades; i++) {
             inventory.push(formatItem(shuffledUpgrades[i], 1));

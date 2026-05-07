@@ -87,17 +87,18 @@ export function generateBoatData(options = {}) {
     }
 
     // 4. Set Base Upgrades & Modules
-    // Players will buy better versions of these at the Docks
+    // Players will buy better versions of these at the Docks and install them at their Safehouse
     const upgrades = {
+        plating: null, // Armor / Dampening
+        engine: null,  // Speed / Air Filters
+        prow: null,    // Collision / Icebreakers
         lantern: {
             id: 'lantern_oil',
             name: 'Oil Lantern',
-            lightRadius: 250, // INCREASED: Was 150
+            lightRadius: 250,
             fuelDrainRate: 1.0 
         },
-        plating: null,
-        engine: null,  
-        storage: null  
+        storage: null  // Cargo nets
     };
 
     // 5. Calculate Economy Value

@@ -155,15 +155,18 @@
             <div style="display: flex; flex: 1; overflow: hidden; padding: 0 2rem 2rem 2rem; gap: 2rem; margin-top: 1.5rem;">
                 
                 <!-- Left: Navigation Tabs -->
-                <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem; max-width: 250px;">
-                    <div class="hub-tabs">
-                        <button class="hub-tab-btn active" data-tab="market">Merchant</button>
-                        <button class="hub-tab-btn" data-tab="fishmonger">Fishmonger</button>
-                        <button class="hub-tab-btn" data-tab="boatwright">Boatwright</button>
-                        <button class="hub-tab-btn" data-tab="tavern">Tavern</button>
-                    </div>
-                    <button class="menu-btn" id="btn-hub-depart" style="width: 100%; margin-top: auto; padding: 0.8rem; font-size: 1.6rem; border-color: var(--red-danger); color: var(--red-danger);">Depart</button>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem; max-width: 250px;">
+                <div class="hub-tabs">
+                    <button class="hub-tab-btn active" data-tab="market">Merchant</button>
+                    <button class="hub-tab-btn" data-tab="fishmonger">Fishmonger</button>
+                    <button class="hub-tab-btn" data-tab="boatwright">Boatwright</button>
+                    <button class="hub-tab-btn" data-tab="tavern">Tavern</button>
+                    
+                    <!-- NEW: Safehouse Tab -->
+                    <button class="hub-tab-btn" data-tab="safehouse" style="margin-top: 1rem; border-color: var(--gold-warn); color: var(--gold-warn);">🏡 Safehouse</button>
                 </div>
+                <button class="menu-btn" id="btn-hub-depart" style="width: 100%; margin-top: auto; padding: 0.8rem; font-size: 1.6rem; border-color: var(--red-danger); color: var(--red-danger);">Depart</button>
+            </div>
 
                 <!-- Right: Active Shop / Content Area -->
                 <div id="hub-content-area" style="flex: 2; height: 100%; background: var(--panel-base); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; overflow-y: auto;">

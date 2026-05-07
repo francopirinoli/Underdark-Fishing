@@ -545,54 +545,37 @@ export const GrimoireUI = {
                 <div style="display:flex; justify-content:space-between;"><span>Speed:</span> <span>${item.stats.speed} ${this.formatDelta(item.stats.speed, eqBoat.stats.speed)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Stealth:</span> <span>${item.stats.stealth}x ${this.formatDelta(item.stats.stealth, eqBoat.stats.stealth, true)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Base Cargo:</span> <span>${item.stats.cargoSpace} ${this.formatDelta(item.stats.cargoSpace, eqBoat.stats.cargoSpace)}</span></div>
+                <div style="margin-top:1.5rem; text-align:center; color:var(--gold-warn); font-style:italic; font-size:1.1rem;">
+                    Boats cannot be carried in your backpack.<br>Access your Safehouse Dry Dock to manage hulls.
+                </div>
             `;
             
-            btnEquip.style.display = 'block';
+            // Completely hide action buttons
+            btnEquip.style.display = 'none';
+            btnAction.style.display = 'none';
+        }
+        // 6. UPGRADES (Fallback if one ends up in the cargo)
+        else if (item.invType === 'upgrade') {
+            document.getElementById('grim-item-img').src = ''; // Upgrades don't have art yet
+            document.getElementById('grim-item-img').style.display = 'none';
+            document.getElementById('grim-item-name').innerText = item.name;
+            document.getElementById('grim-item-name').style.color = 'var(--cyan-glow)';
+            document.getElementById('grim-item-sub').innerText = `Boat Upgrade [${item.slot.toUpperCase()}]`;
             
-            // Check Capacity Before Swapping
-            const oldUpgrades = player.gear.boat.upgrades;
-            let newCargoLimit = item.stats.cargoSpace;
-            if (oldUpgrades && oldUpgrades.storage) newCargoLimit += 10;
+            document.getElementById('grim-item-stats').innerHTML = `
+                <div style="color:var(--text-main); font-size:1.2rem; text-align:center; padding: 1rem 0;">
+                    ${item.desc}
+                </div>
+                <div style="margin-top:1rem; text-align:center; color:var(--gold-warn); font-style:italic; font-size:1.1rem;">
+                    Upgrades must be installed using the crane at a Safehouse Dry Dock.
+                </div>
+            `;
             
-            if (player.inventory.length > newCargoLimit) {
-                btnEquip.innerText = 'Hold Too Full To Swap';
-                btnEquip.disabled = true;
-                btnEquip.style.opacity = '0.5';
-                btnEquip.style.cursor = 'not-allowed';
-            } else {
-                btnEquip.innerText = 'Equip Boat';
-                btnEquip.disabled = false;
-                btnEquip.style.opacity = '1';
-                btnEquip.style.cursor = 'pointer';
-                
-                btnEquip.onclick = () => {
-                    SFX.playUISelect();
-                    
-                    const newBoat = player.inventory.splice(invIndex, 1)[0];
-                    const oldBoat = player.gear.boat;
-                    
-                    // Transfer Upgrades
-                    newBoat.upgrades = oldUpgrades;
-                    if (oldUpgrades.storage) newBoat.stats.cargoSpace += 10;
-                    if (oldUpgrades.plating) newBoat.stats.maxHp += 50;
-                    
-                    player.gear.boat = newBoat;
-                    player.vitals.hp = Math.min(player.vitals.hp, newBoat.stats.maxHp);
-                    
-                    // Reset old boat before storing
-                    oldBoat.upgrades = { lantern: { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 }, plating: null, engine: null, storage: null };
-                    if (oldUpgrades.storage) oldBoat.stats.cargoSpace -= 10;
-                    if (oldUpgrades.plating) oldBoat.stats.maxHp -= 50;
-                    
-                    player.inventory.push(oldBoat);
-                    
-                    if (this.callbacks.onSave) this.callbacks.onSave();
-                    this.renderInventory();
-                };
-            }
+            btnEquip.style.display = 'none';
+            btnAction.style.display = 'none';
         }
 
-        // 6. CHESTS (Treasure & Mimics)
+        // 7. CHESTS (Treasure & Mimics)
         else if (item.invType === 'chest') {
             document.getElementById('grim-item-img').src = item.imageDataUrl;
             document.getElementById('grim-item-img').style.display = 'block';
@@ -799,8 +782,10 @@ export const GrimoireUI = {
         
         let upgHtml = `<div style="font-size:1rem; color:var(--text-muted); margin-top:0.5rem; line-height: 1.4;">`;
         upgHtml += `Lantern: <span style="color:var(--cyan-glow)">${boat.upgrades.lantern ? boat.upgrades.lantern.name : 'Basic'}</span><br>`;
-        if (boat.upgrades.plating) upgHtml += `Plating: <span style="color:var(--cyan-glow)">${boat.upgrades.plating.name}</span><br>`;
-        if (boat.upgrades.storage) upgHtml += `Storage: <span style="color:var(--cyan-glow)">${boat.upgrades.storage.name}</span>`;
+        upgHtml += `Plating: <span style="color:var(--cyan-glow)">${boat.upgrades.plating ? boat.upgrades.plating.name : 'Empty'}</span><br>`;
+        upgHtml += `Engine:  <span style="color:var(--cyan-glow)">${boat.upgrades.engine ? boat.upgrades.engine.name : 'Empty'}</span><br>`;
+        upgHtml += `Prow:    <span style="color:var(--cyan-glow)">${boat.upgrades.prow ? boat.upgrades.prow.name : 'Empty'}</span><br>`;
+        upgHtml += `Storage: <span style="color:var(--cyan-glow)">${boat.upgrades.storage ? boat.upgrades.storage.name : 'Empty'}</span>`;
         upgHtml += `</div>`;
 
         document.querySelector('#loadout-boat .slot-content').innerHTML = `
