@@ -30,11 +30,11 @@ const ART_GENERATORS = {
 
 // --- RARITY MULTIPLIERS ---
 const RARITY_TIERS =[
-    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 10,  xpBase: 10,  tolerance: 0.8, hookMod: 1.0 },
-    { name: 'Uncommon',  weight: 30, statMult: 1.4, valBase: 35,  xpBase: 25,  tolerance: 0.6, hookMod: 0.8 },
-    { name: 'Rare',      weight: 14, statMult: 2.2, valBase: 120, xpBase: 65,  tolerance: 0.4, hookMod: 0.6 },
-    { name: 'Legendary', weight: 5,  statMult: 3.5, valBase: 500, xpBase: 200, tolerance: 0.2, hookMod: 0.4 },
-    { name: 'Boss',      weight: 1,  statMult: 6.0, valBase: 2500,xpBase: 800, tolerance: 0.1, hookMod: 0.25 }
+    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 10,  xpBase: 5,   tolerance: 0.8, hookMod: 1.0 },
+    { name: 'Uncommon',  weight: 30, statMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.6, hookMod: 0.8 },
+    { name: 'Rare',      weight: 14, statMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.4, hookMod: 0.6 },
+    { name: 'Legendary', weight: 5,  statMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.2, hookMod: 0.4 },
+    { name: 'Boss',      weight: 1,  statMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.1, hookMod: 0.25 }
 ];
 
 // --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---
@@ -200,8 +200,8 @@ export function generateFishInstance(speciesData, rng) {
     
     instance.lurePrefs.tolerance = rarityObj.tolerance;
 
-    instance.economy.baseValue = Math.round(instance.economy.baseValue * (rarityObj.valBase / 10)); // Scale to rarity base
-    instance.economy.baseXp = Math.round(instance.economy.baseXp * (rarityObj.xpBase / 10));
+    instance.economy.baseValue = Math.round(instance.economy.baseValue * (rarityObj.valBase / 10));
+    instance.economy.baseXp = Math.round((instance.economy.baseXp / 10) * rarityObj.xpBase);
     
     // Roll the specific weight for this catch (boosted by rarity)
     const minW = instance.physical.weightRange.min * rarityObj.statMult;

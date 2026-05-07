@@ -542,7 +542,17 @@ function gameLoop(timestamp) {
                         }
                     });
 
-                    handleEndFishing(`Caught a ${caughtFish.identity.name} (${caughtFish.actualWeight}kg)!`, "safe");
+                    // --- NEW: XP & LEVEL UP LOGIC ---
+                    // Apply Intelligence stat multiplier to the fish's base XP
+                    const finalXpGain = Math.round(caughtFish.economy.baseXp * effStats.economy.generalXpMult);
+                    const leveledUp = PlayerEngine.addXp(player, finalXpGain);
+                    
+                    if (leveledUp) {
+                        SFX.playLevelUp();
+                        HUD.logAction("LEVEL UP! You have unspent stat points!", "safe");
+                    }
+
+                    handleEndFishing(`Caught a ${caughtFish.identity.name} (+${finalXpGain} XP)!`, "safe");
                     saveCurrentState();
                 }
             } else {

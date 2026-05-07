@@ -639,7 +639,26 @@ export const HubUI = {
                         });
                     }
 
-                    player.activeQuests.splice(index, 1);
+                    // --- NEW: Consume Fish for Hunt Quests ---
+                    if (q.type === 'hunt') {
+                        let removed = 0;
+                        for (let i = player.inventory.length - 1; i >= 0; i--) {
+                            if (player.inventory[i].invType === 'fish' && player.inventory[i].id === q.targetSpeciesId) {
+                                player.inventory.splice(i, 1);
+                                removed++;
+                                if (removed >= q.requiredAmount) break;
+                            }
+                        }
+                    }
+
+                    // Safely remove from Active Quests
+                    const activeIdx = player.activeQuests.findIndex(aq => aq.id === q.id);
+                    if (activeIdx > -1) player.activeQuests.splice(activeIdx, 1);
+
+                    // --- NEW: Remove from the Town's board so it doesn't reappear ---
+                    const boardIdx = this.currentQuests.findIndex(bq => bq.id === q.id);
+                    if (boardIdx > -1) this.currentQuests.splice(boardIdx, 1);
+
                     this.triggerDialogue(this.currentNPCs.tavern, "Well done! The guild sends their regards.");
                     
                     if (this.callbacks.onSave) this.callbacks.onSave();

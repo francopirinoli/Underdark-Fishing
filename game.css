@@ -439,8 +439,8 @@ body, html {
     flex: 1;
 }
 .loadout-slot img {
-    width: 96px;
-    height: 96px;
+    width: 50px; /* Reduced from 96px */
+    height: 50px; /* Reduced from 96px */
     image-rendering: pixelated;
     background: #000;
     border: 1px solid var(--panel-border);
@@ -737,4 +737,71 @@ body, html {
     display: flex; 
     justify-content: space-between; 
     margin-bottom: 0.2rem; 
+}
+
+/* =========================================
+   UI SLIDERS (LURES & BESTIARY)
+========================================= */
+.pref-container { 
+    margin-bottom: 0.8rem; 
+    width: 100%; 
+}
+.pref-labels { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    font-size: 1rem; 
+    color: var(--text-muted); 
+    margin-bottom: 0.4rem; 
+}
+.pref-labels b { 
+    color: var(--text-main); 
+    font-size: 1.1rem; 
+}
+.pref-track { 
+    position: relative; 
+    height: 8px; 
+    background: #000; 
+    border: 1px solid var(--panel-border); 
+    border-radius: 4px; 
+}
+.pref-center { 
+    position: absolute; 
+    left: 50%; 
+    top: 0; 
+    bottom: 0; 
+    width: 2px; 
+    background: var(--text-muted); 
+    opacity: 0.5; 
+}
+.pref-marker { 
+    position: absolute; 
+    top: -4px; 
+    bottom: -4px; 
+    width: 6px; 
+    background: var(--cyan-glow); 
+    border-radius: 3px; 
+    box-shadow: 0 0 8px var(--cyan-glow); 
+    transform: translateX(-50%); 
+    transition: left 0.3s ease; 
+}
+
+/* Compact sliders inside the Loadout Tab */
+.loadout-details .pref-container {
+    margin-bottom: 0.2rem;
+}
+.loadout-details .pref-labels {
+    font-size: 0.8rem;
+    margin-bottom: 0.1rem;
+}
+.loadout-details .pref-labels b {
+    font-size: 0.9rem;
+}
+.loadout-details .pref-track {
+    height: 6px;
+}
+.loadout-details .pref-marker {
+    top: -3px;
+    bottom: -3px;
+    width: 4px;
 }

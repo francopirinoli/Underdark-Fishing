@@ -263,9 +263,18 @@
                         </div>
 
                         <div style="flex: 1; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
-                            <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: baseline;">
-                                <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Cargo Hold & Parts</h2>
-                                <span style="color: var(--text-muted); font-size: 1.2rem;">Capacity: <span id="grim-inv-count" style="color: var(--text-main);">0</span> / <span id="grim-inv-max">10</span></span>
+                            <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Cargo Hold & Parts</h2>
+                                    <span style="color: var(--text-muted); font-size: 1.2rem;">Capacity: <span id="grim-inv-count" style="color: var(--text-main);">0</span> / <span id="grim-inv-max">10</span></span>
+                                </div>
+                                <!-- NEW: Sorting Dropdown -->
+                                <select id="grim-inv-sort" style="background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.5rem; border-radius: 4px; font-family: inherit; font-size: 1.1rem; cursor: pointer;">
+                                    <option value="none">Sort: Default</option>
+                                    <option value="type">Sort: By Type</option>
+                                    <option value="name">Sort: A-Z</option>
+                                    <option value="value">Sort: Value</option>
+                                </select>
                             </div>
                             <div id="grim-inv-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;"></div>
                         </div>
@@ -282,9 +291,9 @@
                             
                             <div id="grim-item-stats" style="flex: 1; font-size: 1.4rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;"></div>
                             
-                            <div style="margin-top: auto; display: flex; gap: 1rem;">
-                                <button id="btn-inv-action" class="menu-btn" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; display: none;">Dissect</button>
-                                <button id="btn-inv-equip" class="menu-btn" style="flex: 1; font-size: 1.6rem; padding: 0.8rem; margin: 0; display: none; border-color: var(--green-safe); color: var(--green-safe);">Equip</button>
+                            <div style="margin-top: auto; display: flex; gap: 1.5rem; justify-content: center;">
+                                <button id="btn-inv-action" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none;">Dissect</button>
+                                <button id="btn-inv-equip" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none; border-color: var(--green-safe); color: var(--green-safe);">Equip</button>
                             </div>
                         </div>
                         

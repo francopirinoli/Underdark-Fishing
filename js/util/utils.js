@@ -57,3 +57,21 @@ export function hideStatTooltip() {
     const tt = document.getElementById('stat-tooltip');
     if (tt) tt.style.display = 'none';
 }
+
+export function buildStatSlider(label, value, leftText, rightText, deltaText = "") {
+    // Convert -100 to 100 into a CSS percentage (0% to 100%)
+    const percent = Math.max(0, Math.min(100, (value + 100) / 2));
+    return `
+        <div class="pref-container">
+            <div class="pref-labels">
+                <span style="flex:1; text-align:left;">${leftText}</span>
+                <b style="flex:1; text-align:center;">${label} (${value})${deltaText}</b>
+                <span style="flex:1; text-align:right;">${rightText}</span>
+            </div>
+            <div class="pref-track">
+                <div class="pref-center"></div>
+                <div class="pref-marker" style="left: ${percent}%;"></div>
+            </div>
+        </div>
+    `;
+}

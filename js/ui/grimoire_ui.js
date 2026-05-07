@@ -10,7 +10,7 @@ import { renderGlobalMap } from '../exploration/map_renderer.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { DissectionEngine } from '../data/fish_dissection.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
-import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils.js';
+import { showStatTooltip, moveStatTooltip, hideStatTooltip, buildStatSlider } from '../util/utils.js'; // <-- Added buildStatSlider
 
 // --- NEW IMPORTS ---
 import { createRng } from '../util/rng.js'; 
@@ -315,6 +315,40 @@ export const GrimoireUI = {
         }
         
         this.showBenchPreview();
+         // --- NEW: INVENTORY SORTING LOGIC ---
+        const sortSelect = document.getElementById('grim-inv-sort');
+        if (!sortSelect.onchange) {
+            sortSelect.onchange = () => {
+                const mode = sortSelect.value;
+                SFX.playUISelect();
+
+                if (mode === 'type') {
+                    // Custom sort order for types
+                    const typeOrder = { 'boat': 1, 'rod': 2, 'lure': 3, 'part': 4, 'chest': 5, 'fish': 6 };
+                    player.inventory.sort((a, b) => (typeOrder[a.invType] || 99) - (typeOrder[b.invType] || 99));
+                } 
+                else if (mode === 'name') {
+                    // Sort Alphabetically
+                    player.inventory.sort((a, b) => {
+                        const nameA = a.name || (a.identity ? a.identity.name : '');
+                        const nameB = b.name || (b.identity ? b.identity.name : '');
+                        return nameA.localeCompare(nameB);
+                    });
+                } 
+                else if (mode === 'value') {
+                    // Sort by highest gold value
+                    player.inventory.sort((a, b) => {
+                        const valA = a.economy ? a.economy.baseValue : (a.basePrice || 0);
+                        const valB = b.economy ? b.economy.baseValue : (b.basePrice || 0);
+                        return valB - valA;
+                    });
+                }
+                
+                // Re-render and save the new organized state
+                this.renderInventory();
+                if (this.callbacks.onSave) this.callbacks.onSave();
+            };
+        }
     },
 
     showInventoryDetails(item, invIndex, slotEl) {
@@ -326,8 +360,12 @@ export const GrimoireUI = {
         
         const btnAction = document.getElementById('btn-inv-action');
         const btnEquip = document.getElementById('btn-inv-equip');
+        
+        // Reset button visibility and colors
         btnAction.style.display = 'none';
         btnEquip.style.display = 'none';
+        btnEquip.style.borderColor = 'var(--green-safe)';
+        btnEquip.style.color = 'var(--green-safe)';
         
         const player = this.gameState.player;
 
@@ -375,6 +413,27 @@ export const GrimoireUI = {
                 if (this.callbacks.onSave) this.callbacks.onSave();
                 this.renderInventory();
             };
+            // --- NEW: COOK BUTTON LOGIC ---
+            btnEquip.style.display = 'block';
+            btnEquip.innerText = '🔥 Cook';
+            btnEquip.style.borderColor = 'var(--warn)'; // Orange color
+            btnEquip.style.color = 'var(--warn)';
+
+            btnEquip.onclick = () => {
+                SFX.playUISelect(); // Nice crisp UI sound
+                
+                // Calculate ration yield based on size
+                const rationYields = { 'Tiny': 1, 'Small': 2, 'Medium': 4, 'Large': 8, 'Massive': 16 };
+                const rationsGained = rationYields[item.physical.sizeTier] || 1;
+                
+                // Add rations and remove fish
+                player.vitals.rations += rationsGained;
+                player.inventory.splice(invIndex, 1);
+                
+                if (this.callbacks.onSave) this.callbacks.onSave();
+                this.renderInventory(); // This will safely refresh the grid and hide the detail pane
+                this.renderCharacter(); // Updates the ration counter on the Character tab too
+            };
         } 
         // 2. PARTS
         else if (item.invType === 'part') {
@@ -387,10 +446,10 @@ export const GrimoireUI = {
             const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
             
             document.getElementById('grim-item-stats').innerHTML = `
-                <div style="display:flex; justify-content:space-between;"><span>Color:</span> <span>${fmt(item.stats.color)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Sound:</span> <span>${fmt(item.stats.sound)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Light:</span> <span>${fmt(item.stats.light)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Weight:</span> <span>${fmt(item.stats.weight)}</span></div>
+                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
+                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
+                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
+                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
             `;
             
             if (this.craftingBench.length < 5) {
@@ -417,14 +476,19 @@ export const GrimoireUI = {
             document.getElementById('grim-item-name').style.color = 'var(--gold-warn)';
             document.getElementById('grim-item-sub').innerText = `Custom Lure (${item.componentsUsed} Parts)`;
             
-            // Lures are subjective, so we use Neutral formatting for differences
+            const deltaC = this.formatDelta(item.stats.color, eqLure.stats.color);
+            const deltaS = this.formatDelta(item.stats.sound, eqLure.stats.sound);
+            const deltaL = this.formatDelta(item.stats.light, eqLure.stats.light);
+            const deltaW = this.formatDelta(item.stats.weight, eqLure.stats.weight);
+
             document.getElementById('grim-item-stats').innerHTML = `
-                <div style="display:flex; justify-content:space-between;"><span>Durability:</span> <span>${item.durability}/${item.maxDurability} ${this.formatDelta(item.maxDurability, eqLure.maxDurability)}</span></div>
-                <hr style="border: 1px solid var(--panel-border); width: 100%; margin: 0.5rem 0;" />
-                <div style="display:flex; justify-content:space-between;"><span>Color:</span> <span>${item.stats.color} ${this.formatDelta(item.stats.color, eqLure.stats.color)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Sound:</span> <span>${item.stats.sound} ${this.formatDelta(item.stats.sound, eqLure.stats.sound)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Light:</span> <span>${item.stats.light} ${this.formatDelta(item.stats.light, eqLure.stats.light)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Weight:</span> <span>${item.stats.weight} ${this.formatDelta(item.stats.weight, eqLure.stats.weight)}</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:1.5rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem;">
+                    <span>Durability:</span> <span>${item.durability}/${item.maxDurability} ${this.formatDelta(item.maxDurability, eqLure.maxDurability)}</span>
+                </div>
+                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm', deltaC)}
+                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud', deltaS)}
+                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow', deltaL)}
+                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink', deltaW)}
             `;
             
             btnEquip.style.display = 'block';
@@ -652,10 +716,10 @@ export const GrimoireUI = {
         const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
 
         document.getElementById('grim-item-stats').innerHTML = `
-            <div style="display:flex; justify-content:space-between;"><span>Net Color:</span> <span>${fmt(tc)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Net Sound:</span> <span>${fmt(ts)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Net Light:</span> <span>${fmt(tl)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>Net Weight:</span> <span>${fmt(tw)}</span></div>
+            ${buildStatSlider('Net Color', tc, 'Cold', 'Warm')}
+            ${buildStatSlider('Net Sound', ts, 'Silent', 'Loud')}
+            ${buildStatSlider('Net Light', tl, 'Dark', 'Glow')}
+            ${buildStatSlider('Net Weight', tw, 'Float', 'Sink')}
         `;
 
         const btnAction = document.getElementById('btn-inv-action');
@@ -756,16 +820,19 @@ export const GrimoireUI = {
             </div>
         `;
         
-        const lureImg = lure.imageDataUrl ? `<img src="${lure.imageDataUrl}" />` : `<div style="width:96px;height:96px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);">Bare Hook</div>`;
+        // Reduced fallback box to match new CSS
+        const lureImg = lure.imageDataUrl ? `<img src="${lure.imageDataUrl}" />` : `<div style="width:50px;height:50px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.9rem;">Bare Hook</div>`;
         const durText = lure.maxDurability > 0 ? `Durability: ${lure.durability}/${lure.maxDurability}` : `Durability: ∞`;
 
-        const fmtP = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
         document.querySelector('#loadout-lure .slot-content').innerHTML = `
             ${lureImg}
-            <div class="loadout-details">
-                <b>${lure.name}</b>
-                <span style="color:var(--text-main); margin-bottom:0.2rem; display:block;">${durText}</span>
-                <span>Color:${fmtP(lure.stats.color)} Sound:${fmtP(lure.stats.sound)} Light:${fmtP(lure.stats.light)} Weight:${fmtP(lure.stats.weight)}</span>
+            <div class="loadout-details" style="flex: 1;">
+                <b style="font-size: 1.3rem;">${lure.name}</b>
+                <span style="color:var(--text-main); margin-bottom:0.2rem; display:block; border-bottom:1px dashed var(--panel-border); padding-bottom:0.3rem; font-size: 0.9rem;">${durText}</span>
+                ${buildStatSlider('Color', lure.stats.color, 'Cold', 'Warm')}
+                ${buildStatSlider('Sound', lure.stats.sound, 'Silent', 'Loud')}
+                ${buildStatSlider('Light', lure.stats.light, 'Dark', 'Glow')}
+                ${buildStatSlider('Weight', lure.stats.weight, 'Float', 'Sink')}
             </div>
         `;
 
@@ -898,14 +965,16 @@ renderBestiary() {
         }
 
         if (level >= 3) {
-            const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
             statsHtml += `
                 <div class="dashboard-group">
-                    <h3>Lure Preferences (Lv.3)</h3>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Color (Cold - Warm):</span> <span>${fmt(fish.lurePrefs.color)}</span></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Sound (Quiet - Loud):</span> <span>${fmt(fish.lurePrefs.sound)}</span></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Light (Dark - Glow):</span> <span>${fmt(fish.lurePrefs.light)}</span></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Weight (Float - Sink):</span> <span>${fmt(fish.lurePrefs.weight)}</span></div>
+                    <h3 style="margin-bottom: 1rem;">Lure Preferences (Lv.3)</h3>
+                    ${buildStatSlider('Color', fish.lurePrefs.color, 'Cold', 'Warm')}
+                    ${buildStatSlider('Sound', fish.lurePrefs.sound, 'Silent', 'Loud')}
+                    ${buildStatSlider('Light', fish.lurePrefs.light, 'Dark', 'Glow')}
+                    ${buildStatSlider('Weight', fish.lurePrefs.weight, 'Float', 'Sink')}
+                    <div style="text-align:center; font-size:0.9rem; color:var(--text-muted); margin-top:1rem;">
+                        Preference Tolerance: ±${Math.round(fish.lurePrefs.tolerance * 100)}%
+                    </div>
                 </div>
             `;
         } else {
