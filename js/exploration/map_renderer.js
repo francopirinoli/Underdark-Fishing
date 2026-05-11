@@ -5,12 +5,11 @@
 
 import { TILE } from './local_map.js';
 
-export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[]) {
+export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[], weatherNodes = {}) {
     const ctx = canvas.getContext('2d');
     const tileW = canvas.width / globalMap.width;
     const tileH = canvas.height / globalMap.height;
     
-    // Extract a Set of exact Node strings "x,y" that contain active quest targets
     const questNodes = new Set();
     activeQuests.forEach(q => {
         if (q.targetNode) questNodes.add(`${q.targetNode.x},${q.targetNode.y}`);
@@ -23,18 +22,23 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
         for (let x = 0; x < globalMap.width; x++) {
             const node = globalMap.nodes[y][x];
             const isQuestTarget = questNodes.has(`${x},${y}`);
+            const hasWeather = weatherNodes[`${x},${y}`]; // <-- NEW
             
             if (node.isDiscovered) {
                 ctx.fillStyle = biomes[node.biomeId].globalColor;
             } else {
-                ctx.fillStyle = '#000000'; // Pure black for undiscovered space
+                ctx.fillStyle = '#000000';
             }
-            
             ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             
-            // Grid border
+            // --- NEW: Hazard Overlay ---
+            if (node.isDiscovered && hasWeather) {
+                ctx.fillStyle = 'rgba(239, 68, 68, 0.25)'; // Red tint
+                ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
+            }
+            
             if (isQuestTarget) {
-                ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; // Golden border for quests
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; 
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x * tileW + 1, y * tileH + 1, tileW - 2, tileH - 2);
             } else {
@@ -53,9 +57,9 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
             const cx = x * tileW + tileW / 2;
             const cy = y * tileH + tileH / 2;
             const isQuestTarget = questNodes.has(`${x},${y}`);
+            const hasWeather = weatherNodes[`${x},${y}`]; // <-- NEW
             
             if (node.isDiscovered) {
-                // Draw Exits
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                 ctx.beginPath();
                 if (node.exits.n) { ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - tileH / 2); }
@@ -64,7 +68,6 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                 if (node.exits.e) { ctx.moveTo(cx, cy); ctx.lineTo(cx + tileW / 2, cy); }
                 ctx.stroke();
 
-                // Draw Settlement
                 if (node.hasSettlement) {
                     ctx.fillStyle = '#FBBF24'; 
                     ctx.beginPath();
@@ -72,7 +75,15 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fill();
                 }
 
-                // Discovered Quest Marker (Top Right Corner)
+                // --- NEW: Hazard Warning Icon ---
+                if (hasWeather) {
+                    ctx.fillStyle = '#EF4444';
+                    ctx.font = `bold ${tileH * 0.4}px "Courier New", monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('⚠', x * tileW + 2, y * tileH + 2);
+                }
+
                 if (isQuestTarget) {
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `bold ${tileH * 0.5}px "Courier New", monospace`;
@@ -82,14 +93,12 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                 }
             } else {
                 if (isQuestTarget) {
-                    // Undiscovered Quest Marker (Centered Gold !)
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `bold ${tileH * 0.6}px "Courier New", monospace`; 
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText('!', cx, cy + 2);
                 } else {
-                    // Standard Fog of War (?)
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
                     ctx.font = `${tileH * 0.6}px "Courier New", monospace`; 
                     ctx.textAlign = 'center';

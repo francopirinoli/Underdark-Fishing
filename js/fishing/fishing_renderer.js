@@ -6,6 +6,7 @@
  */
 
 import { SFX } from '../audio/sfx_generator.js';
+import { getRarityColor } from '../util/utils.js';
 
 // Local Map Tile IDs
 const TILE = { WATER: 0, DEEP_WATER: 1, LAND: 2, ROCK: 3, FLORA: 4, DOCK: 5 };
@@ -161,7 +162,7 @@ export const FishingRenderer = {
         this.ctx.imageSmoothingEnabled = false;
     },
 
-    open(config) {
+open(config) {
         this.biomePal = config.biome.palette;
         this.tileId = config.tileId;
         
@@ -180,13 +181,26 @@ export const FishingRenderer = {
         this.lastPhase = 'SINKING';
         this.lastAiState = 'HOLD';
         
-        // [FIX]: Reset behavior text on new cast
         this.elements.behavior.innerText = "Sinking line...";
         this.elements.behavior.style.color = "#64748B";
+
+        // --- NEW: Reset all physics bars visually ---
+        this.elements.barTension.style.width = '0%';
+        this.elements.lblTension.innerText = '0%';
+        this.elements.barTension.style.background = '#3B82F6';
+        
+        this.elements.barCatch.style.width = '0%';
+        this.elements.lblCatch.innerText = '0%';
+        
+        this.elements.barPStam.style.width = '100%';
+        this.elements.lblPStam.innerText = '100%';
+        this.elements.barPStam.style.background = '#22D3EE';
+        
+        this.elements.barFStam.style.width = '100%';
+        this.elements.lblFStam.innerText = '100%';
         
         this._initParticles();
         SFX.playCast();
-
     },
 
     close() {
@@ -232,9 +246,11 @@ export const FishingRenderer = {
             else if (engine.phase === 'FIGHT') {
                 this.elements.biteAlert.style.opacity = '0';
                 this.elements.title.innerText = `Fighting: ${engine.fishData.identity.name}`;
-                this.elements.title.style.color = "#FBBF24";
+                // Color the title by the fish's rarity!
+                this.elements.title.style.color = getRarityColor(engine.fishData.identity.rarity);
                 this.elements.timerWrap.style.display = 'block';
             }
+
             else if (engine.phase === 'CAUGHT') SFX.playCatchSuccess();
             else if (engine.phase === 'SNAPPED') SFX.playLineSnap();
             else if (engine.phase === 'ESCAPED') SFX.playError();

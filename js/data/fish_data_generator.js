@@ -191,7 +191,7 @@ export function generateFishInstance(speciesData, rng) {
     
     // Apply Rarity Multipliers to the Instance
     instance.identity.rarity = rarityObj.name;
-    instance.identity.name = `${rarityObj.name} ${speciesData.identity.name}`;
+    instance.identity.name = speciesData.identity.name; 
     
     instance.combat.stamina = Math.round(instance.combat.stamina * rarityObj.statMult);
     instance.combat.speed = Math.round(Math.min(120, instance.combat.speed * Math.pow(rarityObj.statMult, 0.5))); // Speed scales slower

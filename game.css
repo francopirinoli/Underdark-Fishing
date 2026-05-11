@@ -135,20 +135,24 @@ body, html {
     flex-direction: column; 
     justify-content: flex-end; 
     overflow: hidden;
-    padding-bottom: 0.5rem;
+    background: rgba(15, 23, 42, 0.95); 
+    border: 2px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 0.5rem; /* Tighter padding */
 }
 .log-msg { 
-    margin-top: 0.4rem; 
-    font-size: 1.05rem; 
-    line-height: 1.2;
-    animation: fadeOut 5s forwards; 
-    word-wrap: break-word; /* Fixes long text cutting off */
+    margin-top: 0.2rem; /* Reduced spacing */
+    font-size: 1rem; /* Slightly smaller for readability */
+    line-height: 1.15;
+    word-wrap: break-word; 
+    color: var(--text-main);
+    padding-bottom: 0.3rem;
+    border-bottom: 1px dashed rgba(30, 41, 59, 0.5);
+    flex-shrink: 0; /* Prevents text from squishing */
 }
-
-@keyframes fadeOut {
-    0% { opacity: 1; }
-    80% { opacity: 1; }
-    100% { opacity: 0; }
+.log-msg:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
 }
 
 /* Z-50 | ACTION OVERLAYS (Minigame / Town Hub) */
@@ -899,6 +903,7 @@ body, html {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    min-height: 0; /* CRITICAL: Prevents flexbox from stretching off screen */
 }
 
 .stash-grid {
@@ -909,4 +914,5 @@ body, html {
     grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
     gap: 0.5rem;
     align-content: flex-start;
+    min-height: 0;
 }

@@ -26,6 +26,13 @@ export const ExplorationRenderer = {
     camY: 0,
     dockPositions:[], 
 
+    // --- NEW: Atmospherics & Hazard State ---
+    hazardParticles:[],
+    wakeParticles:[],     // NEW
+    ambientRipples:[],    // NEW
+    currentBiome: null,    // NEW: Store the biome for colored effects
+    currentWeather: null,
+
     init(containerElement, width = 800, height = 600) {
         this.container = containerElement;
         this.VIEW_W = width;
@@ -59,6 +66,8 @@ export const ExplorationRenderer = {
     },
 
     buildMapCache(localMap, biome) {
+        this.currentBiome = biome; // Save biome for particles
+        
         this.offscreenMap = document.createElement('canvas');
         this.offscreenMap.width = localMap.width * this.TILE_SIZE;
         this.offscreenMap.height = localMap.height * this.TILE_SIZE;
@@ -66,6 +75,7 @@ export const ExplorationRenderer = {
         offCtx.imageSmoothingEnabled = false;
 
         this.dockPositions =[]; 
+        this.ambientRipples =[]; // Reset ripples for new map
 
         const pal = biome.palette;
         const hexToRgb = (hex) => {
@@ -73,11 +83,13 @@ export const ExplorationRenderer = {
             return[(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
         };
 
-        const colors = {[TILE.WATER]: hexToRgb(pal.water),
+        const colors = {
+            [TILE.WATER]: hexToRgb(pal.water),
             [TILE.DEEP_WATER]: hexToRgb(pal.deepWater),
             [TILE.LAND]: hexToRgb(pal.land),
-            [TILE.ROCK]: hexToRgb(pal.rock),[TILE.FLORA]: hexToRgb(pal.flora),
-            [TILE.DOCK]:[120, 53, 15] 
+            [TILE.ROCK]: hexToRgb(pal.rock),
+            [TILE.FLORA]: hexToRgb(pal.flora),
+            [TILE.DOCK]: [120, 53, 15] 
         };
 
         const imgData = offCtx.createImageData(this.offscreenMap.width, this.offscreenMap.height);
@@ -86,10 +98,22 @@ export const ExplorationRenderer = {
         for (let y = 0; y < localMap.height; y++) {
             for (let x = 0; x < localMap.width; x++) {
                 const tileId = localMap.grid[y][x];
-                let [r, g, b] = colors[tileId] ||[255, 0, 255]; 
+                let [r, g, b] = colors[tileId] || [255, 0, 255]; 
 
                 if (tileId === TILE.DOCK) {
                     this.dockPositions.push({ x, y });
+                }
+                
+                // --- NEW: Scatter Ambient Ripples ---
+                // ~2% chance to place a ripple on any water tile
+                if ((tileId === TILE.WATER || tileId === TILE.DEEP_WATER) && Math.random() < 0.02) {
+                    this.ambientRipples.push({
+                        wx: x * this.TILE_SIZE + Math.random() * this.TILE_SIZE,
+                        wy: y * this.TILE_SIZE + Math.random() * this.TILE_SIZE,
+                        phase: Math.random() * Math.PI * 2,
+                        speed: Math.random() * 2 + 1,
+                        width: Math.random() * 4 + 2
+                    });
                 }
 
                 for (let dy = 0; dy < this.TILE_SIZE; dy++) {
@@ -116,6 +140,50 @@ export const ExplorationRenderer = {
         offCtx.putImageData(imgData, 0, 0);
     },
 
+    initHazards(biomeId, weather) {
+        this.currentBiomeId = biomeId;
+        this.currentWeather = weather;
+        this.hazardParticles =[];
+
+        // Base Biome Particles
+        if (biomeId === 'volcanic') {
+            for (let i = 0; i < 60; i++) {
+                this.hazardParticles.push({
+                    x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
+                    vx: (Math.random() - 0.5) * 20, vy: -(Math.random() * 50 + 20),
+                    size: Math.random() * 2 + 1, color: Math.random() > 0.5 ? '#F59E0B' : '#EF4444' // Embers
+                });
+            }
+        } else if (biomeId === 'frozen') {
+            for (let i = 0; i < 100; i++) {
+                this.hazardParticles.push({
+                    x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
+                    vx: Math.random() * 30 + 10, vy: Math.random() * 50 + 20,
+                    size: Math.random() * 2 + 1, color: Math.random() > 0.3 ? '#FFFFFF' : '#93C5FD' // Snow
+                });
+            }
+        }
+
+        // Dynamic Weather Particles
+        if (weather === 'spores') {
+            for (let i = 0; i < 50; i++) {
+                this.hazardParticles.push({
+                    x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
+                    vx: (Math.random() - 0.5) * 15, vy: Math.random() * 20 + 5,
+                    size: Math.random() * 3 + 2, color: Math.random() > 0.5 ? '#4ADE80' : '#86EFAC' // Large spores
+                });
+            }
+        } else if (weather === 'shatter') {
+            for (let i = 0; i < 30; i++) {
+                this.hazardParticles.push({
+                    x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
+                    vx: 0, vy: Math.random() * 300 + 200, // Very fast falling
+                    size: Math.random() * 15 + 10, color: '#22D3EE' // Crystal shards (length)
+                });
+            }
+        }
+    },
+
     screenToWorld(screenX, screenY) {
         return {
             x: (this.camX + screenX) / this.TILE_SIZE,
@@ -123,7 +191,170 @@ export const ExplorationRenderer = {
         };
     },
 
-    render(engine, lightRadius, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, fisherman = null) {
+    _renderHazards(dt) {
+        // Fungal Spore Tint
+        if (this.currentWeather === 'spores') {
+            this.ctx.fillStyle = 'rgba(22, 101, 52, 0.15)'; 
+            this.ctx.fillRect(0, 0, this.VIEW_W, this.VIEW_H);
+        }
+
+        // Particles
+        this.hazardParticles.forEach(p => {
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+
+            // Screen wrap
+            if (p.x < 0) p.x = this.VIEW_W;
+            if (p.x > this.VIEW_W) p.x = 0;
+            if (p.y < 0) p.y = this.VIEW_H;
+            if (p.y > this.VIEW_H) p.y = 0;
+
+            this.ctx.fillStyle = p.color;
+            if (this.currentWeather === 'shatter') {
+                // Draw shards as vertical lines
+                this.ctx.fillRect(p.x, p.y, 2, p.size); 
+            } else {
+                // Draw embers, snow, and spores as squares
+                this.ctx.fillRect(p.x, p.y, p.size, p.size);
+            }
+        });
+
+// Abyssal Whirlpool (Anchored to the exact center of the map!)
+        if (this.currentWeather === 'whirlpool') {
+            const mapCenterPx = (512 / 2) * this.TILE_SIZE; // LOCAL_MAP_SIZE = 512
+            const screenCX = mapCenterPx - this.camX;
+            const screenCY = mapCenterPx - this.camY;
+
+            // Only draw if it's currently on screen
+            if (screenCX > -100 && screenCX < this.VIEW_W + 100 && screenCY > -100 && screenCY < this.VIEW_H + 100) {
+                const time = Date.now() / 1000;
+                const RADIUS = 70; // SCALED DOWN: Was 120
+                
+                // 1. The Dark Void (Event Horizon)
+                const voidGrad = this.ctx.createRadialGradient(screenCX, screenCY, 0, screenCX, screenCY, RADIUS);
+                voidGrad.addColorStop(0, '#000000');
+                voidGrad.addColorStop(0.4, 'rgba(15, 23, 42, 0.9)'); 
+                voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                this.ctx.fillStyle = voidGrad;
+                this.ctx.fillRect(screenCX - RADIUS, screenCY - RADIUS, RADIUS * 2, RADIUS * 2);
+
+                // 2. Rotating Spiral Arms
+                this.ctx.lineWidth = 3;
+                for (let i = 0; i < 6; i++) {
+                    this.ctx.beginPath();
+                    const startAngle = (i * Math.PI / 3) + (time * 3.5); 
+                    
+                    for (let r = 5; r < RADIUS; r += 4) {
+                        const angle = startAngle - (r * 0.045); // Tighter twist
+                        const px = screenCX + Math.cos(angle) * r;
+                        const py = screenCY + Math.sin(angle) * r;
+                        if (r === 5) this.ctx.moveTo(px, py);
+                        else this.ctx.lineTo(px, py);
+                    }
+                    
+                    const armGrad = this.ctx.createRadialGradient(screenCX, screenCY, 10, screenCX, screenCY, RADIUS);
+                    armGrad.addColorStop(0, 'rgba(168, 85, 247, 0.9)'); 
+                    armGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.5)'); 
+                    armGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    
+                    this.ctx.strokeStyle = armGrad;
+                    this.ctx.stroke();
+                }
+
+                // 3. Debris / Particles getting sucked in
+                this.ctx.fillStyle = '#E2E8F0';
+                for(let i = 0; i < 15; i++) {
+                    const angle = (i * Math.PI * 2 / 15) + (time * 4);
+                    const r = RADIUS - ((time * 50 + i * 25) % RADIUS); 
+                    const px = screenCX + Math.cos(angle - (r * 0.045)) * r;
+                    const py = screenCY + Math.sin(angle - (r * 0.045)) * r;
+                    
+                    this.ctx.globalAlpha = Math.max(0, r / RADIUS); 
+                    this.ctx.fillRect(px, py, 2, 2);
+                }
+                this.ctx.globalAlpha = 1.0;
+            }
+        }
+    },
+
+    _renderAtmospherics(engine, dt) {
+        if (!this.currentBiome) return;
+        
+        const time = Date.now() / 1000;
+        const gleamColor = this.currentBiome.palette.waterGleam;
+
+        // --- 1. AMBIENT RIPPLES ---
+        this.ctx.fillStyle = gleamColor;
+        this.ambientRipples.forEach(r => {
+            const screenX = r.wx - this.camX;
+            const screenY = r.wy - this.camY;
+
+            // Only draw if visible on screen
+            if (screenX > 0 && screenX < this.VIEW_W && screenY > 0 && screenY < this.VIEW_H) {
+                // Sine wave pulsing logic (0.0 to 1.0)
+                const pulse = (Math.sin(time * r.speed + r.phase) + 1) / 2;
+                if (pulse > 0.2) {
+                    this.ctx.globalAlpha = pulse * 0.5; // Max 50% opacity so it's subtle
+                    const currentWidth = r.width * pulse;
+                    this.ctx.fillRect(screenX - currentWidth/2, screenY, currentWidth, 1);
+                }
+            }
+        });
+        this.ctx.globalAlpha = 1.0; // Reset alpha
+
+        // --- 2. BOAT WAKE ---
+        // Spawn new particles if moving fast enough
+        const speed = Math.abs(engine.velocity);
+        if (speed > 10) {
+            // Calculate stern (back) of the boat
+            const sternDistance = 12; // pixels from center to back
+            const sternX = (engine.x * this.TILE_SIZE) - Math.cos(engine.heading) * sternDistance;
+            const sternY = (engine.y * this.TILE_SIZE) - Math.sin(engine.heading) * sternDistance;
+            
+            // Spawn 1-2 particles per frame
+            for(let i = 0; i < (speed > 40 ? 2 : 1); i++) {
+                // Spread perpendicular to movement
+                const spreadAngle = engine.heading + (Math.PI / 2);
+                const spreadDist = (Math.random() - 0.5) * 8; 
+
+                this.wakeParticles.push({
+                    x: sternX + Math.cos(spreadAngle) * spreadDist,
+                    y: sternY + Math.sin(spreadAngle) * spreadDist,
+                    vx: -Math.cos(engine.heading) * (speed * 0.1) + (Math.random() - 0.5) * 5,
+                    vy: -Math.sin(engine.heading) * (speed * 0.1) + (Math.random() - 0.5) * 5,
+                    life: 1.0,
+                    maxLife: 1.0
+                });
+            }
+        }
+
+        // Update and draw wake particles
+        for (let i = this.wakeParticles.length - 1; i >= 0; i--) {
+            const p = this.wakeParticles[i];
+            p.life -= dt * 1.5; // Decay rate
+            
+            if (p.life <= 0) {
+                this.wakeParticles.splice(i, 1);
+                continue;
+            }
+
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+
+            const screenX = p.x - this.camX;
+            const screenY = p.y - this.camY;
+
+            if (screenX > 0 && screenX < this.VIEW_W && screenY > 0 && screenY < this.VIEW_H) {
+                const size = Math.max(1, 3 * (p.life / p.maxLife));
+                this.ctx.fillStyle = gleamColor;
+                this.ctx.globalAlpha = p.life * 0.6; // Fade out
+                this.ctx.fillRect(screenX, screenY, size, size);
+            }
+        }
+        this.ctx.globalAlpha = 1.0; // Reset alpha
+    },
+
+    render(engine, lightRadius, dt, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, fisherman = null) {
         if (!this.offscreenMap || !this.boatImage) return;
 
         const playerPxX = engine.x * this.TILE_SIZE;
@@ -145,12 +376,17 @@ export const ExplorationRenderer = {
 
         this.ctx.clearRect(0, 0, this.VIEW_W, this.VIEW_H);
         
-        // Draw the map only within the visible area, leaving the right side empty for the UI
+        // Draw the map only within the visible area
         this.ctx.drawImage(
             this.offscreenMap, 
             this.camX, this.camY, VISIBLE_W, this.VIEW_H, 
             0, 0, VISIBLE_W, this.VIEW_H
         );
+
+        // --- NEW: Draw water ripples and boat wake ---
+        if (!isFishingPhase) {
+            this._renderAtmospherics(engine, dt);
+        }
 
         const screenBoatX = playerPxX - this.camX;
         const screenBoatY = playerPxY - this.camY;
@@ -210,6 +446,11 @@ export const ExplorationRenderer = {
             });
         });
 
+        // --- NEW: Draw Hazards BEFORE Lighting (so they sit in the darkness) ---
+        if (!isFishingPhase) {
+            this._renderHazards(dt);
+        }
+
         this._drawLighting(activeLights);
 
         // --- NEW: Draw Subtle Treasure Glint ---
@@ -238,6 +479,8 @@ export const ExplorationRenderer = {
     },
 
     _drawCastingReticle(boatX, boatY, castState) {
+        this.ctx.save(); // <-- NEW: Lock the canvas state
+
         const { mouseX, mouseY, isCharging, chargePct, maxDist } = castState;
         
         let dx = mouseX - boatX;
@@ -280,6 +523,8 @@ export const ExplorationRenderer = {
         this.ctx.strokeStyle = '#FFF';
         this.ctx.lineWidth = 1;
         this.ctx.stroke();
+
+        this.ctx.restore(); // <-- NEW: Restore the canvas state so colors don't leak!
     },
 
     lightCache: {}, // NEW: Cache pre-rendered light circles

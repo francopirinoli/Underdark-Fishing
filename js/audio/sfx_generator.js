@@ -109,10 +109,10 @@ export const SFX = {
         SYNTHS.tensionTremolo.connect(SYNTHS.tensionVol);
     },
 
-    playUIHover() { if (SYNTHS.uiHover) SYNTHS.uiHover.triggerAttackRelease("C3", "32n"); },
-    playUISelect() { if (SYNTHS.uiSelect) SYNTHS.uiSelect.triggerAttackRelease("E6", "16n"); },
-    playError() { if (SYNTHS.error) SYNTHS.error.triggerAttackRelease("C2", "8n"); },
-    playGold() { if (SYNTHS.gold) SYNTHS.gold.triggerAttackRelease("16n"); },
+    playUIHover() { try { if (SYNTHS.uiHover) SYNTHS.uiHover.triggerAttackRelease("C3", "32n", Tone.now()); } catch(e){} },
+    playUISelect() { try { if (SYNTHS.uiSelect) SYNTHS.uiSelect.triggerAttackRelease("E6", "16n", Tone.now()); } catch(e){} },
+    playError() { try { if (SYNTHS.error) SYNTHS.error.triggerAttackRelease("C2", "8n", Tone.now()); } catch(e){} },
+    playGold() { try { if (SYNTHS.gold) SYNTHS.gold.triggerAttackRelease("16n", Tone.now()); } catch(e){} },
     
     playCast() {
         if (!SYNTHS.cast) return;

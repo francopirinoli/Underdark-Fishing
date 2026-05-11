@@ -10,13 +10,12 @@ import { renderGlobalMap } from '../exploration/map_renderer.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { DissectionEngine } from '../data/fish_dissection.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
-import { showStatTooltip, moveStatTooltip, hideStatTooltip, buildStatSlider } from '../util/utils.js'; // <-- Added buildStatSlider
-
-// --- NEW IMPORTS ---
+import { showStatTooltip, moveStatTooltip, hideStatTooltip, buildStatSlider, getRarityColor, getItemColor } from '../util/utils.js';
 import { createRng } from '../util/rng.js'; 
 import { generateChest } from '../art/chest_generator.js'; 
 import { generateLurePart } from '../art/lure_generator.js'; 
 import { generateRodData } from '../data/rod_data_generator.js';
+import { EventManager } from '../events/event_manager.js';
 
 export const GrimoireUI = {
     selectedMapNode: null,
@@ -75,6 +74,20 @@ export const GrimoireUI = {
         this.gameState = state;
         document.getElementById('z100-grimoire').style.display = 'flex';
         this.selectedMapNode = this.gameState.world.nodes[this.gameState.globalY][this.gameState.globalX];
+        
+        // --- NEW: Force reset to Map tab ---
+        this.activeTab = 'map';
+        
+        // Reset Tab Buttons
+        document.querySelectorAll('.grim-tab').forEach(t => t.classList.remove('active'));
+        const mapTabBtn = document.querySelector('.grim-tab[data-tab="map"]');
+        if (mapTabBtn) mapTabBtn.classList.add('active');
+        
+        // Reset Pages
+        document.querySelectorAll('.grim-page').forEach(page => page.style.display = 'none');
+        const mapPage = document.getElementById('grim-page-map');
+        if (mapPage) mapPage.style.display = 'flex'; 
+        
         this.renderActiveTab();
     },
 
@@ -105,28 +118,34 @@ export const GrimoireUI = {
         const world = this.gameState.world;
         const player = this.gameState.player;
 
-        // Filter for quests that are NOT complete yet
         const incompleteQuests = player.activeQuests.filter(q => {
             if (q.type === 'hunt') return q.currentAmount < q.requiredAmount;
             if (q.type === 'trophy') return q.currentBestWeight < q.requiredWeight;
             if (q.type === 'bounty') return !q.isComplete;
             if (q.type === 'research') {
                 const entry = player.bestiary[q.targetSpeciesId];
-                let curLvl = 0;
-                if (entry) {
-                    if (entry.xp >= 250) curLvl = 3;
-                    else if (entry.xp >= 100) curLvl = 2;
-                    else curLvl = 1;
-                }
-                return curLvl < q.requiredKnowledgeLevel;
+                return (entry ? (entry.xp >= 250 ? 3 : entry.xp >= 100 ? 2 : 1) : 0) < q.requiredKnowledgeLevel;
             }
             return true;
         });
         
-        // Pass the incomplete quests to the map renderer
-        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests);
+        // Pass Weather Nodes to renderer
+        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, EventManager.Weather.activeNodes);
 
-        document.getElementById('grim-map-coords').innerText = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}]`;
+        // Calculate Hazard Text for the info panel
+        const weather = EventManager.Weather.getWeather(this.selectedMapNode.x, this.selectedMapNode.y);
+        let hazardHtml = '';
+        
+        // Permanent Hazards
+        if (this.selectedMapNode.biomeId === 'volcanic') hazardHtml = `<div style="color:var(--red-danger); font-size:1.1rem; margin-top:0.3rem;">⚠ Boiling Waters</div>`;
+        if (this.selectedMapNode.biomeId === 'frozen') hazardHtml = `<div style="color:var(--cyan-glow); font-size:1.1rem; margin-top:0.3rem;">⚠ Pack Ice</div>`;
+        
+        // Dynamic Hazards
+        if (weather === 'spores') hazardHtml += `<div style="color:#86EFAC; font-size:1.1rem; margin-top:0.3rem;">⚠ Toxic Spore Storm</div>`;
+        else if (weather === 'shatter') hazardHtml += `<div style="color:#93C5FD; font-size:1.1rem; margin-top:0.3rem;">⚠ Crystal Shatter-Storm</div>`;
+        else if (weather === 'whirlpool') hazardHtml += `<div style="color:#A855F7; font-size:1.1rem; margin-top:0.3rem;">⚠ Void Whirlpool</div>`;
+
+        document.getElementById('grim-map-coords').innerHTML = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}] ${hazardHtml}`;
 
         const ecoContainer = document.getElementById('grim-map-ecology');
         ecoContainer.innerHTML = '';
@@ -135,30 +154,26 @@ export const GrimoireUI = {
             document.getElementById('grim-map-title').innerText = this.selectedMapNode.name;
             const b = BIOMES[this.selectedMapNode.biomeId];
             document.getElementById('grim-map-biome').innerText = b.name;
-            document.getElementById('grim-map-biome').style.color = b.globalColor;
+            // FIX: Use the new readable text color!
+            document.getElementById('grim-map-biome').style.color = b.textColor || b.globalColor;
 
-            // [FIX]: Look exactly at the species discovered in THIS specific node
             const discoveredIds = this.selectedMapNode.discoveredSpecies ||[];
-            
-            // Map those IDs to the actual Bestiary entries
-            const knownSpecies = discoveredIds
-                .map(id => this.gameState.player.bestiary[id])
-                .filter(Boolean); // Filter out any undefined just in case
+            const knownSpecies = discoveredIds.map(id => this.gameState.player.bestiary[id]).filter(Boolean);
 
             if (knownSpecies.length > 0) {
                 knownSpecies.forEach(entry => {
                     const fish = entry.speciesData;
+                    const rColor = getRarityColor(fish.identity.rarity); // Get Rarity Color
                     ecoContainer.innerHTML += `
                         <div style="display: flex; align-items: center; gap: 0.8rem; font-size: 1.1rem; padding-bottom: 0.2rem; border-bottom: 1px dashed var(--panel-border);">
                             <img src="${fish.art.imageDataUrl}" style="width: 28px; height: 28px; background: #000; border: 1px solid var(--panel-border); border-radius: 2px; image-rendering: pixelated;" />
-                            <span style="color: var(--cyan-glow);">${fish.identity.name}</span>
+                            <span style="color: var(--cyan-glow); font-weight: bold;">${fish.identity.name}</span>
                         </div>
                     `;
                 });
             } else {
                 ecoContainer.innerHTML = `<span style="color: var(--text-muted); font-style: italic;">No species cataloged here yet.</span>`;
             }
-
         } else {
             document.getElementById('grim-map-title').innerText = "???";
             document.getElementById('grim-map-biome').innerText = "Undiscovered Region";
@@ -169,6 +184,7 @@ export const GrimoireUI = {
         const legend = document.getElementById('grim-map-legend');
         legend.innerHTML = '';
         for (const key in BIOMES) {
+            if (key === 'hub') continue; // Skip hub in legend to save space
             const b = BIOMES[key];
             legend.innerHTML += `
                 <div class="legend-item">
@@ -373,7 +389,8 @@ export const GrimoireUI = {
         if (item.invType === 'fish') {
             document.getElementById('grim-item-img').src = item.art.imageDataUrl;
             document.getElementById('grim-item-name').innerText = item.identity.name;
-            document.getElementById('grim-item-name').style.color = 'var(--cyan-glow)';
+            // FIX: Color by rarity!
+            document.getElementById('grim-item-name').style.color = getItemColor(item);
             document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} ${item.identity.family}`;
             
             document.getElementById('grim-item-stats').innerHTML = `
@@ -440,7 +457,7 @@ export const GrimoireUI = {
             document.getElementById('grim-item-img').src = item.imageDataUrl || '';
             document.getElementById('grim-item-img').style.display = item.imageDataUrl ? 'block' : 'none';
             document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = 'var(--text-main)';
+            document.getElementById('grim-item-name').style.color = getItemColor(item);
             document.getElementById('grim-item-sub').innerText = `${item.rarity} Component`;
             
             const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
@@ -473,7 +490,7 @@ export const GrimoireUI = {
             document.getElementById('grim-item-img').src = item.imageDataUrl;
             document.getElementById('grim-item-img').style.display = 'block';
             document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = 'var(--gold-warn)';
+            document.getElementById('grim-item-name').style.color = getItemColor(item);
             document.getElementById('grim-item-sub').innerText = `Custom Lure (${item.componentsUsed} Parts)`;
             
             const deltaC = this.formatDelta(item.stats.color, eqLure.stats.color);
@@ -509,7 +526,7 @@ export const GrimoireUI = {
             document.getElementById('grim-item-img').src = item.art.imageDataUrl;
             document.getElementById('grim-item-img').style.display = 'block';
             document.getElementById('grim-item-name').innerText = item.identity.name;
-            document.getElementById('grim-item-name').style.color = 'var(--cyan-glow)';
+            document.getElementById('grim-item-name').style.color = getItemColor(item);
             document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} Rod`;
             
             document.getElementById('grim-item-stats').innerHTML = `
@@ -537,7 +554,7 @@ export const GrimoireUI = {
             document.getElementById('grim-item-img').src = item.art.profileDataUrl;
             document.getElementById('grim-item-img').style.display = 'block';
             document.getElementById('grim-item-name').innerText = item.identity.name;
-            document.getElementById('grim-item-name').style.color = 'var(--cyan-glow)';
+            document.getElementById('grim-item-name').style.color = getItemColor(item);
             document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} ${item.art.boatType.toUpperCase()}`;
             
             document.getElementById('grim-item-stats').innerHTML = `
@@ -780,32 +797,33 @@ export const GrimoireUI = {
         const rod = player.gear.rod;
         const lure = player.gear.lure;
         
-        let upgHtml = `<div style="font-size:1rem; color:var(--text-muted); margin-top:0.5rem; line-height: 1.4;">`;
-        upgHtml += `Lantern: <span style="color:var(--cyan-glow)">${boat.upgrades.lantern ? boat.upgrades.lantern.name : 'Basic'}</span><br>`;
-        upgHtml += `Plating: <span style="color:var(--cyan-glow)">${boat.upgrades.plating ? boat.upgrades.plating.name : 'Empty'}</span><br>`;
-        upgHtml += `Engine:  <span style="color:var(--cyan-glow)">${boat.upgrades.engine ? boat.upgrades.engine.name : 'Empty'}</span><br>`;
-        upgHtml += `Prow:    <span style="color:var(--cyan-glow)">${boat.upgrades.prow ? boat.upgrades.prow.name : 'Empty'}</span><br>`;
-        upgHtml += `Storage: <span style="color:var(--cyan-glow)">${boat.upgrades.storage ? boat.upgrades.storage.name : 'Empty'}</span>`;
+        // Compacted grid for boat upgrades
+        let upgHtml = `<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.2rem; font-size:0.9rem; color:var(--text-muted); margin-top:0.4rem; line-height: 1.2;">`;
+        upgHtml += `<div>Lantern: <span style="color:var(--cyan-glow)">${boat.upgrades.lantern ? boat.upgrades.lantern.name : 'Basic'}</span></div>`;
+        upgHtml += `<div>Plating: <span style="color:var(--cyan-glow)">${boat.upgrades.plating ? boat.upgrades.plating.name : 'Empty'}</span></div>`;
+        upgHtml += `<div>Engine:  <span style="color:var(--cyan-glow)">${boat.upgrades.engine ? boat.upgrades.engine.name : 'Empty'}</span></div>`;
+        upgHtml += `<div>Prow:    <span style="color:var(--cyan-glow)">${boat.upgrades.prow ? boat.upgrades.prow.name : 'Empty'}</span></div>`;
+        upgHtml += `<div style="grid-column: span 2;">Storage: <span style="color:var(--cyan-glow)">${boat.upgrades.storage ? boat.upgrades.storage.name : 'Empty'}</span></div>`;
         upgHtml += `</div>`;
 
         document.querySelector('#loadout-boat .slot-content').innerHTML = `
             <img src="${boat.art.profileDataUrl}" />
-            <div class="loadout-details">
-                <b>${boat.identity.name}</b>
-                <span>Type: ${boat.art.boatType.toUpperCase()} | HP: ${boat.stats.maxHp} | Space: ${boat.stats.cargoSpace}</span>
+            <div class="loadout-details" style="flex:1;">
+                <b style="color: ${getItemColor(boat)}">${boat.identity.name}</b>
+                <span style="display:block; font-size:0.9rem;">Type: ${boat.art.boatType.toUpperCase()} | HP: ${boat.stats.maxHp} | Space: ${boat.stats.cargoSpace}</span>
                 ${upgHtml}
             </div>
         `;
         
         document.querySelector('#loadout-rod .slot-content').innerHTML = `
             <img src="${rod.art.imageDataUrl}" />
-            <div class="loadout-details">
-                <b>${rod.identity.name}</b>
-                <span>Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</span>
+            <div class="loadout-details" style="flex:1;">
+                <b style="color: ${getItemColor(rod)}">${rod.identity.name}</b>
+                <span style="display:block; font-size:1rem; margin-bottom:0.1rem;">Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</span>
+                <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Flex: ${rod.stats.flexibility}x | Hook Win: ${rod.stats.sensitivity}ms</span>
             </div>
         `;
         
-        // Reduced fallback box to match new CSS
         const lureImg = lure.imageDataUrl ? `<img src="${lure.imageDataUrl}" />` : `<div style="width:50px;height:50px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.9rem;">Bare Hook</div>`;
         const durText = lure.maxDurability > 0 ? `Durability: ${lure.durability}/${lure.maxDurability}` : `Durability: ∞`;
 
@@ -829,19 +847,20 @@ export const GrimoireUI = {
             return `<span style="color:var(--text-main); font-weight:bold;">${v}</span>`;
         }
         
+        // Compacted Dashboard slightly
         document.getElementById('grim-dashboard-content').innerHTML = `
             <div class="dashboard-group">
                 <h3>🎣 Minigame Physics</h3>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Reeling Power</span> ${fmt(effStats.minigame.power, true)}</div>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Hook Window</span> <span style="color:var(--cyan-glow); font-weight:bold;">${effStats.minigame.hookWindowMs}ms</span></div>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Stamina Pool</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.stamina}</span></div>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Max Line Tension</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.maxTension}</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Reeling Power</span> ${fmt(effStats.minigame.power, true)}</div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Hook Window</span> <span style="color:var(--cyan-glow); font-weight:bold;">${effStats.minigame.hookWindowMs}ms</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Stamina Pool</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.stamina}</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Max Line Tension</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.maxTension}</span></div>
             </div>
             <div class="dashboard-group">
                 <h3>🗺️ Exploration & Survival</h3>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Boat Speed</span> ${fmt(effStats.exploration.speed, true)}</div>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Boat Stealth</span> ${fmt(effStats.exploration.stealth, true)}</div>
-                <div class="grim-stat-row" style="font-size:1.3rem; padding:0.4rem 0;"><span>Hazard Dodge Chance</span> <span class="dash-pos">${Math.round(effStats.exploration.hazardDodgeChance * 100)}%</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Boat Speed</span> ${fmt(effStats.exploration.speed, true)}</div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Boat Stealth</span> ${fmt(effStats.exploration.stealth, true)}</div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Hazard Dodge Chance</span> <span class="dash-pos">${Math.round(effStats.exploration.hazardDodgeChance * 100)}%</span></div>
             </div>
         `;
     },
@@ -896,8 +915,10 @@ renderBestiary() {
         
         document.getElementById('grim-bestiary-img').src = fish.art.imageDataUrl;
         document.getElementById('grim-bestiary-name').innerText = fish.identity.name;
-        // FIXED: Replaced undefined rarity with 'Species' text
-        document.getElementById('grim-bestiary-sub').innerText = `Species: ${fish.identity.family}`;
+        
+        // FIX: Revert to Cyan (Base Species) and fix undefined subtitle!
+        document.getElementById('grim-bestiary-name').style.color = 'var(--cyan-glow)';
+        document.getElementById('grim-bestiary-sub').innerText = `Family: ${fish.identity.family}`;
         
         const xp = entry.xp;
 

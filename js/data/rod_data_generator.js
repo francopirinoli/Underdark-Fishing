@@ -151,7 +151,7 @@ export function generateRodData(options = {}) {
         id: `rod_${rng.int(100000, 999999)}`,
         seed: seed,
         identity: {
-            name: `${rarityObj.name} ${artResult.name}`,
+            name: artResult.name, // Rarity prefix removed!
             baseName: artResult.name,
             rarity: rarityObj.name
         },

@@ -7,6 +7,7 @@ import { SFX } from '../audio/sfx_generator.js';
 import { createRng } from '../util/rng.js';
 import { DialogueGenerator } from '../economy/dialogue_generator.js';
 import { PlayerEngine } from '../data/player_data.js';
+import { getRarityColor, getItemColor } from '../util/utils.js';
 
 export const EncounterUI = {
     gameState: null,
@@ -132,11 +133,14 @@ export const EncounterUI = {
                 let imgSrc = item.imageDataUrl || (item.itemData ? item.itemData.art.imageDataUrl : '');
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
 
+                const itemName = item.name || (item.identity ? item.identity.name : 'Item');
+                const nameColor = getItemColor(item.itemData || item);
+
                 row.innerHTML = `
                     <div style="display:flex; gap: 1rem; align-items:center;">
                         ${imgHtml}
                         <div class="shop-item-info">
-                            <b>${item.name}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
+                            <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
                             <p>${item.desc || `Stock: ${item.stock}`}</p>
                         </div>
                     </div>
@@ -189,11 +193,14 @@ export const EncounterUI = {
                 let imgSrc = item.invType === 'fish' ? item.art.imageDataUrl : item.imageDataUrl;
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
 
+                const itemName = item.name || (item.identity ? item.identity.name : 'Item');
+                const nameColor = getItemColor(item);
+
                 row.innerHTML = `
                     <div style="display:flex; gap: 1rem; align-items:center;">
                         ${imgHtml}
                         <div class="shop-item-info">
-                            <b>${item.name || (item.identity ? item.identity.name : 'Item')}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.invType}]</span>
+                            <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.invType}]</span>
                             ${item.invType === 'fish' ? `<p>${item.actualWeight}kg</p>` : ''}
                         </div>
                     </div>
@@ -230,7 +237,10 @@ export const EncounterUI = {
         const tt = document.getElementById('shop-tooltip');
         if (!tt) return;
         const player = this.gameState.player;
-        let html = `<b>${item.name}</b>`;
+        
+        let itemName = item.name || (item.identity ? item.identity.name : 'Unknown Item');
+        let nameColor = getItemColor(item.itemData || item);
+        let html = `<b style="color: ${nameColor};">${itemName}</b>`;
         
         if (item.type === 'rod') {
             const eq = player.gear.rod.stats;
@@ -245,9 +255,18 @@ export const EncounterUI = {
                      <div class="tt-row"><span>Sound:</span> <span>${fmt(item.stats.sound)}</span></div>
                      <div class="tt-row"><span>Light:</span> <span>${fmt(item.stats.light)}</span></div>
                      <div class="tt-row"><span>Weight:</span> <span>${fmt(item.stats.weight)}</span></div>`;
+        } else if (item.invType === 'fish') {
+            const familyName = item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1);
+            html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem;">
+                        <span style="color:var(--text-muted);">${item.identity.rarity} ${familyName}</span>
+                     </div>
+                     <div class="tt-row"><span>Size:</span> <span>${item.physical.sizeTier}</span></div>
+                     <div class="tt-row"><span>Weight:</span> <span>${item.actualWeight}kg</span></div>
+                     <div class="tt-row"><span>Habitat:</span> <span style="text-transform:capitalize;">${item.environment.depthPref}</span></div>`;
         } else {
-            html += `<p style="margin:0; color:var(--text-main);">${item.desc}</p>`;
+            html += `<p style="margin:0; color:var(--text-main);">${item.desc || ''}</p>`;
         }
+        
         tt.innerHTML = html;
         tt.style.display = 'block';
         this.moveShopTooltip(e);
@@ -256,12 +275,23 @@ export const EncounterUI = {
     moveShopTooltip(e) {
         const tt = document.getElementById('shop-tooltip');
         if (!tt || tt.style.display === 'none') return;
+        
         const container = document.getElementById('game-container');
         const rect = container.getBoundingClientRect();
         const scaleX = 1280 / rect.width;
         const scaleY = 720 / rect.height;
-        tt.style.left = `${(e.clientX - rect.left) * scaleX + 15}px`;
-        tt.style.top = `${(e.clientY - rect.top) * scaleY + 15}px`;
+        
+        let x = (e.clientX - rect.left) * scaleX + 15;
+        let y = (e.clientY - rect.top) * scaleY + 15;
+        
+        const ttW = tt.offsetWidth || 250;
+        const ttH = tt.offsetHeight || 150;
+
+        if (x + ttW > 1280) x = (e.clientX - rect.left) * scaleX - ttW - 15;
+        if (y + ttH > 720) y = (e.clientY - rect.top) * scaleY - ttH - 15;
+        
+        tt.style.left = `${x}px`;
+        tt.style.top = `${y}px`;
     },
 
     hideShopTooltip() {

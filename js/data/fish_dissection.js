@@ -87,7 +87,7 @@ export const DissectionEngine = {
 
             parts.push({
                 id: `part_${rng.int(10000, 99999)}`,
-                name: `${fish.identity.rarity} ${visualId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`,
+                name: visualId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), // Rarity prefix removed!
                 visualId: visualId,
                 rarity: fish.identity.rarity,
                 stats: partStats,

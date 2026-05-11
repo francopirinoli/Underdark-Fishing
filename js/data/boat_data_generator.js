@@ -110,7 +110,7 @@ export function generateBoatData(options = {}) {
         id: `boat_${rng.int(100000, 999999)}`,
         seed: seed,
         identity: {
-            name: `${rarityObj.name} ${artResult.name}`,
+            name: artResult.name, // Rarity prefix removed!
             baseName: artResult.name,
             rarity: rarityObj.name
         },

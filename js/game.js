@@ -60,6 +60,7 @@ let currentLocalFisherman = null;
 let discoveredNodes =[];
 let gameDay = 1;
 let gameTimeMinutes = 8 * 60; 
+let fungalRotTimer = 0; // NEW: Tracks time inside toxic spore storms
 
 // Inputs
 const keys = { forward: false, backward: false, left: false, right: false, action: false, actionJustPressed: false };
@@ -153,8 +154,8 @@ function startNewDescent(slot, identityData, stats, points) {
     // 1. GENERATE THE WORLD FIRST
     world = generateGlobalMap(Date.now(),[]);
     
-    // 2. NOW WE CAN CALL THE EVENT MANAGER (because world.seed exists)
-    EventManager.onNewDay(1, world.seed);
+// 2. NOW WE CAN CALL THE EVENT MANAGER (because world exists)
+    EventManager.onNewDay(1, world);
     
     let startNode = world.nodes.flat().find(n => n.hasSettlement) || world.nodes[world.startY][world.startX];
     
@@ -253,10 +254,16 @@ function loadLocalNode(entryDir) {
 
     let spawnX = LOCAL_MAP_SIZE / 2, spawnY = LOCAL_MAP_SIZE / 2;
     const EDGE_OFFSET = 15;
+    
     if (entryDir === 'n') spawnY = LOCAL_MAP_SIZE - EDGE_OFFSET;
     else if (entryDir === 's') spawnY = EDGE_OFFSET;
     else if (entryDir === 'e') spawnX = EDGE_OFFSET;
     else if (entryDir === 'w') spawnX = LOCAL_MAP_SIZE - EDGE_OFFSET;
+    else if (entryDir === 'warp') {
+        // Spawn safely tucked into the top-left corner
+        spawnX = EDGE_OFFSET * 2;
+        spawnY = EDGE_OFFSET * 2;
+    }
 
     const effStats = PlayerEngine.getEffectiveStats(player);
     const engineStats = {
@@ -306,21 +313,95 @@ function loadLocalNode(entryDir) {
         }
     }
 
-    // --- 3. INIT ENGINES ---
+    // --- 3. INIT ENGINES & HAZARDS ---
     ExplorationRenderer.buildMapCache(currentLocalMap, currentBiome);
     
-    // NEW: Pass currentLocalFisherman into the Engine!
-    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity, currentLocalFisherman);
+    // NEW: Get current weather for this node and init visuals!
+    const activeWeather = EventManager.Weather.getWeather(globalX, globalY);
+    ExplorationRenderer.initHazards(currentBiome.id, activeWeather);
+    
+    // Pass everything into the Engine
+    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity, currentLocalFisherman, currentBiome.id, activeWeather);
     
     HUD.cacheMinimap(currentLocalMap);
 
-    ExplorationEngine.onDamage = (amount) => {
+    // --- NEW: HAZARD WARNING LOGS ---
+    if (currentBiome.id === 'volcanic') {
+        HUD.logAction("⚠ Warning: Extreme heat. Hull integrity compromised.", "danger");
+        if (effStats.exploration.immunities.volcanic) setTimeout(() => HUD.logAction("Iron Plating holding. Heat negated.", "safe"), 1500);
+    } else if (currentBiome.id === 'frozen') {
+        HUD.logAction("⚠ Warning: Pack Ice slowing vessel.", "danger");
+        if (effStats.exploration.immunities.frozen) setTimeout(() => HUD.logAction("Icebreaker Prow cutting through floes.", "safe"), 1500);
+    }
+    
+    if (activeWeather === 'spores') {
+        HUD.logAction("⚠ Warning: Toxic Spore Storm. Rations rotting.", "danger");
+        if (effStats.exploration.immunities.fungal) setTimeout(() => HUD.logAction("Alchemical Filter purifying air.", "safe"), 1500);
+    } else if (activeWeather === 'shatter') {
+        HUD.logAction("⚠ Warning: Crystal Shatter-Storm. High Acoustic Disturbance.", "danger");
+        if (effStats.exploration.immunities.crystal) setTimeout(() => HUD.logAction("Acoustic Dampening absorbing shockwaves.", "safe"), 1500);
+    } else if (activeWeather === 'whirlpool') {
+        HUD.logAction("⚠ Warning: Void Whirlpool detected. Gravitational pull active.", "danger");
+        if (effStats.exploration.immunities.abyssal) setTimeout(() => HUD.logAction("Overclocked Motor engaging bypass thrust.", "safe"), 1500);
+    }
+
+    // --- UPDATED: Damage Callback ---
+    ExplorationEngine.onDamage = (amount, reason) => {
         player.vitals.hp -= amount;
-        SFX.playLineSnap();
-        HUD.logAction(`Collision! Hull took ${amount} damage.`, 'danger');
+        SFX.playLineSnap(); // Crunch sound
+        
+        if (reason === "Boiling Water") {
+            HUD.logAction(`Hull melting! Took ${amount} damage.`, 'danger');
+        } else if (reason === "Falling Crystal") {
+            // NEW: Warn the player that a crystal hit them
+            HUD.logAction(`A falling crystal struck the hull! Took ${amount} damage.`, 'danger');
+        } else {
+            HUD.logAction(`Collision! Hull took ${amount} damage.`, 'danger');
+        }
+        
         if (player.vitals.hp <= 0) handleDeath();
     };
 
+    // --- NEW: WHIRLPOOL TELEPORT CALLBACK ---
+    ExplorationEngine.onWhirlpoolWarp = () => {
+        player.vitals.hp -= 30;
+        SFX.playLineSnap();
+        HUD.logAction(`Sucked into the Void! Took 30 damage and violently ejected.`, 'danger');
+        
+        if (player.vitals.hp <= 0) {
+            handleDeath();
+            return;
+        }
+
+        // Find an undiscovered node
+        let possibleNodes = [];
+        let allNodes =[];
+        for (let y = 0; y < world.height; y++) {
+            for (let x = 0; x < world.width; x++) {
+                allNodes.push({x, y});
+                if (!world.nodes[y][x].isDiscovered) {
+                    possibleNodes.push({x, y});
+                }
+            }
+        }
+
+        // Pick an undiscovered node, or fall back to any random node if fully explored
+        const list = possibleNodes.length > 0 ? possibleNodes : allNodes;
+        const target = list[Math.floor(Math.random() * list.length)];
+
+        globalX = target.x;
+        globalY = target.y;
+
+        const nodeKey = `${globalX},${globalY}`;
+        if (!discoveredNodes.includes(nodeKey)) {
+            discoveredNodes.push(nodeKey);
+            world.nodes[globalY][globalX].isDiscovered = true;
+        }
+
+        saveCurrentState();
+        loadLocalNode('warp'); // Reloads the map with the safe spawn coordinates
+    };
+    
     ExplorationEngine.onZoneTransition = (dir) => {
         let moved = false;
         if (dir === 'n' && targetNode.exits.n && globalY > 0) { globalY--; moved = true; }
@@ -381,6 +462,9 @@ function enterHub() {
     const targetNode = world.nodes[globalY][globalX];
     HUD.logAction("Docked at Settlement.");
     
+    // --- NEW: Switch to cozy Hub Music! ---
+    MusicEngine.playBiome('hub', createRng(world.seed + globalX + globalY));
+
     HubUI.open({ player, world, globalX, globalY, gameDay }, targetNode);
     saveCurrentState(); 
 }
@@ -388,6 +472,11 @@ function enterHub() {
 function resumeFromHub() {
     currentState = STATE.EXPLORATION;
     if (player.vitals.hp <= 0) player.vitals.hp = player.gear.boat.stats.maxHp;
+    
+    // --- NEW: Switch back to dark Biome Music! ---
+    const targetNode = world.nodes[globalY][globalX];
+    MusicEngine.playBiome(BIOMES[targetNode.biomeId].id, createRng(world.seed + globalX + globalY));
+
     lastTime = performance.now();
     requestAnimationFrame(gameLoop);
 }
@@ -410,12 +499,12 @@ function gameLoop(timestamp) {
             player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
         }
 
-        // --- NEW: TIME & DAY ROLLOVER (Events) ---
+        // --- TIME & DAY ROLLOVER (Events) ---
         gameTimeMinutes += dt; 
         if (gameTimeMinutes >= 24 * 60) { 
             gameTimeMinutes -= 24 * 60; 
             gameDay++; 
-            EventManager.onNewDay(gameDay, world.seed);
+            EventManager.onNewDay(gameDay, world); // Passed 'world' instead of 'world.seed'
             HUD.logAction("A new day begins. The Darklake shifts...", "safe");
         }
 
@@ -424,17 +513,35 @@ function gameLoop(timestamp) {
             keys.forward = keys.backward = keys.left = keys.right = false; 
         }
 
+         // --- NEW: HAZARD FUNGAL ROT ---
+        const activeWeather = EventManager.Weather.getWeather(globalX, globalY);
+        if (activeWeather === 'spores' && !effStats.exploration.immunities.fungal && player.vitals.rations > 0) {
+            fungalRotTimer += dt;
+            if (fungalRotTimer >= 45.0) { // Loses 1 ration every 45 real-time seconds in a storm
+                fungalRotTimer = 0;
+                player.vitals.rations--;
+                HUD.logAction("Spores rotting food. Lost 1 Ration.", "danger");
+                if (player.vitals.rations <= 0) {
+                    player.vitals.hp -= 20;
+                    HUD.logAction("Starving! Hull took 20 damage.", 'danger');
+                    if (player.vitals.hp <= 0) handleDeath();
+                }
+            }
+        } else {
+            fungalRotTimer = 0; // Reset if safe
+        }
+
         ExplorationEngine.update(dt, keys);
         
 // --- INTERACTION CHECK ---
         let canInteract = false;
         let interactMsg = "";
-        let interactAction = null; // NEW: Tells the engine what function to run on [E]
+        let interactAction = null; // Tells the engine what function to run on [E]
         const tx = Math.floor(ExplorationEngine.x);
         const ty = Math.floor(ExplorationEngine.y);
         
         // 1. Check for Settlement Docks
-        const searchRadius = 3; 
+        const searchRadius = 8; // INCREASED: Was 3. Now allows docking from much further away.
         for (let y = Math.max(0, ty - searchRadius); y <= Math.min(LOCAL_MAP_SIZE - 1, ty + searchRadius); y++) {
             for (let x = Math.max(0, tx - searchRadius); x <= Math.min(LOCAL_MAP_SIZE - 1, tx + searchRadius); x++) {
                 if (currentLocalMap.grid[y][x] === TILE.DOCK) {
@@ -447,13 +554,14 @@ function gameLoop(timestamp) {
             if (canInteract) break;
         }
 
-        // 2. Check for Wandering Fishermen (Generous 12-tile radius)
+        // 2. Check for Wandering Fishermen 
         if (!canInteract && currentLocalFisherman) {
             const distToFisherman = Math.hypot(tx - currentLocalFisherman.x, ty - currentLocalFisherman.y);
-            if (distToFisherman < 12) {
+            // INCREASED: Was 12. 25 gives you plenty of space to hail them without colliding.
+            if (distToFisherman < 25) { 
                 canInteract = true;
                 interactMsg = `Press [E] to hail ${currentLocalFisherman.npc.name}`;
-                interactAction = enterEncounter; // We will define this function next
+                interactAction = enterEncounter; 
             }
         }
 
@@ -473,16 +581,16 @@ function gameLoop(timestamp) {
 
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // Pass currentLocalFisherman to the renderer
-        ExplorationRenderer.render(ExplorationEngine, lightRad, mouse, false,[], currentLocalChest, currentLocalFisherman);
+        // Passed 'dt' as the 3rd argument!
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, mouse, false,[], currentLocalChest, currentLocalFisherman);
         HUD.drawMinimap(ExplorationEngine.x, ExplorationEngine.y);
     }
 
     else if (currentState === STATE.FISHING) {
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // --- NEW: Pass currentLocalChest to Renderer ---
-        ExplorationRenderer.render(ExplorationEngine, lightRad, null, true,[], currentLocalChest);
+        // Passed 'dt' as the 3rd argument!
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, null, true,[], currentLocalChest);
         
         FishingEngine.update(dt, isReeling);
         FishingRenderer.update(FishingEngine, dt, isReeling);

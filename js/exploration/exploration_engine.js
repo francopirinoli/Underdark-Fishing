@@ -5,16 +5,23 @@
  */
 
 import { TILE, LOCAL_MAP_SIZE } from './local_map.js';
-import { clamp } from '../util/utils.js';
+import { clamp, getRandomInRange } from '../util/utils.js'; // <-- Added getRandomInRange
 
 export const ExplorationEngine = {
     // --- State ---
     x: 256,
     y: 256,
     velocity: 0,
-    heading: -Math.PI / 2, // Facing North (Up)
+    heading: -Math.PI / 2, 
     currentNoise: 0, 
-    fishermanPos: null, // NEW: Tracks the NPC boat location
+    fishermanPos: null, 
+    
+    // --- NEW: Hazard State ---
+    biomeId: null,
+    weather: null,
+    volcanicTimer: 0,
+    crystalTimer: 0,
+    isWarping: false, // <-- NEW
     
     // --- Data References ---
     boatStats: null,
@@ -29,13 +36,19 @@ export const ExplorationEngine = {
     onZoneTransition: null,
     onDockInteract: null,
 
-    init(startX, startY, effectiveExplorationStats, localMapData, heading = -Math.PI / 2, velocity = 0, fishermanPos = null) {
+    init(startX, startY, effectiveExplorationStats, localMapData, heading = -Math.PI / 2, velocity = 0, fishermanPos = null, biomeId = null, weather = null) {
         this.x = startX;
         this.y = startY;
         this.velocity = velocity; 
         this.heading = heading;   
         this.currentNoise = 0;    
-        this.fishermanPos = fishermanPos; // Assign the fisherman object
+        this.fishermanPos = fishermanPos; 
+        
+        this.biomeId = biomeId;
+        this.weather = weather;
+        this.volcanicTimer = 5.0; 
+        this.crystalTimer = getRandomInRange(5.0, 15.0);
+        this.isWarping = false; // <-- NEW
         
         this.boatStats = effectiveExplorationStats; 
         this.localMap = localMapData;
@@ -46,31 +59,70 @@ export const ExplorationEngine = {
     update(dt, input) {
         if (!this.boatStats || !this.localMap) return;
 
+        const imm = this.boatStats.immunities || {};
+
+        // --- HAZARD: FROZEN (Pack Ice) ---
+        let envSpeedMult = 1.0;
+        let envTurnMult = 1.0;
+        if (this.biomeId === 'frozen' && !imm.frozen) {
+            envSpeedMult = 0.5; // Halves speed and acceleration
+            envTurnMult = 0.5;  // Extremely sluggish turning
+        }
+
         // --- 1. ROTATION ---
-        const turnRate = (this.boatStats.turnSpeed * (Math.PI / 180)) * dt;
+        const turnRate = (this.boatStats.turnSpeed * envTurnMult * (Math.PI / 180)) * dt;
         if (input.left)  this.heading -= turnRate;
         if (input.right) this.heading += turnRate;
 
         // --- 2. ACCELERATION & THRUST ---
         let thrust = 0;
-        if (input.forward) thrust = this.boatStats.acceleration;
-        if (input.backward) thrust = -this.boatStats.acceleration * 0.5;
+        if (input.forward) thrust = this.boatStats.acceleration * envSpeedMult;
+        if (input.backward) thrust = -this.boatStats.acceleration * envSpeedMult * 0.5;
 
         this.velocity += thrust * dt;
         this.velocity -= this.velocity * this.waterFriction * dt;
 
-        const maxSpeed = this.boatStats.speed;
+        const maxSpeed = this.boatStats.speed * envSpeedMult;
         this.velocity = clamp(this.velocity, -maxSpeed * 0.4, maxSpeed);
 
-        // --- 3. MOVEMENT ---
-        const dx = Math.cos(this.heading) * this.velocity * dt;
-        const dy = Math.sin(this.heading) * this.velocity * dt;
+// --- 3. MOVEMENT & HAZARD: ABYSSAL WHIRLPOOL ---
+        let moveX = Math.cos(this.heading) * this.velocity * dt;
+        let moveY = Math.sin(this.heading) * this.velocity * dt;
 
-        this.x += dx;
-        this.y += dy;
+        if (this.weather === 'whirlpool' && !imm.abyssal) {
+            const cx = LOCAL_MAP_SIZE / 2;
+            const cy = LOCAL_MAP_SIZE / 2;
+            const dist = Math.hypot(cx - this.x, cy - this.y);
+            
+            if (dist > 3) {
+                // Gravity becomes stronger the closer you get to the center
+                const pullStrength = 8.0 + (80 / Math.max(5, dist)); // Smoothed out curve
+                moveX += ((cx - this.x) / dist) * pullStrength * dt;
+                moveY += ((cy - this.y) / dist) * pullStrength * dt;
+            } else {
+                // SUCKED INTO THE EVENT HORIZON!
+                // Trigger the dedicated warp callback exactly once
+                if (!this.isWarping && this.onWhirlpoolWarp) {
+                    this.isWarping = true;
+                    this.onWhirlpoolWarp();
+                }
+            }
+        }
+
+        this.x += moveX;
+        this.y += moveY;
 
         // --- 4. COLLISION DETECTION ---
         this._checkCollisions();
+
+        // --- HAZARD: VOLCANIC BOILING WATER ---
+        if (this.biomeId === 'volcanic' && !imm.volcanic) {
+            this.volcanicTimer -= dt;
+            if (this.volcanicTimer <= 0) {
+                this.volcanicTimer = 20.0; // 1 HP damage every 20 seconds
+                if (this.onDamage) this.onDamage(1, "Boiling Water");
+            }
+        }
 
         // --- 5. ZONE TRANSITIONS ---
         this._checkZoneTransitions();
@@ -78,19 +130,37 @@ export const ExplorationEngine = {
         // --- 6. DOCK INTERACTION ---
         if (input.action) this._checkDock();
 
-        // --- 7. STEALTH & NOISE CALCULATION ---
+        // --- 7. STEALTH & HAZARD: CRYSTAL SHATTER-STORMS ---
         let thrustNoise = (input.forward || input.backward) ? 60 : 0;
         let speedNoise = (Math.abs(this.velocity) / this.boatStats.speed) * 40;
         
         let rawNoise = thrustNoise + speedNoise;
         let targetNoise = rawNoise / Math.max(0.1, this.boatStats.stealth);
-        targetNoise = clamp(targetNoise, 0, 100);
         
-        if (targetNoise > this.currentNoise) {
-            this.currentNoise += (targetNoise - this.currentNoise) * 5.0 * dt;
-        } else {
-            this.currentNoise += (targetNoise - this.currentNoise) * 0.3 * dt;
+        // Apply smooth transition
+        if (targetNoise > this.currentNoise) this.currentNoise += (targetNoise - this.currentNoise) * 5.0 * dt;
+        else this.currentNoise += (targetNoise - this.currentNoise) * 0.3 * dt;
+
+        // Crystal Shatter-Storm randomly spikes noise to terrifying levels and drops sharp debris
+        if (this.weather === 'shatter' && !imm.crystal) {
+            this.crystalTimer -= dt;
+            if (this.crystalTimer <= 0) {
+                this.crystalTimer = getRandomInRange(5.0, 12.0); // Spikes randomly every 5 to 12 seconds
+                this.currentNoise += getRandomInRange(50, 100);  // Massive noise injection
+                
+                // --- NEW: 40% chance for a crystal shard to physically strike the boat ---
+                if (Math.random() < 0.40) {
+                    // Check if the player's Driving stat helps them dodge it!
+                    if (Math.random() > this.boatStats.hazardDodgeChance) {
+                        const damage = Math.floor(getRandomInRange(5, 15));
+                        if (this.onDamage) this.onDamage(damage, "Falling Crystal");
+                    } else {
+                        console.log("Dodged falling crystal!"); // Silent dodge, just spares the HP
+                    }
+                }
+            }
         }
+
         this.currentNoise = clamp(this.currentNoise, 0, 100);
     },
 

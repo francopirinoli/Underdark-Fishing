@@ -49,6 +49,13 @@ export function moveStatTooltip(e) {
     let x = (e.clientX - rect.left) * scaleX + 15;
     let y = (e.clientY - rect.top) * scaleY + 15;
     
+    // Prevent clipping
+    const ttW = tt.offsetWidth;
+    const ttH = tt.offsetHeight;
+
+    if (x + ttW > 1280) x -= (ttW + 30);
+    if (y + ttH > 720) y -= (ttH + 30);
+    
     tt.style.left = `${x}px`;
     tt.style.top = `${y}px`;
 }
@@ -74,4 +81,34 @@ export function buildStatSlider(label, value, leftText, rightText, deltaText = "
             </div>
         </div>
     `;
+}
+
+export function getRarityColor(rarity) {
+    switch(rarity) {
+        case 'Common': return '#94A3B8'; // Muted Gray
+        case 'Uncommon': return '#22C55E'; // Green
+        case 'Rare': return '#3B82F6'; // Blue
+        case 'Legendary': return '#F59E0B'; // Gold
+        case 'Boss': return '#EF4444'; // Red
+        default: return 'var(--text-main)';
+    }
+}
+
+
+// NEW: Smartly determines the color of ANY item in the game
+export function getItemColor(item) {
+    if (!item) return 'var(--text-main)';
+    
+    // Lures and Chests are always Gold
+    if (item.invType === 'lure' || item.invType === 'chest' || item.invType === 'chest_encounter') {
+        return 'var(--gold-warn)';
+    }
+    
+    // Check for rarity inside identity (Gear/Fish) or at the root (Parts)
+    const rarity = item.identity ? item.identity.rarity : item.rarity;
+    
+    // If it has no rarity (like a base species in the bestiary), default to Cyan
+    if (!rarity) return 'var(--cyan-glow)'; 
+    
+    return getRarityColor(rarity);
 }
