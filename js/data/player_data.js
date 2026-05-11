@@ -7,6 +7,7 @@
 import { generateBoatData } from './boat_data_generator.js';
 import { generateRodData } from './rod_data_generator.js';
 import { generateLure } from '../art/lure_generator.js'; 
+import { createRng } from '../util/rng.js'; // <-- NEW: Add this import
 
 const MAX_LEVEL = 10;
 const MAX_STAT_VALUE = 5; 
@@ -40,9 +41,14 @@ export const PlayerEngine = {
         starterRod.invType = 'rod';   
 
         // Generate a baseline lure with art so it appears during the fishing minigame
-        const starterLureArt = generateLure({ components: ['iron_sinker', 'fish_gut'] });
+        const starterLureSeed = Date.now();
+        const starterComponents = ['iron_sinker', 'fish_gut'];
+        const starterLureArt = generateLure({ rng: createRng(starterLureSeed), components: starterComponents });
+        
         const starterLure = {
             id: 'lure_starter',
+            seed: starterLureSeed,             // <-- NEW
+            components: starterComponents,     // <-- NEW
             name: 'Basic Jig',
             invType: 'lure',  
             basePrice: 15,    
@@ -57,7 +63,8 @@ export const PlayerEngine = {
                 name: options.name || "Unknown Angler",
                 race: options.race || "Human",
                 gender: options.gender || "Female",
-                portraitData: options.portraitData || null
+                portraitData: options.portraitData || null,
+                portraitSeed: options.portraitSeed || Date.now() // <-- NEW
             },
             vitals: {
                 level: 1,
@@ -140,6 +147,11 @@ export const PlayerEngine = {
         let effectiveStamina = 50 + (stats.stamina * 30);
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
+        
+        let effectiveSweetSpotTolerance = Math.max(2, Math.min(20, 5 + (rodSens / 100))); 
+        
+        // NEW: Base scroll speed is 1.0x. High sens (e.g., 300) = 1.6x scroll speed. Low sens (-100) = 0.8x.
+        let effectiveReelScrollSpeed = Math.max(0.5, 1.0 + (rodSens / 500));
 
         if (rod && rod.traits) {
             rod.traits.forEach(t => {
@@ -228,7 +240,9 @@ export const PlayerEngine = {
                 hookWindowMs: Math.round(effectiveHookWindow),
                 stamina: effectiveStamina,
                 maxTension: effectiveMaxTension,
-                flexibility: Number(effectiveFlexibility.toFixed(2))
+                flexibility: Number(effectiveFlexibility.toFixed(2)),
+                sweetSpotTolerance: Number(effectiveSweetSpotTolerance.toFixed(1)),
+                reelScrollSpeed: Number(effectiveReelScrollSpeed.toFixed(2)) // <-- NEW
             },
             exploration: {
                 maxHp: Math.round(effectiveMaxHp),

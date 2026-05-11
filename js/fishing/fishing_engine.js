@@ -8,11 +8,11 @@ import { getRandomInRange, clamp } from '../util/utils.js';
 
 // [FIX]: Added selfDrain to behaviors. Negative means regen, positive means burning energy.
 const BEHAVIORS = {
-    HOLD:     { pullMult: 0.2, catchable: true,  stamDrainMult: 1.0, selfDrain: -6 }, 
-    RUN:      { pullMult: 1.0, catchable: true,  stamDrainMult: 1.2, selfDrain: 6 }, 
-    THRASH:   { pullMult: 1.8, catchable: false, stamDrainMult: 3.5, selfDrain: 18 }, 
-    BURST:    { pullMult: 3.5, catchable: false, stamDrainMult: 1.0, selfDrain: 12 },
-    INANIMATE:{ pullMult: 0.8, catchable: true,  stamDrainMult: 0.8, selfDrain: 0 } // NEW: For Treasures
+    HOLD:     { pullMult: 0.2, catchable: true,  stamDrainMult: 1.0, selfDrain: -6,  dragSlip: 0 }, 
+    RUN:      { pullMult: 1.0, catchable: true,  stamDrainMult: 1.2, selfDrain: 6,   dragSlip: -15 }, // Steals 15% power per second
+    THRASH:   { pullMult: 1.8, catchable: false, stamDrainMult: 3.5, selfDrain: 18,  dragSlip: 'shake' }, // Violently vibrates the dial
+    BURST:    { pullMult: 3.5, catchable: false, stamDrainMult: 1.0, selfDrain: 12,  dragSlip: -40 }, // Rips drag out rapidly
+    INANIMATE:{ pullMult: 0.8, catchable: true,  stamDrainMult: 0.8, selfDrain: 0,   dragSlip: 0 } 
 };
 
 export const FishingEngine = {
@@ -28,7 +28,6 @@ export const FishingEngine = {
     targetDepth: 0,
     maxDepth: 20,
     waterCurrent: 0, 
-
     tension: 0,
     maxTension: 100,
     fishStamina: 0,
@@ -37,8 +36,9 @@ export const FishingEngine = {
     maxPlayerStamina: 0,
     playerStaminaRegen: 0, 
     catchProgress: 0, 
-    
-    hookTimerMs: 0, 
+    reelPower: 50,      // <-- NEW
+    inSweetSpot: false, // <-- NEW
+    hookTimerMs: 0,
     fightTimer: 0,    
     maxFightTimer: 0,
     
@@ -62,6 +62,8 @@ export const FishingEngine = {
         this.maxTension = this.playerStats.minigame.maxTension;
         this.tension = 0;
         this.catchProgress = 0;
+        this.reelPower = 50;      // <-- NEW
+        this.inSweetSpot = false; // <-- NEW
         this.phase = 'SINKING';
     },
 
@@ -69,6 +71,21 @@ export const FishingEngine = {
         if (this.phase === 'SINKING') {
             this.targetDepth = clamp(this.targetDepth + delta, 0, this.maxDepth);
         }
+    },
+
+    scrollReelPower(delta) {
+        // Base increment is 1% per standard wheel notch.
+        const baseIncrement = 1.0; 
+        
+        // Rod sensitivity determines how fast the player can physically adjust the drag
+        const speedMult = this.playerStats.minigame.reelScrollSpeed || 1.0;
+        
+        // Normalize delta: Standard mouse wheel click = 100 delta. 
+        // This ensures smooth trackpads and clicky wheels both scale perfectly to 1% chunks.
+        const normalizedDelta = delta / 100; 
+        
+        const scrollAmount = -normalizedDelta * baseIncrement * speedMult;
+        this.reelPower = clamp(this.reelPower + scrollAmount, 10, 100);
     },
 
     getDepthZone() {
@@ -221,45 +238,73 @@ export const FishingEngine = {
 
     _applyPhysics(dt, isReeling) {
         const behavior = BEHAVIORS[this.ai.state];
+
+        // --- NEW: FISH FIGHTS THE DRAG DIAL ---
+        // If the fish has stamina and is fighting back, it alters the Reel Power
+        if (this.fishStamina > 0 && this.fishData.combat.aggression > 0) {
+            if (behavior.dragSlip === 'shake') {
+                // Erratic shaking (-40% to +40% per second)
+                const shake = (Math.random() - 0.5) * 80 * dt;
+                this.reelPower += shake;
+            } else if (behavior.dragSlip !== 0) {
+                // Consistent pull (loosens drag)
+                // Faster, more aggressive fish slip the drag significantly harder
+                const pullPower = behavior.dragSlip * (this.fishData.combat.speed / 50) * (this.fishData.combat.aggression + 0.5) * dt;
+                this.reelPower += pullPower;
+            }
+            this.reelPower = clamp(this.reelPower, 10, 100);
+        }
+
+        // --- SWEET SPOT CHECK ---
+        if (this.fishData.combat.aggression === 0) {
+            this.inSweetSpot = false;
+        } else {
+            const opt = this.fishData.combat.optimalReel;
+            const tol = this.playerStats.minigame.sweetSpotTolerance;
+            this.inSweetSpot = Math.abs(this.reelPower - opt) <= tol;
+        }
+
         const fishSpeed = this.fishData.combat.speed;
         const rodPower = this.playerStats.minigame.power;
         const flex = this.playerStats.minigame.flexibility;
+
+        const powerMult = this.reelPower / 50; // 50% is baseline 1.0x
 
         let fishPullForce = (this.fishStamina > 0) ? (fishSpeed * behavior.pullMult) : 0;
         
         // 1. TENSION & EXHAUSTION
         if (isReeling) {
-            const reelFriction = 30 * rodPower; 
-            this.tension += (fishPullForce + reelFriction) * dt;
+            const reelFriction = 30 * rodPower * powerMult; 
+            const rawTensionIncrease = (fishPullForce + reelFriction) * dt;
+            this.tension += this.inSweetSpot ? (rawTensionIncrease * 0.7) : rawTensionIncrease;
         } else {
-            // [FIX]: EXHAUSTION PENALTY. If stamina is 0, tension decay is crippled!
             const baseDecay = 50 * flex;
             const decay = (this.playerStamina <= 0) ? (baseDecay * 0.1) : baseDecay;
-            
             this.tension -= (decay - (fishPullForce * 0.4)) * dt; 
         }
         this.tension = clamp(this.tension, 0, this.maxTension + 10); 
 
-        // 2. PLAYER STAMINA (Doubled Drain)
+        // 2. PLAYER STAMINA
         if (isReeling) {
-            const drain = 50 * behavior.stamDrainMult; 
+            const drain = 50 * behavior.stamDrainMult * Math.pow(powerMult, 1.5); 
             this.playerStamina -= drain * dt;
         } else {
             this.playerStamina += this.playerStaminaRegen * dt;
         }
         this.playerStamina = clamp(this.playerStamina, 0, this.maxPlayerStamina);
 
-        // 3. FISH STAMINA (Reel Damage + Inherent AI Behavior Drain)
+        // 3. FISH STAMINA
         if (isReeling && behavior.catchable) {
-            this.fishStamina -= (12 * rodPower) * dt;
+            this.fishStamina -= (12 * rodPower * powerMult) * dt;
         }
-        this.fishStamina -= behavior.selfDrain * dt; // Active Drain/Regen
+        this.fishStamina -= behavior.selfDrain * dt; 
         this.fishStamina = clamp(this.fishStamina, 0, this.maxFishStamina);
 
         // 4. CATCH PROGRESS
         if (isReeling && behavior.catchable) {
             const exhaustMult = (this.fishStamina <= 0) ? 3.0 : (1.5 - (this.fishStamina / this.maxFishStamina)); 
-            this.catchProgress += (8 * rodPower * exhaustMult) * dt;
+            const sweetSpotMult = this.inSweetSpot ? 1.5 : 1.0; 
+            this.catchProgress += (8 * rodPower * exhaustMult * powerMult * sweetSpotMult) * dt;
         }
         this.catchProgress = clamp(this.catchProgress, 0, 100);
     },

@@ -141,10 +141,21 @@ export const SFX = {
         SYNTHS.ripple.triggerAttackRelease("4n");
     },
     
-    playReel() {
+    playReel(powerPct = 50) {
         if (!SYNTHS.reel) return;
-        const notes =["C5", "C#5", "D5"];
-        SYNTHS.reel.triggerAttackRelease(notes[Math.floor(Math.random()*notes.length)], "64n");
+        const notes =["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        
+        // Map 10-100 power to an octave shift of roughly -1 to +1
+        const shift = (powerPct - 50) / 50; 
+        const totalSemitones = Math.round(shift * 12);
+        
+        let finalIdx = 0 + totalSemitones; // Base note C
+        let oct = 5;
+        
+        while (finalIdx >= 12) { finalIdx -= 12; oct++; }
+        while (finalIdx < 0) { finalIdx += 12; oct--; }
+        
+        SYNTHS.reel.triggerAttackRelease(`${notes[finalIdx]}${oct}`, "64n");
     },
     
     playLineSnap() {

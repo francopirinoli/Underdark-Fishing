@@ -68,13 +68,22 @@ export const ExplorationRenderer = {
     buildMapCache(localMap, biome) {
         this.currentBiome = biome; // Save biome for particles
         
-        this.offscreenMap = document.createElement('canvas');
-        this.offscreenMap.width = localMap.width * this.TILE_SIZE;
-        this.offscreenMap.height = localMap.height * this.TILE_SIZE;
-        const offCtx = this.offscreenMap.getContext('2d');
+        // --- NEW: REUSE OFFSCREEN CANVAS TO PREVENT MEMORY LEAKS ---
+        if (!this.offscreenMap) {
+            this.offscreenMap = document.createElement('canvas');
+        }
+        
+        // Ensure dimensions match
+        if (this.offscreenMap.width !== localMap.width * this.TILE_SIZE || 
+            this.offscreenMap.height !== localMap.height * this.TILE_SIZE) {
+            this.offscreenMap.width = localMap.width * this.TILE_SIZE;
+            this.offscreenMap.height = localMap.height * this.TILE_SIZE;
+        }
+
+        const offCtx = this.offscreenMap.getContext('2d', { willReadFrequently: true });
         offCtx.imageSmoothingEnabled = false;
 
-        this.dockPositions =[]; 
+        this.dockPositions = []; 
         this.ambientRipples =[]; // Reset ripples for new map
 
         const pal = biome.palette;
@@ -84,8 +93,7 @@ export const ExplorationRenderer = {
         };
 
         const colors = {
-            [TILE.WATER]: hexToRgb(pal.water),
-            [TILE.DEEP_WATER]: hexToRgb(pal.deepWater),
+            [TILE.WATER]: hexToRgb(pal.water),[TILE.DEEP_WATER]: hexToRgb(pal.deepWater),
             [TILE.LAND]: hexToRgb(pal.land),
             [TILE.ROCK]: hexToRgb(pal.rock),
             [TILE.FLORA]: hexToRgb(pal.flora),
@@ -104,8 +112,7 @@ export const ExplorationRenderer = {
                     this.dockPositions.push({ x, y });
                 }
                 
-                // --- NEW: Scatter Ambient Ripples ---
-                // ~2% chance to place a ripple on any water tile
+                // Scatter Ambient Ripples
                 if ((tileId === TILE.WATER || tileId === TILE.DEEP_WATER) && Math.random() < 0.02) {
                     this.ambientRipples.push({
                         wx: x * this.TILE_SIZE + Math.random() * this.TILE_SIZE,

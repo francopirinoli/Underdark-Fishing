@@ -1,8 +1,8 @@
 /**
  * js/art/elf_female.js
  * Generates highly varied Elf Female portraits.
- * Blends slender elven anatomy (sharp jaws, distinct ears) with feminine 
- * cosmetic rendering (lashes, plump lips) and elegant layered hairstyles.
+ * V5 - Complete Overhaul: Fixed hair collapse (beard bug), removed dithering, 
+ * implemented organic squircle skull math, sculpted cheekbones, and sweeping tattoos.
  */
 
 import { drawScaledRect } from '../util/utils.js';
@@ -18,12 +18,14 @@ export function generateElfFemale(options = {}) {
     const eye = options.eye;
     const cloth = options.cloth;
 
-    // Color Blending Helper for smooth hair highlights
+    // Color Blending Helpers for ethereal, soft shading
     const hex2rgb = h =>[parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
-    const rgb2hex = ([r,g,b]) => `#${(1<<24|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
+    const rgb2hex = ([r,g,b]) => `#${(1<<24|(r<<16)|(g<<8)|b).toString(16).slice(1).padStart(6, '0')}`;
     const blend = (c1, c2, t) => rgb2hex(hex2rgb(c1).map((v,i) => Math.round(v + (hex2rgb(c2)[i]-v)*t)));
     
     const hairSoftHigh = blend(hair.base, hair.highlight, 0.4);
+    const lipDark = blend(skin.shadow, '#7F1D1D', 0.25); // Subtle, natural dark lip
+    const lipLight = blend(skin.base, '#BE123C', 0.15); // Soft rosy tint for the bottom lip
 
     const offscreenCanvas = document.createElement('canvas');
     offscreenCanvas.width = CANVAS_SIZE;
@@ -48,7 +50,7 @@ export function generateElfFemale(options = {}) {
     const eyeY = 28; 
     const noseY = 38;    
     const mouthY = 44;
-    const chinY = 51;    
+    const chinY = 51; // Elegant long face
 
     // --- 1. PROCEDURAL PARAMETERS ---
     const jawShape = rng.pick(['v_shape', 'pointed', 'diamond', 'narrow_oval']);
@@ -60,15 +62,12 @@ export function generateElfFemale(options = {}) {
     const earStyle = rng.pick(['high_elf', 'horizontal', 'swept_back', 'leaf_shaped']);
     const earLength = rng.int(5, 8);
     
-    // Decoupled Hair
     const hairStyle = rng.pick(['long_straight', 'wavy', 'half_up', 'elegant_braid', 'pixie', 'high_bun']);
     const bangStyle = rng.pick(['swept', 'parted', 'fringe', 'none']); 
     
     const clothStyle = rng.pick(['elegant_gown', 'leather_armor', 'tunic', 'cowl', 'high_collar']);
     const feature = rng.pick(['none', 'none', 'earrings', 'freckles', 'scar', 'sylvan_tattoos']); 
 
-    const lipDark = '#7F1D1D'; 
-    const lipLight = '#BE123C'; 
     const lashColor = '#020617'; 
 
     // --- 2. FACIAL CONTOUR MAP ---
@@ -79,15 +78,15 @@ export function generateElfFemale(options = {}) {
         let w = 0;
         if (y <= eyeY) {
             const dy = (eyeY - y) / (eyeY - headTopY); 
-            w = maxW * Math.pow(1 - Math.pow(dy, 2), 0.45); // Smooth dome
+            w = maxW * Math.pow(1 - Math.pow(dy, 2), 0.5); // Smooth organic dome
         } else {
             const dy = (y - eyeY) / (chinY - eyeY); 
-            if (jawShape === 'v_shape') w = maxW - (maxW - 3) * Math.pow(dy, 1.2);
+            if (jawShape === 'v_shape') w = maxW - (maxW - 3) * Math.pow(dy, 1.3);
             else if (jawShape === 'pointed') w = maxW - (maxW - 2) * Math.pow(dy, 1.1); 
-            else if (jawShape === 'diamond') w = maxW + (dy < 0.35 ? dy * 1.5 : -(dy - 0.35) * 4.5); 
-            else if (jawShape === 'narrow_oval') w = maxW * Math.sqrt(1 - dy * dy * 0.9);
+            else if (jawShape === 'diamond') w = maxW + (dy < 0.35 ? dy * 1.2 : -(dy - 0.35) * 4); 
+            else if (jawShape === 'narrow_oval') w = maxW * Math.sqrt(1 - dy * dy * 0.95);
         }
-        faceW[y] = Math.max(2, Math.round(w)); // Pointy chins can drop to just 2px wide
+        faceW[y] = Math.max(2, Math.round(w)); // Pointy chins taper smoothly
     }
 
     // --- 3. BACKGROUND HAIR ---
@@ -139,7 +138,7 @@ export function generateElfFemale(options = {}) {
     // --- 5. THE ELEGANT POINTED EARS ---
     const earRise = rng.float(0.3, 0.6); 
     
-    for (let side of [-1, 1]) {
+    for (let side of[-1, 1]) {
         let earBaseY = eyeY + 1;
         let earBaseX = faceW[earBaseY];
         
@@ -273,8 +272,9 @@ export function generateElfFemale(options = {}) {
     // --- 8. FOREGROUND HAIR ---
     const hairLineY = headTopY + 3; 
     
-    for (let y = headTopY - 6; y <= chinY + 10; y++) {
-        let skullW = faceW[y] || 0;
+    for (let y = headTopY - 7; y <= chinY + 10; y++) {
+        // FIX: The neck collapse bug!
+        let skullW = (y <= chinY) ? (faceW[y] || 0) : (faceW[chinY] || 0);
         if (y < headTopY) {
             const dy = (headTopY - y) / 6.0; 
             if (dy >= 1) skullW = 0;
@@ -291,16 +291,16 @@ export function generateElfFemale(options = {}) {
             if (hairStyle === 'pixie') {
                 if (y >= hairLineY && y < noseY && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 2) draw = true;
             } 
-            else if (hairStyle === 'long_straight' || hairStyle === 'wavy') {
-                if (y >= hairLineY && y < chinY + 6 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 3) {
-                    if (hairStyle === 'wavy') {
-                        const wave = Math.sin(y * 0.5) * 1.5;
-                        if (Math.abs(x) <= skullW + 2 + wave) draw = true;
-                    } else draw = true;
+            else if (hairStyle === 'long_straight') {
+                if (y >= hairLineY && y < chinY + 8 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 3) draw = true;
+            }
+            else if (hairStyle === 'wavy') {
+                if (y >= hairLineY && y < chinY + 8 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 4) {
+                    const wave = Math.sin(y * 0.5) * 1.5;
+                    if (Math.abs(x) <= skullW + 2 + wave) draw = true;
                 }
             } 
             else if (hairStyle === 'elegant_braid') {
-                // Sweeps across one shoulder
                 if (y >= hairLineY && y < eyeY && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 2) draw = true;
                 if (x > skullW - 1 && x < skullW + 4 && y >= eyeY && y < GRID_SIZE - 2) {
                     draw = true;
@@ -308,10 +308,15 @@ export function generateElfFemale(options = {}) {
                 }
             } 
             else if (hairStyle === 'half_up') {
-                if (y >= eyeY && y < chinY + 4 && Math.abs(x) >= skullW && Math.abs(x) <= skullW + 2) draw = true;
+                if (y >= headTopY - 6 && y < headTopY && Math.abs(x) <= 3) {
+                    if (Math.hypot(x, y - (headTopY - 2)) < 4) draw = true; // Perfect round bun
+                }
+                if (y >= eyeY && y < chinY + 6 && Math.abs(x) >= skullW && Math.abs(x) <= skullW + 2) draw = true;
             }
             else if (hairStyle === 'high_bun') {
-                if (y >= headTopY - 6 && y < headTopY && Math.abs(x) <= 4) draw = true; // Tight bun
+                if (y >= headTopY - 7 && y < headTopY && Math.abs(x) <= 4) {
+                    if (Math.hypot(x, y - (headTopY - 3)) < 4.5) draw = true; // Perfect round bun
+                }
             }
 
             // BANGS
@@ -321,7 +326,7 @@ export function generateElfFemale(options = {}) {
                 if (bangStyle === 'parted' && Math.abs(x) <= skullW && Math.abs(x) > 1 + (y - hairLineY)*0.6) draw = true;
             }
 
-            // MASK FACE & EARS (Protect the pointed ears from being overwritten by hair!)
+            // MASK FACE & EARS 
             if (y >= hairLineY && Math.abs(x) < skullW - 1) {
                 let isBangs = false;
                 if (y < eyeY) {
@@ -337,9 +342,9 @@ export function generateElfFemale(options = {}) {
             if (draw) {
                 let c = hair.base;
                 if (isBraid) {
-                    if ((x+y)%3 === 0) c = hair.shadow; 
+                    if ((x+y)%4 === 0) c = hair.shadow; 
                 } else {
-                    if (y > headTopY - 4 && y < headTopY + 2 && x > -skullW && x < 0 && (x+y)%3===0) c = hairSoftHigh; 
+                    if (y > headTopY - 4 && y < headTopY + 2 && x > -skullW && x < 0 && x % 3 === 0) c = hairSoftHigh; 
                 }
                 if (x > skullW + 1) c = hair.shadow; 
                 overPixel(cx + x, y, c);
@@ -351,20 +356,23 @@ export function generateElfFemale(options = {}) {
     if (feature === 'scar') {
         overPixel(cx + 2, eyeY + 2, '#7F1D1D'); overPixel(cx + 3, eyeY + 1, '#7F1D1D');
     }
+    
+    // Elegant sweeping tattoos
     if (feature === 'sylvan_tattoos') {
-        const inkColor = '#059669'; // Sylvan green
-        overPixel(cx - 3, eyeY + 2, inkColor); overPixel(cx - 4, eyeY + 3, inkColor);
-        overPixel(cx + 3, eyeY + 2, inkColor); overPixel(cx + 4, eyeY + 3, inkColor);
-        overPixel(cx, noseY + 2, inkColor); overPixel(cx, noseY + 3, inkColor);
+        const inkColor = blend(skin.base, '#059669', 0.6); 
+        for (let side of [-1, 1]) {
+            overPixel(cx + side*2, eyeY + 2, inkColor); 
+            overPixel(cx + side*3, eyeY + 2, inkColor);
+            overPixel(cx + side*4, eyeY + 1, inkColor);
+        }
+        overPixel(cx, headTopY + 4, inkColor);
+        overPixel(cx, headTopY + 5, inkColor);
+        overPixel(cx - 1, headTopY + 4, inkColor);
+        overPixel(cx + 1, headTopY + 4, inkColor);
     }
+    
     if (feature === 'freckles') {
-        const darkenHex = (hex, factor) => {
-            const r = Math.floor(parseInt(hex.slice(1, 3), 16) * factor);
-            const g = Math.floor(parseInt(hex.slice(3, 5), 16) * factor);
-            const b = Math.floor(parseInt(hex.slice(5, 7), 16) * factor);
-            return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-        };
-        const freckleColor = darkenHex(skin.base, 0.85); 
+        const freckleColor = blend(skin.base, '#000000', 0.15); 
         for (let i = 0; i < 6; i++) {
             const dx = rng.int(-4, 4);
             const dy = rng.int(eyeY + 2, noseY + 1);

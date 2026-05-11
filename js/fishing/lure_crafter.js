@@ -65,13 +65,15 @@ export const LureCrafter = {
 
         return {
             id: `lure_${rng.int(10000, 99999)}`,
+            seed: seed,                  // <-- NEW: Remember the seed
+            components: visualIds,       // <-- NEW: Remember the component layout
             name: art.name,
             imageDataUrl: art.imageDataUrl,
             stats: finalStats,
             durability: finalDurability,
             maxDurability: finalDurability,
             componentsUsed: parts.length,
-            basePrice: finalValue // <--- NEW: Add sell value
+            basePrice: finalValue
         };
     }
 };

@@ -1,8 +1,8 @@
 /**
  * js/art/orc_female.js
  * Generates highly varied Orc Female portraits.
- * V3 - Fixed "Collapse to Zero" hair bug causing fake beards, 
- * overhauled war paint to respect 3D shading, and improved textures.
+ * V6 - Fixed hair shelf bug, overhauled undercut/mohawk coverage logic,
+ * and improved organic background hair flow.
  */
 
 import { drawScaledRect } from '../util/utils.js';
@@ -32,6 +32,10 @@ export function generateOrcFemale(options = {}) {
     const blend = (c1, c2, t) => rgb2hex(hex2rgb(c1).map((v,i) => Math.round(v + (hex2rgb(c2)[i]-v)*t)));
     
     const hairSoftHigh = blend(hair.base, hair.highlight, 0.4);
+    const lipDark = blend(skin.shadow, '#7F1D1D', 0.35); 
+    const lipLight = blend(skin.base, '#9F1239', 0.2); 
+    const stubbleColor = blend(skin.shadow, hair.base, 0.4); // Clean 5 o'clock shadow
+    const lashColor = '#020617'; 
 
     const offscreenCanvas = document.createElement('canvas');
     offscreenCanvas.width = CANVAS_SIZE;
@@ -65,15 +69,11 @@ export function generateOrcFemale(options = {}) {
     const eyeShape = rng.pick(['fierce', 'almond', 'slanted', 'heavy_lashes']);
     
     const tuskStyle = rng.pick(['small', 'medium', 'broken', 'asymmetric']);
-    const hairStyle = rng.pick(['wild_braids', 'dreadlocks', 'war_hawk', 'shaved_sides', 'messy_long', 'high_ponytail']);
+    const hairStyle = rng.pick(['wild_braids', 'dreadlocks', 'war_hawk', 'undercut', 'messy_long', 'top_knot']);
     const bangStyle = rng.pick(['none', 'swept', 'fringe']);
     
     const clothStyle = rng.pick(['furs', 'spiked_armor', 'leather', 'tunic']);
-    const feature = rng.pick(['none', 'none', 'scar', 'war_paint', 'earrings', 'torn_ear']); 
-
-    const lipDark = '#7F1D1D'; 
-    const lipLight = '#9F1239'; 
-    const lashColor = '#020617'; 
+    const feature = rng.pick(['none', 'none', 'scar', 'war_paint', 'earrings', 'torn_ear', 'eyepatch']); 
 
     // --- 2. FACIAL CONTOUR MAP ---
     const faceW = Array(GRID_SIZE).fill(0);
@@ -83,7 +83,7 @@ export function generateOrcFemale(options = {}) {
         let w = 0;
         if (y <= eyeY) {
             const dy = (eyeY - y) / (eyeY - headTopY); 
-            w = maxW * Math.pow(1 - Math.pow(dy, 2), 0.45); 
+            w = maxW * Math.pow(1 - Math.pow(dy, 2.5), 0.35); 
         } else {
             const dy = (y - eyeY) / (chinY - eyeY); 
             if (jawShape === 'underbite') w = maxW + (dy * 1.5); 
@@ -94,10 +94,11 @@ export function generateOrcFemale(options = {}) {
     }
 
     // --- 3. BACKGROUND HAIR ---
-    if (['wild_braids', 'dreadlocks', 'messy_long', 'high_ponytail'].includes(hairStyle)) {
-        for (let y = eyeY; y < GRID_SIZE; y++) {
-            let spread = faceW[chinY] + 3 + (y - eyeY) * 0.25;
-            if (hairStyle === 'high_ponytail') spread -= (y - eyeY) * 0.15;
+    if (['wild_braids', 'dreadlocks', 'messy_long'].includes(hairStyle)) {
+        for (let y = eyeY - 2; y < GRID_SIZE; y++) {
+            // FIX: Smoothly expand from the skull width instead of jumping out instantly
+            let spread = (faceW[y] || faceW[chinY]) + 2; 
+            if (y >= chinY) spread += (y - chinY) * 0.25;
             spread = Math.floor(spread);
             
             for (let x = -spread; x <= spread; x++) {
@@ -177,34 +178,36 @@ export function generateOrcFemale(options = {}) {
         overPixel(ex - side*2, browY + 1, hair.base); overPixel(ex - side, browY, hair.base); 
         overPixel(ex, browY, hair.base); overPixel(ex + side, browY, hair.base);
         
-        if (eyeShape === 'fierce' || eyeShape === 'slanted') {
-            overPixel(ex - side, browY + 1, hair.base); 
+        if (eyeShape === 'fierce' || eyeShape === 'slanted') overPixel(ex - side, browY + 1, hair.base); 
+        else overPixel(ex + side*2, browY + 1, hair.base); 
+
+        if (feature === 'eyepatch' && side === 1) {
+            for(let dx = -faceW[eyeY]; dx <= faceW[eyeY]; dx++) if (dx > 0) overPixel(cx + dx, eyeY - 1, '#111827');
+            for(let dy=-1; dy<=2; dy++) for(let dx=1; dx<=5; dx++) if(Math.abs(dx-3)+Math.abs(dy-0.5)<=2.5) overPixel(cx+dx, eyeY+dy, '#111827');
         } else {
-            overPixel(ex + side*2, browY + 1, hair.base); 
-        }
+            overPixel(ex - 1, eyeY - 1, lashColor);
+            overPixel(ex, eyeY - 1, lashColor);
+            overPixel(ex + 1, eyeY - 1, lashColor);
 
-        overPixel(ex - 1, eyeY - 1, lashColor);
-        overPixel(ex, eyeY - 1, lashColor);
-        overPixel(ex + 1, eyeY - 1, lashColor);
+            overPixel(ex + side * 2, eyeY - 1, lashColor);
+            if (eyeShape === 'heavy_lashes') {
+                overPixel(ex + side * 2, eyeY - 2, lashColor);
+                overPixel(ex + side * 3, eyeY - 2, lashColor);
+            } else if (eyeShape === 'slanted' || eyeShape === 'almond') {
+                overPixel(ex + side * 3, eyeY - 2, lashColor); 
+            }
 
-        overPixel(ex + side * 2, eyeY - 1, lashColor);
-        if (eyeShape === 'heavy_lashes') {
-            overPixel(ex + side * 2, eyeY - 2, lashColor);
-            overPixel(ex + side * 3, eyeY - 2, lashColor);
-        } else if (eyeShape === 'slanted' || eyeShape === 'almond') {
-            overPixel(ex + side * 3, eyeY - 2, lashColor); 
-        }
-
-        if (eyeShape === 'fierce') {
-            overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, skin.shadow);
-            overPixel(ex, eyeY, eye.color);
-        } else if (eyeShape === 'doe') {
-            overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, '#F8FAFC');
-            overPixel(ex - 1, eyeY + 1, '#F8FAFC'); overPixel(ex + 1, eyeY + 1, '#F8FAFC');
-            overPixel(ex, eyeY, eye.color); overPixel(ex, eyeY + 1, eye.color); 
-        } else {
-            overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, '#F8FAFC');
-            overPixel(ex, eyeY, eye.color);
+            if (eyeShape === 'fierce') {
+                overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, skin.shadow);
+                overPixel(ex, eyeY, eye.color);
+            } else if (eyeShape === 'doe') {
+                overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, '#F8FAFC');
+                overPixel(ex - 1, eyeY + 1, '#F8FAFC'); overPixel(ex + 1, eyeY + 1, '#F8FAFC');
+                overPixel(ex, eyeY, eye.color); overPixel(ex, eyeY + 1, eye.color); 
+            } else {
+                overPixel(ex - 1, eyeY, '#F8FAFC'); overPixel(ex + 1, eyeY, '#F8FAFC');
+                overPixel(ex, eyeY, eye.color);
+            }
         }
     }
 
@@ -254,14 +257,11 @@ export function generateOrcFemale(options = {}) {
         }
     }
 
-    // --- 9. FOREGROUND HAIR ---
-    const hairLineY = headTopY + 2; 
+    // --- 8. FOREGROUND HAIR ---
+    const hairLineY = headTopY + 3; 
     
-    for (let y = headTopY - 6; y <= chinY + 12; y++) {
-        // FIX: The "Beard" bug is fixed here!
-        // Lock the width to the chin width if we go below the chin.
+    for (let y = headTopY - 8; y <= chinY + 12; y++) {
         let skullW = (y <= chinY) ? (faceW[y] || 0) : (faceW[chinY] || 0);
-        
         if (y < headTopY) {
             const dy = (headTopY - y) / 6.0; 
             if (dy >= 1) skullW = 0;
@@ -274,55 +274,66 @@ export function generateOrcFemale(options = {}) {
             let isStubble = false;
             let isBraid = false;
 
-            if (y < eyeY && Math.abs(x) <= skullW + 1) draw = true;
-
+            // FIX: Removed the unconditional "draw = true" across the whole head!
+            // Each style now strictly defines its own coverage zone.
+            
             if (hairStyle === 'war_hawk') {
-                if (y < hairLineY && Math.abs(x) <= 3) draw = true;
+                if (y < eyeY && Math.abs(x) <= 2) draw = true;
                 if (y >= headTopY - 6 && y < headTopY && Math.abs(x) <= 2) draw = true; 
+                if (y >= hairLineY && y < eyeY && Math.abs(x) > 2 && Math.abs(x) <= skullW) isStubble = true;
             } 
-            else if (hairStyle === 'shaved_sides') {
+            else if (hairStyle === 'undercut') {
                 if (y < hairLineY && Math.abs(x) <= skullW) draw = true;
-                if (y >= hairLineY && Math.abs(x) >= skullW - 1 && y < eyeY) {
-                    overPixel(cx + x, y, skin.shadow); 
-                    continue;
-                }
+                if (y >= headTopY - 4 && y < headTopY && Math.abs(x) <= skullW) draw = true;
+                // Sweeps across one side
+                if (y >= hairLineY && y < eyeY && x > -skullW + 1 && x <= 1) draw = true; 
+                if (y >= hairLineY && y < eyeY && Math.abs(x) <= skullW && !draw) isStubble = true;
             } 
-            else if (hairStyle === 'messy_long') {
-                if (y >= hairLineY && y < chinY + 5 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 4) {
-                    if (rng.chance(0.85)) draw = true; 
+            else if (hairStyle === 'top_knot') {
+                if (y < eyeY && Math.abs(x) <= skullW) isStubble = true;
+                if (y >= headTopY - 7 && y <= headTopY && Math.abs(x) <= 3) draw = true; 
+            }
+            else {
+                // Full coverage base
+                if (y < eyeY && Math.abs(x) <= skullW + 1) draw = true;
+
+                if (hairStyle === 'messy_long') {
+                    if (y >= hairLineY && y < chinY + 5 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 4) {
+                        if (rng.chance(0.85)) draw = true; 
+                    }
                 }
-            }
-            else if (hairStyle === 'high_ponytail') {
-                if (y >= headTopY - 7 && y <= headTopY && Math.abs(x) <= 4) draw = true; 
-            }
-            else if (hairStyle === 'dreadlocks' || hairStyle === 'wild_braids') {
-                if (y >= hairLineY && y < chinY + 8 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 4) {
-                    draw = true;
-                    if (hairStyle === 'wild_braids') isBraid = true;
+                else if (hairStyle === 'dreadlocks' || hairStyle === 'wild_braids') {
+                    if (y >= hairLineY && y < chinY + 8 && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 4) {
+                        draw = true;
+                        if (hairStyle === 'wild_braids') isBraid = true;
+                    }
                 }
             }
 
+            // BANGS
             if (y >= hairLineY && y < eyeY) {
                 if (bangStyle === 'fringe' && Math.abs(x) <= skullW) draw = true;
                 if (bangStyle === 'swept' && x > -skullW && x < skullW && y < eyeY - 1 + (x * 0.3)) draw = true;
             }
 
+            // MASK FACE
             if (y >= hairLineY && Math.abs(x) < skullW - 1) {
                 let isBangs = false;
                 if (y < eyeY) {
                     if (bangStyle === 'fringe') isBangs = true;
                     if (bangStyle === 'swept' && y < eyeY - 1 + (x * 0.3)) isBangs = true;
+                    if (hairStyle === 'undercut' && x <= 1) isBangs = true; // Protect swoop
                 }
-                if (!isBangs && !isBraid && !isStubble) draw = false;
+                if (!isBangs && !isBraid && !isStubble && hairStyle !== 'war_hawk') draw = false;
                 if (isBraid && y > eyeY && y < mouthY + 2 && Math.abs(x) < skullW - 1) draw = false; 
             }
 
-            if (draw) {
+            // RENDER PIXEL
+            if (isStubble) {
+                overPixel(cx + x, y, stubbleColor);
+            } else if (draw) {
                 let c = hair.base;
-                if (isStubble) {
-                    c = skin.shadow; 
-                } 
-                else if (isBraid) {
+                if (isBraid) {
                     if ((x+y)%4 === 0) c = hair.shadow; 
                 } 
                 else if (hairStyle === 'dreadlocks') {
@@ -351,11 +362,9 @@ export function generateOrcFemale(options = {}) {
                 let isSkin = (currentC === skin.base || currentC === skin.highlight);
                 let isShadow = (currentC === skin.shadow);
                 
-                // Only paint over skin/shadows (protects teeth, eyes, hair)
                 if (!isSkin && !isShadow) continue;
                 
                 let drawPaint = false;
-                
                 if (paintStyle === 'jaw_stripes') {
                     if (y > noseY && Math.abs(x) > w - 4 && (x+y)%3 === 0) drawPaint = true;
                 } else if (paintStyle === 'eye_mask') {
@@ -364,9 +373,7 @@ export function generateOrcFemale(options = {}) {
                     if (y >= eyeY + 1 && y <= noseY + 2 && (Math.abs(x) === 2 || Math.abs(x) === 4)) drawPaint = true;
                 }
                 
-                if (drawPaint) {
-                    overPixel(cx+x, y, isShadow ? paintShadow : paintBase);
-                }
+                if (drawPaint) overPixel(cx+x, y, isShadow ? paintShadow : paintBase);
             }
         }
     }
@@ -375,8 +382,10 @@ export function generateOrcFemale(options = {}) {
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             if (grid[y][x] === null) {
-                if ((y > 0 && grid[y - 1][x] !== null) || (y < GRID_SIZE - 1 && grid[y + 1][x] !== null) || 
-                    (x > 0 && grid[y][x - 1] !== null) || (x < GRID_SIZE - 1 && grid[y][x + 1] !== null)) {
+                if ((y > 0 && grid[y - 1][x] !== null && grid[y - 1][x] !== '#111827') || 
+                    (y < GRID_SIZE - 1 && grid[y + 1][x] !== null && grid[y + 1][x] !== '#111827') || 
+                    (x > 0 && grid[y][x - 1] !== null && grid[y][x - 1] !== '#111827') || 
+                    (x < GRID_SIZE - 1 && grid[y][x + 1] !== null && grid[y][x + 1] !== '#111827')) {
                     outlineGrid[y][x] = '#020617'; 
                 }
             }
@@ -386,6 +395,7 @@ export function generateOrcFemale(options = {}) {
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             let colorCode = grid[y][x] || outlineGrid[y][x];
+            if (grid[y][x] === '#111827') colorCode = grid[y][x]; 
             if (colorCode) drawScaledRect(ctx, x, y, 1, 1, colorCode, DISPLAY_SCALE);
         }
     }

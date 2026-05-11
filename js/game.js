@@ -1006,8 +1006,13 @@ function setupInputListeners() {
     };
 
     container.onwheel = (e) => {
-        if (currentState === STATE.FISHING && FishingEngine.phase === 'SINKING') {
-            FishingEngine.scrollDepth(e.deltaY / 15);
+        if (currentState === STATE.FISHING) {
+            if (FishingEngine.phase === 'SINKING') {
+                FishingEngine.scrollDepth(e.deltaY / 15);
+            } else if (FishingEngine.phase === 'FIGHT') {
+                // NEW: Route scroll to the Reel Power slider during the fight!
+                FishingEngine.scrollReelPower(e.deltaY);
+            }
         }
     };
 }

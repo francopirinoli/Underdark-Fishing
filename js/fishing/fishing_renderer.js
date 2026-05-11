@@ -125,6 +125,13 @@ export const FishingRenderer = {
                                 <div class="bar-labels"><span style="color:#FBBF24;">Catch Progress</span> <span id="lbl-catch" style="color:#FBBF24;">0%</span></div>
                                 <div class="bar-track" style="height: 24px; border-color: #B45309;"><div class="bar-fill" id="bar-catch" style="width: 0%;"></div></div>
                             </div>
+                            
+                            <!-- NEW: REEL POWER GAUGE -->
+                            <div class="bar-row" style="margin-top: 0.5rem; border-top: 1px dashed #1E293B; padding-top: 0.5rem;">
+                                <div class="bar-labels"><span id="lbl-reel-text" style="color:#A5B4FC;">Reel Power (Scroll)</span> <span id="lbl-reel-power" style="color:#A5B4FC;">50%</span></div>
+                                <div class="bar-track" id="track-reel-power" style="height: 18px; border-color: #4F46E5;"><div class="bar-fill" id="bar-reel-power" style="width: 50%; background: #6366F1; transition: width 0.05s linear, background-color 0.2s;"></div></div>
+                            </div>
+                            
                             <div class="depth-readout" id="lbl-depth">Depth: 0m (Surface)</div>
                         </div>
                     </div>
@@ -153,6 +160,11 @@ export const FishingRenderer = {
             lblFStam: document.getElementById('lbl-f-stam'),
             barCatch: document.getElementById('bar-catch'),
             lblCatch: document.getElementById('lbl-catch'),
+            
+            // <-- ADD THESE 3 LINES -->
+            barReelPower: document.getElementById('bar-reel-power'),
+            lblReelPower: document.getElementById('lbl-reel-power'),
+            trackReelPower: document.getElementById('track-reel-power'),
             
             lblDepth: document.getElementById('lbl-depth'),
             behavior: document.getElementById('fm-behavior')
@@ -279,9 +291,13 @@ open(config) {
         if (isReeling && engine.playerStamina > 0) {
             this.reelAudioTimer -= dt;
             if (this.reelAudioTimer <= 0) {
-                SFX.playReel();
-                const speed = 0.15 * (engine.fishStamina / engine.maxFishStamina) + 0.05;
-                this.reelAudioTimer = speed;
+                SFX.playReel(engine.reelPower); // <-- NEW: Pass power for pitch shifting
+                
+                // Audio click speed scales with both fish stamina and player reel power
+                const powerSpeedMod = 1.0 - (engine.reelPower / 100 * 0.5); // 0.5 (fast) to 0.95 (slow)
+                const speed = (0.15 * (engine.fishStamina / engine.maxFishStamina) + 0.05) * powerSpeedMod;
+                
+                this.reelAudioTimer = Math.max(0.02, speed); // Cap max speed
             }
         }
 
@@ -314,6 +330,25 @@ open(config) {
         // CATCH PROGRESS
         this.elements.barCatch.style.width = `${engine.catchProgress}%`;
         this.elements.lblCatch.innerText = `${Math.floor(engine.catchProgress)}%`;
+
+        // --- NEW: REEL POWER GAUGE ---
+        const reelPower = engine.reelPower || 50; // Mock 50 if engine doesn't have it yet (Phase 4)
+        const inSweetSpot = engine.inSweetSpot || false;
+        
+        this.elements.barReelPower.style.width = `${reelPower}%`;
+        this.elements.lblReelPower.innerText = `${Math.round(reelPower)}%`;
+        
+        if (inSweetSpot) {
+            this.elements.barReelPower.style.background = '#FBBF24'; // Gold
+            this.elements.trackReelPower.style.borderColor = '#F59E0B';
+            this.elements.lblReelPower.style.color = '#FBBF24';
+            document.getElementById('lbl-reel-text').style.color = '#FBBF24';
+        } else {
+            this.elements.barReelPower.style.background = '#6366F1'; // Indigo
+            this.elements.trackReelPower.style.borderColor = '#4F46E5';
+            this.elements.lblReelPower.style.color = '#A5B4FC';
+            document.getElementById('lbl-reel-text').style.color = '#A5B4FC';
+        }
 
         // AI STATE & BORDER SHAKE
         const state = engine.ai.state;

@@ -129,21 +129,24 @@ export const GrimoireUI = {
             return true;
         });
         
-        // Pass Weather Nodes to renderer
+// Pass Weather Nodes to renderer
         renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, EventManager.Weather.activeNodes);
 
         // Calculate Hazard Text for the info panel
         const weather = EventManager.Weather.getWeather(this.selectedMapNode.x, this.selectedMapNode.y);
         let hazardHtml = '';
         
-        // Permanent Hazards
-        if (this.selectedMapNode.biomeId === 'volcanic') hazardHtml = `<div style="color:var(--red-danger); font-size:1.1rem; margin-top:0.3rem;">⚠ Boiling Waters</div>`;
-        if (this.selectedMapNode.biomeId === 'frozen') hazardHtml = `<div style="color:var(--cyan-glow); font-size:1.1rem; margin-top:0.3rem;">⚠ Pack Ice</div>`;
-        
-        // Dynamic Hazards
-        if (weather === 'spores') hazardHtml += `<div style="color:#86EFAC; font-size:1.1rem; margin-top:0.3rem;">⚠ Toxic Spore Storm</div>`;
-        else if (weather === 'shatter') hazardHtml += `<div style="color:#93C5FD; font-size:1.1rem; margin-top:0.3rem;">⚠ Crystal Shatter-Storm</div>`;
-        else if (weather === 'whirlpool') hazardHtml += `<div style="color:#A855F7; font-size:1.1rem; margin-top:0.3rem;">⚠ Void Whirlpool</div>`;
+        // --- FIX: Only reveal hazards if the player has actually discovered the node! ---
+        if (this.selectedMapNode.isDiscovered) {
+            // Permanent Hazards
+            if (this.selectedMapNode.biomeId === 'volcanic') hazardHtml = `<div style="color:var(--red-danger); font-size:1.1rem; margin-top:0.3rem;">⚠ Boiling Waters</div>`;
+            if (this.selectedMapNode.biomeId === 'frozen') hazardHtml = `<div style="color:var(--cyan-glow); font-size:1.1rem; margin-top:0.3rem;">⚠ Pack Ice</div>`;
+            
+            // Dynamic Hazards
+            if (weather === 'spores') hazardHtml += `<div style="color:#86EFAC; font-size:1.1rem; margin-top:0.3rem;">⚠ Toxic Spore Storm</div>`;
+            else if (weather === 'shatter') hazardHtml += `<div style="color:#93C5FD; font-size:1.1rem; margin-top:0.3rem;">⚠ Crystal Shatter-Storm</div>`;
+            else if (weather === 'whirlpool') hazardHtml += `<div style="color:#A855F7; font-size:1.1rem; margin-top:0.3rem;">⚠ Void Whirlpool</div>`;
+        }
 
         document.getElementById('grim-map-coords').innerHTML = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}] ${hazardHtml}`;
 
@@ -955,10 +958,14 @@ renderBestiary() {
             const biomes = fish.environment.biomes.map(b => b.charAt(0).toUpperCase() + b.slice(1)).join(', ');
             statsHtml += `
                 <div class="dashboard-group">
-                    <h3>Habitat (Lv.2)</h3>
+                    <h3>Habitat & Behavior (Lv.2)</h3>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Native Biomes:</span> <span style="color:var(--cyan-glow); font-weight:bold;">${biomes}</span></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Depth:</span> <span style="color:var(--text-main); font-weight:bold;">${fish.environment.depthPref}</span></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem;"><span>Active:</span> <span style="color:var(--text-main); font-weight:bold;">${fish.environment.activeHours}</span></div>
+                    
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-top: 1px dashed var(--panel-border); padding-top: 0.4rem; margin-top: 0.4rem;">
+                        <span>Optimal Reel Speed:</span> <span style="color:var(--gold-warn); font-weight:bold;">~${fish.combat.optimalReel}%</span>
+                    </div>
                 </div>
             `;
         } else {

@@ -38,7 +38,8 @@ export const MenuUI = {
                 name: document.getElementById('cc-name').value,
                 race: document.getElementById('cc-race').value,
                 gender: document.getElementById('cc-gender').value,
-                portraitData: this.ccIdentity.imageDataUrl
+                portraitData: this.ccIdentity.imageDataUrl,
+                portraitSeed: this.ccIdentity.seed // <-- NEW: Save the seed!
             };
             // Pass the selected slot back to game.js
             this.callbacks.onNewGame(this.selectedSlot, playerData, { ...this.ccStats }, this.ccPoints);

@@ -257,11 +257,13 @@ export function generateHumanFemale(options = {}) {
     // Single spec of gloss
     if (mouthShape !== 'thin') overPixel(cx - 1, mouthY + 1, '#F8FAFC'); 
 
-    // --- 8. FOREGROUND HAIR (Solid blocks with structured highlights) ---
+// --- 8. FOREGROUND HAIR (Solid blocks with structured highlights) ---
     const hairLineY = headTopY + 2; 
     
     for (let y = headTopY - 6; y <= chinY + 6; y++) {
-        let skullW = faceW[y] || 0;
+        // FIX: Lock the skull width to the chin's width when drawing below the face.
+        // This prevents the hair from collapsing to x=0 and forming a "beard".
+        let skullW = (y <= chinY) ? (faceW[y] || 0) : (faceW[chinY] || 0);
         if (y < headTopY) skullW = faceW[headTopY] - (headTopY - y) * 1.5; 
         if (skullW < 0) skullW = 0;
         

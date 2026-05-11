@@ -1,8 +1,8 @@
 /**
  * js/art/orc_male.js
  * Generates highly varied Orc Male portraits.
- * V1 - Features heavy underbites, dynamic tusks, brutalist hairstyles, 
- * war paint, thick necks, and fierce deep-set eyes.
+ * V5 - Complete Overhaul: Fixed hair collapse bug, removed noisy dithering, 
+ * applied squircle skull math, solid beard structures, and clean shading.
  */
 
 import { drawScaledRect } from '../util/utils.js';
@@ -25,12 +25,15 @@ export function generateOrcMale(options = {}) {
     ];
     const metal = rng.pick(metals);
 
-    // Color Blending Helper
+    // Color Blending Helpers for clean, natural shading
     const hex2rgb = h =>[parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
-    const rgb2hex = ([r,g,b]) => `#${(1<<24|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
+    const rgb2hex = ([r,g,b]) => `#${(1<<24|(r<<16)|(g<<8)|b).toString(16).slice(1).padStart(6, '0')}`;
     const blend = (c1, c2, t) => rgb2hex(hex2rgb(c1).map((v,i) => Math.round(v + (hex2rgb(c2)[i]-v)*t)));
     
     const hairSoftHigh = blend(hair.base, hair.highlight, 0.4);
+    const lipDark = blend(skin.shadow, '#7F1D1D', 0.4);
+    const stubbleColor = blend(skin.shadow, hair.base, 0.4); // Clean 5 o'clock shadow
+    const lashColor = '#020617';
 
     const offscreenCanvas = document.createElement('canvas');
     offscreenCanvas.width = CANVAS_SIZE;
@@ -66,7 +69,7 @@ export function generateOrcMale(options = {}) {
     const tuskStyle = rng.pick(['large', 'broken', 'asymmetric', 'small']);
     const browStyle = rng.pick(['heavy', 'unibrow', 'scarred', 'angled']);
     
-    const hairStyle = rng.pick(['bald', 'mohawk', 'top_knot', 'dreadlocks', 'shaved_sides', 'messy_tuft']);
+    const hairStyle = rng.pick(['bald', 'mohawk', 'top_knot', 'dreadlocks', 'undercut', 'messy_tuft']);
     const beardStyle = rng.pick(['none', 'stubble', 'braided_goatee', 'chops', 'rough_beard']);
     
     const clothStyle = rng.pick(['furs', 'spiked_armor', 'leather', 'bare_chested']);
@@ -80,7 +83,8 @@ export function generateOrcMale(options = {}) {
         let w = 0;
         if (y <= eyeY) {
             const dy = (eyeY - y) / (eyeY - headTopY); 
-            w = maxW * Math.pow(1 - Math.pow(dy, 2), 0.4); // Sloped skull
+            // V5 FIX: Broad squircle dome instead of sharp angle
+            w = maxW * Math.pow(1 - Math.pow(dy, 2.5), 0.35); 
         } else {
             const dy = (y - eyeY) / (chinY - eyeY); 
             // ORC JAW MATH: Expands OUTWARD or drops straight down heavily
@@ -93,10 +97,14 @@ export function generateOrcMale(options = {}) {
 
     // --- 3. BACKGROUND HAIR ---
     if (hairStyle === 'dreadlocks') {
-        for (let y = eyeY; y < GRID_SIZE; y++) {
-            let spread = faceW[chinY] + 1;
+        for (let y = eyeY - 2; y < GRID_SIZE; y++) {
+            // Smoothly expand from skull width
+            let spread = (faceW[y] || faceW[chinY]) + 2; 
+            if (y >= chinY) spread += (y - chinY) * 0.25;
+            spread = Math.floor(spread);
+            
             for (let x = -spread; x <= spread; x++) {
-                if (Math.abs(x) > maxW - 1) setPixel(cx + x, y, hair.shadow);
+                if (Math.abs(x) > maxW - 1) overPixel(cx + x, y, hair.shadow);
             }
         }
     }
@@ -120,15 +128,16 @@ export function generateOrcMale(options = {}) {
                 c = skin.base;
                 if (x > shoulderWidth * 0.4) c = skin.shadow;
                 if (x < -shoulderWidth * 0.4) c = skin.highlight;
-                // Pectoral / Collarbone lines
-                if (Math.abs(x) < neckW && y > chinY + 6 && y < chinY + 9 && Math.abs(x) > 2) c = skin.shadow;
+                // V5 FIX: Clean Collarbone and Pectoral lines
+                if (Math.abs(x) < neckW && y > chinY + 5 && y < chinY + 8 && Math.abs(x) > 2) c = skin.shadow;
                 if (x === 0 && y > chinY + 8) c = skin.shadow; // Sternum cleft
+                if (y === chinY + 12 && Math.abs(x) < 7 && Math.abs(x) > 1) c = skin.shadow; // Pectoral bottom
             } else {
                 if (x > shoulderWidth * 0.4) c = cloth.shadow;
                 if (x < -shoulderWidth * 0.4) c = cloth.highlight;
                 
                 const isCenter = Math.abs(x) <= neckW - 1;
-                if (clothStyle === 'leather' && isCenter && y < chinY + 7) continue; // Neck opening
+                if (clothStyle === 'leather' && isCenter && y < chinY + 7) continue; 
                 
                 if (clothStyle === 'spiked_armor') {
                     if ((x + y) % 4 === 0) c = metal.base; 
@@ -149,6 +158,12 @@ export function generateOrcMale(options = {}) {
             if (x > w - 2) c = skin.shadow;         
             if (x < -w + 2 && y < noseY) c = skin.highlight; 
             if (y > chinY - 2) c = skin.shadow;     
+            
+            // Heavy sunken cheeks
+            if (y > noseY + 2 && y < mouthY && Math.abs(x) >= w - 3) {
+                if ((x+y) % 2 === 0) c = skin.shadow; 
+            }
+            
             overPixel(cx + x, y, c);
         }
     }
@@ -174,7 +189,6 @@ export function generateOrcMale(options = {}) {
     for (let side of [-1, 1]) {
         const ex = cx + (side * 4); 
         
-        // Brutal Heavy Brows
         let browY = eyeY - 2;
         overPixel(ex - side*2, browY, hair.base); overPixel(ex - side, browY, hair.base); 
         overPixel(ex, browY, hair.base); overPixel(ex + side, browY, hair.base);
@@ -187,13 +201,14 @@ export function generateOrcMale(options = {}) {
             overPixel(ex, browY + 1, hair.base); // Low over the eye
         } else if (browStyle === 'heavy') {
             overPixel(ex - side, browY - 1, hair.base); overPixel(ex, browY - 1, hair.base); 
+            overPixel(ex + side, browY - 1, hair.base);
         } else if (browStyle === 'scarred' && side === 1) {
             overPixel(ex, browY, skin.base); 
         }
 
         if (feature === 'eyepatch' && side === 1) {
-            for(let dx=-2; dx<=2; dx++) for(let dy=-1; dy<=2; dy++) if(Math.abs(dx)+Math.abs(dy)<4) overPixel(ex+dx, eyeY+dy, '#111827');
-            overPixel(ex-4, eyeY-1, '#111827'); overPixel(ex+4, eyeY+1, '#111827'); 
+            for(let dx = -faceW[eyeY]; dx <= faceW[eyeY]; dx++) if (dx > 0) overPixel(cx + dx, eyeY - 1, '#111827');
+            for(let dy=-1; dy<=2; dy++) for(let dx=1; dx<=5; dx++) if(Math.abs(dx-3)+Math.abs(dy-0.5)<=2.5) overPixel(cx+dx, eyeY+dy, '#111827');
         } else {
             if (eyeShape === 'glowing') {
                 overPixel(ex, eyeY, eye.color); overPixel(ex + side, eyeY, eye.color);
@@ -236,18 +251,16 @@ export function generateOrcMale(options = {}) {
 
     // Mouth
     const mw = 4; // Very wide mouth
-    const lipDark = skin.shadow;
     
     if (mouthShape === 'snarl') {
         for (let x = -mw; x <= mw; x++) overPixel(cx + x, mouthY, lipDark);
-        overPixel(cx - mw, mouthY - 1, lipDark); overPixel(cx + mw, mouthY - 1, lipDark); // Curled lips
+        overPixel(cx - mw, mouthY - 1, lipDark); overPixel(cx + mw, mouthY - 1, lipDark); 
     } else if (mouthShape === 'grimace') {
         for (let x = -mw; x <= mw; x++) {
             overPixel(cx + x, mouthY, lipDark);
             if (x % 2 === 0) overPixel(cx + x, mouthY, '#F8FAFC'); // Gritted teeth showing
         }
     } else {
-        // Frown
         for (let x = -mw + 1; x <= mw - 1; x++) overPixel(cx + x, mouthY, lipDark);
         overPixel(cx - mw, mouthY + 1, lipDark); overPixel(cx + mw, mouthY + 1, lipDark);
     }
@@ -277,35 +290,57 @@ export function generateOrcMale(options = {}) {
     
     if (hairStyle !== 'bald') {
         for (let y = headTopY - 6; y <= chinY; y++) {
-            let skullW = faceW[y] || 0;
-            if (y < headTopY) skullW = (faceW[headTopY] + 1) * Math.pow(1 - ((headTopY - y)/6.0)**2, 0.5); 
+            // FIX: Lock width below chin to prevent hair collapse
+            let skullW = (y <= chinY) ? (faceW[y] || 0) : (faceW[chinY] || 0);
+            if (y < headTopY) {
+                const dy = (headTopY - y) / 6.0; 
+                if (dy >= 1) skullW = 0;
+                else skullW = (faceW[headTopY] + 1) * Math.pow(1 - dy * dy, 0.5); 
+            }
             if (skullW < 0) skullW = 0;
             
             for (let x = -skullW - 2; x <= skullW + 2; x++) {
                 let draw = false;
+                let isStubble = false;
 
                 if (hairStyle === 'mohawk') {
-                    if (y < hairLineY && Math.abs(x) <= 2) draw = true;
-                    if (y >= headTopY - 6 && y < headTopY && Math.abs(x) <= 1) draw = true; 
-                } else if (hairStyle === 'shaved_sides') {
-                    if (y < hairLineY && Math.abs(x) <= skullW) draw = true;
-                    if (y >= hairLineY && Math.abs(x) >= skullW - 1) overPixel(cx + x, y, skin.shadow); // Stubble
-                } else if (hairStyle === 'top_knot') {
-                    if (y >= headTopY - 5 && y <= headTopY && Math.abs(x) <= 3) draw = true; 
-                } else if (hairStyle === 'messy_tuft') {
-                    if (y < hairLineY + 2 && Math.abs(x) <= skullW && rng.chance(0.8)) draw = true;
-                } else if (hairStyle === 'dreadlocks') {
+                    if (y < hairLineY && Math.abs(x) <= 3) draw = true;
+                    if (y >= headTopY - 6 && y < headTopY && Math.abs(x) <= 2) draw = true; 
+                    if (y >= hairLineY && y < eyeY && Math.abs(x) >= 4 && Math.abs(x) <= skullW) isStubble = true;
+                } 
+                else if (hairStyle === 'undercut') {
                     if (y < hairLineY && Math.abs(x) <= skullW + 1) draw = true;
-                    if (y >= hairLineY && y < chinY && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 2) {
-                        if (Math.abs(x) % 3 !== 2) draw = true; 
+                    if (y >= headTopY - 4 && y < headTopY && Math.abs(x) <= skullW) draw = true;
+                    if (y >= hairLineY && y < eyeY && Math.abs(x) >= skullW - 1) isStubble = true;
+                } 
+                else if (hairStyle === 'top_knot') {
+                    if (y < hairLineY && Math.abs(x) <= skullW) isStubble = true;
+                    if (y >= headTopY - 6 && y <= headTopY && Math.abs(x) <= 3) draw = true; 
+                } 
+                else if (hairStyle === 'messy_tuft') {
+                    if (y < hairLineY + 2 && Math.abs(x) <= skullW) {
+                        const drop = Math.abs(x) % 3;
+                        if (y <= hairLineY + drop) draw = true;
                     }
+                } 
+                else if (hairStyle === 'dreadlocks') {
+                    if (y < hairLineY && Math.abs(x) <= skullW + 1) draw = true;
+                    if (y >= hairLineY && y < chinY && Math.abs(x) >= skullW - 1 && Math.abs(x) <= skullW + 2) draw = true;
                 }
 
                 if (y >= hairLineY && Math.abs(x) < skullW - 1 && hairStyle !== 'messy_tuft') draw = false;
 
-                if (draw) {
+                if (isStubble) {
+                    overPixel(cx + x, y, stubbleColor);
+                } else if (draw) {
                     let c = hair.base;
-                    if (y > headTopY - 3 && x < 0 && x % 2 === 0) c = hairSoftHigh; 
+                    
+                    if (hairStyle === 'dreadlocks') {
+                        if (Math.abs(x) % 3 === 2) c = hair.shadow; 
+                    } else {
+                        if (y > headTopY - 3 && x < 0 && x % 3 === 0) c = hairSoftHigh; 
+                    }
+                    
                     if (x > skullW - 1) c = hair.shadow; 
                     overPixel(cx + x, y, c);
                 }
@@ -315,32 +350,35 @@ export function generateOrcMale(options = {}) {
 
     // --- 10. BEARD / JAW HAIR ---
     if (beardStyle !== 'none') {
-        for (let y = mouthY + 1; y <= chinY + 3; y++) {
+        for (let y = mouthY + 1; y <= chinY + 4; y++) {
             let jawW = faceW[y]; 
+            if (!jawW) jawW = faceW[chinY];
+
             for (let x = -jawW - 2; x <= jawW + 2; x++) {
                 let draw = false;
                 
                 if (beardStyle === 'stubble') {
-                    if (Math.abs(x) <= jawW && rng.chance(0.4)) overPixel(cx + x, y, skin.shadow); 
+                    if (Math.abs(x) <= jawW && (x+y)%2===0) overPixel(cx + x, y, stubbleColor); 
                     continue;
                 }
                 
                 if (beardStyle === 'braided_goatee') {
-                    if (y > chinY - 1 && y < chinY + 4 && Math.abs(x) <= 2) draw = true;
+                    if (y > chinY - 1 && y < chinY + 5 && Math.abs(x) <= 2) draw = true;
                     if (y === chinY + 3 && Math.abs(x) <= 2) overPixel(cx + x, y, metal.base); // Tie ring
                 } else if (beardStyle === 'chops') {
                     if (Math.abs(x) >= jawW - 3 && Math.abs(x) <= jawW) draw = true;
                 } else if (beardStyle === 'rough_beard') {
-                    if (y >= mouthY + 1 && Math.abs(x) <= jawW) draw = rng.chance(0.8);
-                    if (y > chinY && Math.abs(x) <= jawW - 2) draw = rng.chance(0.6);
+                    if (y >= mouthY + 1 && Math.abs(x) <= jawW) draw = true;
+                    if (y > chinY && y < chinY + 4 && Math.abs(x) <= jawW - (y-chinY)*1.5) draw = true;
                 }
 
-                if (Math.abs(x) <= 3 && y < chinY && beardStyle !== 'braided_goatee' && beardStyle !== 'rough_beard') draw = false; // Expose tusks
+                // Keep mouth opening clear (Expose tusks)
+                if (Math.abs(x) <= 3 && y < chinY && beardStyle !== 'braided_goatee') draw = false; 
 
                 if (draw) {
                     let c = hair.base;
-                    if ((x+y)%3===0) c = hair.shadow; 
-                    if (x > jawW - 1) c = hair.shadow; 
+                    if ((x+y)%3===0) c = hairSoftHigh; // Solid structured shading
+                    if (x > jawW - 1 || y > chinY + 1) c = hair.shadow; 
                     overPixel(cx + x, y, c);
                 }
             }
@@ -353,16 +391,25 @@ export function generateOrcMale(options = {}) {
     }
     
     if (feature === 'war_paint') {
-        const paintColor = rng.pick(['#7F1D1D', '#020617', '#B45309']); // Blood, Black, Ochre
+        const paintBase = rng.pick(['#7F1D1D', '#020617', '#B45309']); // Blood, Black, Ochre
+        const paintShadow = blend(paintBase, '#000000', 0.4); 
         const paintStyle = rng.pick(['jaw_line', 'eye_band', 'hand_print']);
         
         for (let y = eyeY - 2; y <= chinY; y++) {
-            for (let x = -maxW; x <= maxW; x++) {
-                if (grid[y][cx+x] === skin.base || grid[y][cx+x] === skin.highlight) {
-                    if (paintStyle === 'jaw_line' && y > mouthY && Math.abs(x) > 3) overPixel(cx+x, y, paintColor);
-                    if (paintStyle === 'eye_band' && y >= eyeY - 1 && y <= eyeY + 1) overPixel(cx+x, y, paintColor);
-                    if (paintStyle === 'hand_print' && Math.abs(x) < 4 && y >= noseY && y <= mouthY && (x+y)%2 === 0) overPixel(cx+x, y, paintColor);
-                }
+            const w = faceW[y];
+            for (let x = -w; x <= w; x++) {
+                const currentC = grid[y][cx+x];
+                let isSkin = (currentC === skin.base || currentC === skin.highlight);
+                let isShadow = (currentC === skin.shadow);
+                
+                if (!isSkin && !isShadow) continue;
+                
+                let drawPaint = false;
+                if (paintStyle === 'jaw_line' && y > mouthY && Math.abs(x) > 3) drawPaint = true;
+                if (paintStyle === 'eye_band' && y >= eyeY - 1 && y <= eyeY + 1) drawPaint = true;
+                if (paintStyle === 'hand_print' && Math.abs(x) < 4 && y >= noseY && y <= mouthY && (x+y)%2 === 0) drawPaint = true;
+                
+                if (drawPaint) overPixel(cx+x, y, isShadow ? paintShadow : paintBase);
             }
         }
     }
@@ -384,6 +431,7 @@ export function generateOrcMale(options = {}) {
     for (let y = 0; y < GRID_SIZE; y++) {
         for (let x = 0; x < GRID_SIZE; x++) {
             let colorCode = grid[y][x] || outlineGrid[y][x];
+            if (grid[y][x] === '#111827') colorCode = grid[y][x]; 
             if (colorCode) drawScaledRect(ctx, x, y, 1, 1, colorCode, DISPLAY_SCALE);
         }
     }

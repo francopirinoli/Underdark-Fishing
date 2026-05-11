@@ -40,43 +40,51 @@ const RARITY_TIERS =[
 // --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---
 const ARCHETYPES = {
     'fish': {
-        sizes: ['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
+        sizes:['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
         baseStamina: 50, baseSpeed: 50, baseAggro: 0.3,
+        optimalReelRange: [40, 60], // <-- NEW
         prefBias: { color: 0, sound: 0, light: 0, weight: 0 } // Neutral, highly variable
     },
     'shark': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Surface', 'Mid-water'],
         baseStamina: 40, baseSpeed: 95, baseAggro: 0.85, // Fast, aggressive, tires out quickly
+        optimalReelRange: [75, 95], // <-- NEW: Wants fast reeling
         prefBias: { color: 70, sound: 80, light: 10, weight: 20 } // Warm (blood), loud
     },
     'eel': {
-        sizes: ['Small', 'Medium', 'Large'], depths: ['Bottom-feeder'],
+        sizes: ['Small', 'Medium', 'Large'], depths:['Bottom-feeder'],
         baseStamina: 110, baseSpeed: 40, baseAggro: 0.2, // Endurance fighters, slow tension climb
+        optimalReelRange:[25, 45], // <-- NEW: Wants slow, steady reeling
         prefBias: { color: -40, sound: -80, light: -50, weight: 60 } // Dark, silent, heavy
     },
     'ray': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Bottom-feeder'],
         baseStamina: 80, baseSpeed: 45, baseAggro: 0.3, // Heavy, stubborn bottom huggers
+        optimalReelRange:[30, 50], // <-- NEW
         prefBias: { color: 0, sound: -40, light: 0, weight: 80 } // Heavy, quiet
     },
     'crustacean': {
-        sizes: ['Tiny', 'Small', 'Medium'], depths: ['Bottom-feeder'],
+        sizes: ['Tiny', 'Small', 'Medium'], depths:['Bottom-feeder'],
         baseStamina: 90, baseSpeed: 20, baseAggro: 0.4, // Tanky, very slow
+        optimalReelRange:[15, 30], // <-- NEW: Wants very slow winching
         prefBias: { color: -20, sound: 0, light: -20, weight: 90 } // Very heavy
     },
     'jellyfish': {
-        sizes: ['Tiny', 'Small', 'Medium'], depths: ['Surface', 'Mid-water'],
+        sizes: ['Tiny', 'Small', 'Medium'], depths:['Surface', 'Mid-water'],
         baseStamina: 20, baseSpeed: 20, baseAggro: 0.05, // Extremely easy to reel in
+        optimalReelRange:[10, 30], // <-- NEW: Wants delicate, slow reeling
         prefBias: { color: 0, sound: -90, light: 80, weight: -80 } // Silent, shiny, feather-light
     },
     'cephalopod': {
-        sizes: ['Small', 'Medium', 'Large'], depths: ['Mid-water', 'Bottom-feeder'],
+        sizes: ['Small', 'Medium', 'Large'], depths:['Mid-water', 'Bottom-feeder'],
         baseStamina: 70, baseSpeed: 60, baseAggro: 0.5, // Puzzle fighters
+        optimalReelRange:[45, 65], // <-- NEW
         prefBias: { color: -60, sound: -50, light: 0, weight: 10 } // Cold, quiet
     },
     'deepsea': {
         sizes:['Medium', 'Large', 'Massive'], depths: ['Bottom-feeder'],
         baseStamina: 100, baseSpeed: 70, baseAggro: 0.7, // Terrifying all-rounders
+        optimalReelRange:[50, 85], // <-- NEW: Erratic, usually fast
         prefBias: { color: -80, sound: 50, light: -90, weight: 70 } // Cold, loud, pitch black
     }
 };
@@ -92,10 +100,6 @@ const BIOME_TEMPS = {
 
 const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
 
-/**
- * Generates the BASE SPECIES archetype.
- * This represents the "Pokedex entry" of the fish, not an individual catch.
- */
 /**
  * Generates the BASE SPECIES archetype.
  * This represents the biological template, completely decoupled from Rarity.
@@ -146,11 +150,12 @@ export function generateFishData(options = {}) {
     let minW = weightBrackets[sizeTier].min;
     let maxW = weightBrackets[sizeTier].max;
 
-    // Base Combat stats (Unscaled)
+// Base Combat stats (Unscaled)
     const stamina = Math.round(arch.baseStamina * rng.float(0.85, 1.15));
     const speed = Math.round(arch.baseSpeed * rng.float(0.85, 1.15));
     let aggression = Number(clamp(arch.baseAggro * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
-    const hookWindowMs = 1500; // Base generic window
+    const hookWindowMs = 1000; // Base generic window
+    const optimalReel = rng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); // <-- NEW
 
     // Base Economy
     const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
@@ -161,14 +166,14 @@ export function generateFishData(options = {}) {
         id: `sp_${family}_${seed}`, 
         seed: seed,
         identity: {
-            name: artResult.name, // Just the species name (e.g., "Ghostly Guppy")
+            name: artResult.name,
             family: family
         },
         art: { imageDataUrl: artResult.imageDataUrl, palette: artResult.data.palette, metadata: artResult.data },
         environment: { biomes, depthPref, tempPref, activeHours },
-        lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: 0.8 }, // Base tolerance
+        lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: 0.8 }, 
         physical: { sizeTier, weightRange: { min: minW, max: maxW } },
-        combat: { stamina, speed, aggression, hookWindowMs },
+        combat: { stamina, speed, aggression, hookWindowMs, optimalReel }, // <-- ADDED optimalReel HERE
         economy: { baseValue: Math.max(1, baseValue), baseXp: Math.max(5, baseXp) }
     };
 }

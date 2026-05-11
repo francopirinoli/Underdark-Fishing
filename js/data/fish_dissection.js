@@ -85,14 +85,17 @@ export const DissectionEngine = {
             // --- NEW: Calculate Part Value ---
             const PART_PRICES = { 'Common': 10, 'Uncommon': 25, 'Rare': 60, 'Legendary': 150, 'Boss': 300 };
 
+            const partSeed = Math.floor(rng.next() * 1000000); // <-- NEW: Create isolated seed
+
             parts.push({
                 id: `part_${rng.int(10000, 99999)}`,
-                name: visualId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), // Rarity prefix removed!
+                seed: partSeed, // <-- NEW: Remember the seed
+                name: visualId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), 
                 visualId: visualId,
                 rarity: fish.identity.rarity,
                 stats: partStats,
                 basePrice: PART_PRICES[fish.identity.rarity],
-                imageDataUrl: generateLurePart({ visualId: visualId, rng: rng }) // <-- GENERATES ART HERE
+                imageDataUrl: generateLurePart({ visualId: visualId, rng: createRng(partSeed) }) // <-- UPDATED: Use isolated RNG
             });
         }
 
