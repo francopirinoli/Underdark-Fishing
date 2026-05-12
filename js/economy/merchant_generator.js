@@ -15,7 +15,7 @@ import { generateLurePart } from '../art/lure_generator.js';
 const CONSUMABLES =[
     { id: 'cons_ration', name: 'Cave Rations', type: 'consumable', basePrice: 5, desc: 'Restores food. Prevents starvation while traveling.' },
     { id: 'cons_fuel_oil', name: 'Flask of Oil', type: 'consumable', basePrice: 8, desc: 'Refuels standard lanterns.' },
-    { id: 'cons_repair_kit', name: 'Hull Repair Kit', type: 'consumable', basePrice: 25, desc: 'Restores 25 HP to your boat in the field.' }
+    { id: 'cons_repair_kit', name: 'Hull Repair Kit', type: 'consumable', basePrice: 50, desc: 'Restores 25 HP to your boat in the field.' }
 ];
 
 // NEW: Expanded Upgrades with strict Slot assignments and Hazard Immunities

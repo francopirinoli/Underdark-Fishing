@@ -21,19 +21,19 @@ const RARITY_TIERS =[
 const HULL_STATS = {
     'skiff': {
         hp: 50, speed: 60, acceleration: 80, turnSpeed: 90, 
-        cargo: 10, stealth: 1.2 // 1.2x stealth means 20% harder for fish to hear you
+        cargo: 20, stealth: 1.2 // 1.2x stealth means 20% harder for fish to hear you
     },
     'trawler': {
-        hp: 150, speed: 40, acceleration: 30, turnSpeed: 40, 
-        cargo: 40, stealth: 0.7 // Noisy industrial boat
+        hp: 100, speed: 50, acceleration: 50, turnSpeed: 50, 
+        cargo: 30, stealth: 0.8 // Noisy industrial boat
     },
     'runner': {
         hp: 70, speed: 85, acceleration: 70, turnSpeed: 80, 
         cargo: 15, stealth: 1.8 // Drow stealth tech, incredibly quiet
     },
     'dreadnought': {
-        hp: 300, speed: 30, acceleration: 20, turnSpeed: 25, 
-        cargo: 80, stealth: 0.3 // A floating fortress, wakes everything up
+        hp: 150, speed: 40, acceleration: 40, turnSpeed: 40, 
+        cargo: 50, stealth: 0.6 // A floating fortress, wakes everything up
     }
 };
 
