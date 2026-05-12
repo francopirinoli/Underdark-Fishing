@@ -36,6 +36,7 @@ import { MenuUI } from './ui/menu_ui.js';
 import { HubUI } from './ui/hub_ui.js';
 import { PauseUI } from './ui/pause_ui.js';
 import { EncounterUI } from './ui/encounter_ui.js';
+import { TournamentUI } from './ui/tournament_ui.js'; 
 
 // Events
 import { EventManager } from './events/event_manager.js';
@@ -43,7 +44,7 @@ import { generateChest } from './art/chest_generator.js';
 
 // --- GAME STATE ---
 let currentSaveSlot = 1; // <-- ADD THIS LINE
-const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5, ENCOUNTER: 6 }; // <-- ADDED 6
+const STATE = { MENU: 0, EXPLORATION: 1, FISHING: 2, GRIMOIRE: 3, HUB: 4, PAUSE: 5, ENCOUNTER: 6, TOURNAMENT: 7 }; // <-- UPDATED
 let currentState = STATE.MENU;
 let stateBeforePause = STATE.EXPLORATION;
 
@@ -54,6 +55,7 @@ let currentLocalMap, currentBiome;
 let currentLocalFishPool =[];
 let lastTime = 0;
 let currentLocalChest = null; 
+let currentLocalNPCBoats =[]; 
 let currentLocalFisherman = null; 
 
 // World State
@@ -138,6 +140,16 @@ async function initGameSystems() {
     setupInputListeners();
     MenuUI.showMainMenu();
 }
+
+// NEW: Init Tournament UI
+    TournamentUI.init({
+        onSave: () => saveCurrentState(),
+        onLeave: () => {
+            currentState = STATE.EXPLORATION;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+    });
 
 // --- STATE MANAGEMENT (NEW/LOAD) ---
 
@@ -285,31 +297,86 @@ function loadLocalNode(entryDir) {
         if (waterTiles.length > 0) currentLocalChest = rng.pick(waterTiles);
     }
 
-    // --- 2. SPAWN WANDERING FISHERMAN ---
-    currentLocalFisherman = null;
-    if (EventManager.Fisherman.hasFisherman(globalX, globalY)) {
-        const fRng = createRng(world.seed + globalX * 7 + globalY * 11 + gameDay);
-        const deepWaters =[];
-        
-        for (let y = 20; y < LOCAL_MAP_SIZE - 20; y += 5) { 
-            for (let x = 20; x < LOCAL_MAP_SIZE - 20; x += 5) {
-                if (currentLocalMap.grid[y][x] === TILE.DEEP_WATER) deepWaters.push({x, y});
+// --- 2. SPAWN NPC BOATS (Wanderers & Tournaments) ---
+    currentLocalNPCBoats =[];
+    
+    // Helper to find safe deep water away from the map edges (exits)
+    const findSafeSpots = (rng, count, margin = 100, minSpacing = 30) => {
+        const spots = [];
+        const validTiles =[];
+        for (let y = margin; y < LOCAL_MAP_SIZE - margin; y += 4) { 
+            for (let x = margin; x < LOCAL_MAP_SIZE - margin; x += 4) {
+                if (currentLocalMap.grid[y][x] === TILE.DEEP_WATER || currentLocalMap.grid[y][x] === TILE.WATER) {
+                    validTiles.push({x, y});
+                }
             }
         }
+        // Shuffle
+        for (let i = validTiles.length - 1; i > 0; i--) {
+            const j = rng.int(0, i);
+            [validTiles[i], validTiles[j]] = [validTiles[j], validTiles[i]];
+        }
+        for (const tile of validTiles) {
+            let safe = true;
+            for (const spot of spots) {
+                if (Math.hypot(tile.x - spot.x, tile.y - spot.y) < minSpacing) { safe = false; break; }
+            }
+            if (safe) { spots.push(tile); if (spots.length === count) break; }
+        }
+        return spots;
+    };
+
+    // A. Wandering Fisherman
+    if (EventManager.Fisherman.hasFisherman(globalX, globalY)) {
+        const fRng = createRng(world.seed + globalX * 7 + globalY * 11 + gameDay);
+        const spots = findSafeSpots(fRng, 1, 100, 30);
         
-        if (deepWaters.length > 0) {
-            const pos = fRng.pick(deepWaters);
+        if (spots.length > 0) {
             const npc = generateNPCData({ seed: fRng.next() * 10000 });
             const boat = generateBoatData({ seed: fRng.next() * 10000 });
-            const fullInv = MerchantGenerator.generateInventory(fRng.next() * 10000, currentBiome.id, player.stats.bartering);
-            
-            const boatImg = new Image();
-            boatImg.src = boat.art.topDownDataUrl;
+            const boatImg = new Image(); boatImg.src = boat.art.topDownDataUrl;
 
-            currentLocalFisherman = {
-                x: pos.x, y: pos.y, npc: npc, boat: boat, img: boatImg,
-                inventory: fullInv.slice(0, fRng.int(2, 4)) 
-            };
+            currentLocalNPCBoats.push({
+                x: spots[0].x, y: spots[0].y, npc: npc, img: boatImg, bobOffset: fRng.int(0, 1000),
+                isTournament: false,
+                inventory: MerchantGenerator.generateInventory(fRng.next() * 10000, currentBiome.id, player.stats.bartering).slice(0, fRng.int(2, 4))
+            });
+        }
+    }
+
+    // B. Fishing Tournament
+    const activeTournament = EventManager.Tournament.getTournament(globalX, globalY);
+    if (activeTournament) {
+        const tRng = createRng(world.seed + globalX * 13 + globalY * 17 + gameDay);
+        // We need 4 spots: 1 Official, 3 Competitors
+        const spots = findSafeSpots(tRng, 4, 120, 25);
+        
+        if (spots.length >= 4) {
+            // Generate the Organizer/Official
+            const offNpc = generateNPCData({ seed: tRng.next() * 10000 });
+            const offBoat = generateBoatData({ seed: tRng.next() * 10000 });
+            const offImg = new Image(); offImg.src = offBoat.art.topDownDataUrl;
+            
+            currentLocalNPCBoats.push({
+                x: spots[0].x, y: spots[0].y, npc: offNpc, img: offImg, bobOffset: tRng.int(0, 1000),
+                isTournament: true, tournamentRole: 'organizer'
+            });
+
+            // Generate the 3 Competitors using the saved names from the event
+            for (let i = 0; i < 3; i++) {
+                const compData = activeTournament.competitors[i];
+                // We use their saved name/race as the seed source so they look identical all day
+                const compNpc = generateNPCData({ seed: tRng.next() * 10000, race: compData.race, gender: compData.gender });
+                compNpc.name = compData.name; // Override generated name with saved name
+                
+                const compBoat = generateBoatData({ seed: tRng.next() * 10000 });
+                const compImg = new Image(); compImg.src = compBoat.art.topDownDataUrl;
+
+                currentLocalNPCBoats.push({
+                    x: spots[i+1].x, y: spots[i+1].y, npc: compNpc, img: compImg, bobOffset: tRng.int(0, 1000),
+                    isTournament: true, tournamentRole: 'competitor', compIndex: i
+                });
+            }
         }
     }
 
@@ -451,6 +518,19 @@ function enterEncounter() {
     saveCurrentState();
 }
 
+function enterTournament(npcBoat) {
+    ExplorationEngine.velocity = 0; 
+    keys.forward = keys.backward = keys.left = keys.right = false; 
+
+    currentState = STATE.TOURNAMENT;
+    document.getElementById('interact-prompt').style.display = 'none';
+    
+    const activeTournament = EventManager.Tournament.getTournament(globalX, globalY);
+    TournamentUI.open({ player, world, globalX, globalY }, npcBoat, activeTournament);
+    
+    saveCurrentState();
+}
+
 // --- HUB INTERACTION ---
 
 function enterHub() {
@@ -484,12 +564,31 @@ function resumeFromHub() {
 // --- MASTER LOOP ---
 
 function gameLoop(timestamp) {
-    if (currentState === STATE.MENU || currentState === STATE.HUB || currentState === STATE.PAUSE || currentState === STATE.ENCOUNTER) return;
+    if (currentState === STATE.MENU || currentState === STATE.HUB || currentState === STATE.PAUSE || currentState === STATE.ENCOUNTER || currentState === STATE.TOURNAMENT) return;
 
     const dt = Math.min((timestamp - lastTime) / 1000, 0.1); 
     lastTime = timestamp;
 
     HUD.update(player, gameDay, gameTimeMinutes);
+
+    // --- PHASE 4 FIX: GLOBAL TOURNAMENT TICKER ---
+    // Moved outside EXPLORATION so the timer ticks down WHILE you are fighting a fish!
+    const activeTournament = EventManager.Tournament.getTournament(globalX, globalY);
+    
+    if (activeTournament && activeTournament.isPlayerParticipating && !activeTournament.hasClaimedReward) {
+        if (activeTournament.timeRemaining > 0) {
+            activeTournament.timeRemaining -= dt;
+            if (activeTournament.timeRemaining <= 0) {
+                activeTournament.timeRemaining = 0;
+                activeTournament.isFinished = true;
+                HUD.logAction("TOURNAMENT OVER! Return to an official boat.", "danger");
+                SFX.playError(); // Buzzer
+            }
+        }
+        TournamentUI.updateTracker(activeTournament);
+    } else {
+        TournamentUI.hideTracker();
+    }
 
     if (currentState === STATE.EXPLORATION) {
         const effStats = PlayerEngine.getEffectiveStats(player);
@@ -504,7 +603,7 @@ function gameLoop(timestamp) {
         if (gameTimeMinutes >= 24 * 60) { 
             gameTimeMinutes -= 24 * 60; 
             gameDay++; 
-            EventManager.onNewDay(gameDay, world); // Passed 'world' instead of 'world.seed'
+            EventManager.onNewDay(gameDay, world); 
             HUD.logAction("A new day begins. The Darklake shifts...", "safe");
         }
 
@@ -513,7 +612,7 @@ function gameLoop(timestamp) {
             keys.forward = keys.backward = keys.left = keys.right = false; 
         }
 
-         // --- NEW: HAZARD FUNGAL ROT ---
+         // --- HAZARD FUNGAL ROT ---
         const activeWeather = EventManager.Weather.getWeather(globalX, globalY);
         if (activeWeather === 'spores' && !effStats.exploration.immunities.fungal && player.vitals.rations > 0) {
             fungalRotTimer += dt;
@@ -533,15 +632,15 @@ function gameLoop(timestamp) {
 
         ExplorationEngine.update(dt, keys);
         
-// --- INTERACTION CHECK ---
+        // --- INTERACTION CHECK ---
         let canInteract = false;
         let interactMsg = "";
-        let interactAction = null; // Tells the engine what function to run on [E]
+        let interactAction = null; 
         const tx = Math.floor(ExplorationEngine.x);
         const ty = Math.floor(ExplorationEngine.y);
         
         // 1. Check for Settlement Docks
-        const searchRadius = 8; // INCREASED: Was 3. Now allows docking from much further away.
+        const searchRadius = 8; // Allows docking from further away
         for (let y = Math.max(0, ty - searchRadius); y <= Math.min(LOCAL_MAP_SIZE - 1, ty + searchRadius); y++) {
             for (let x = Math.max(0, tx - searchRadius); x <= Math.min(LOCAL_MAP_SIZE - 1, tx + searchRadius); x++) {
                 if (currentLocalMap.grid[y][x] === TILE.DOCK) {
@@ -554,14 +653,24 @@ function gameLoop(timestamp) {
             if (canInteract) break;
         }
 
-        // 2. Check for Wandering Fishermen 
-        if (!canInteract && currentLocalFisherman) {
-            const distToFisherman = Math.hypot(tx - currentLocalFisherman.x, ty - currentLocalFisherman.y);
-            // INCREASED: Was 12. 25 gives you plenty of space to hail them without colliding.
-            if (distToFisherman < 25) { 
-                canInteract = true;
-                interactMsg = `Press [E] to hail ${currentLocalFisherman.npc.name}`;
-                interactAction = enterEncounter; 
+        // 2. Check for NPC Boats (Wanderers & Tournaments)
+        if (!canInteract && currentLocalNPCBoats.length > 0) {
+            for (const npcBoat of currentLocalNPCBoats) {
+                const distToBoat = Math.hypot(tx - npcBoat.x, ty - npcBoat.y);
+                if (distToBoat < 25) { 
+                    canInteract = true;
+                    if (npcBoat.isTournament) {
+                        interactMsg = `Press [E] to hail ${npcBoat.npc.name} (Tournament)`;
+                        interactAction = () => { enterTournament(npcBoat); }; // <-- UPDATED
+                    } else {
+                        interactMsg = `Press [E] to hail ${npcBoat.npc.name}`;
+                        interactAction = () => { 
+                            currentLocalFisherman = npcBoat; 
+                            enterEncounter(); 
+                        }; 
+                    }
+                    break;
+                }
             }
         }
 
@@ -571,7 +680,7 @@ function gameLoop(timestamp) {
             prompt.innerText = interactMsg;
             if (keys.actionJustPressed) {
                 keys.actionJustPressed = false;
-                if (interactAction) interactAction(); // Trigger the specific action
+                if (interactAction) interactAction(); 
             }
         } else {
             prompt.style.display = 'none';
@@ -581,16 +690,16 @@ function gameLoop(timestamp) {
 
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // Passed 'dt' as the 3rd argument!
-        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, mouse, false,[], currentLocalChest, currentLocalFisherman);
+        // Pass the array of boats into the renderer!
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, mouse, false,[], currentLocalChest, currentLocalNPCBoats);
         HUD.drawMinimap(ExplorationEngine.x, ExplorationEngine.y);
     }
 
     else if (currentState === STATE.FISHING) {
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // Passed 'dt' as the 3rd argument!
-        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, null, true,[], currentLocalChest);
+        // Pass the array of boats here as well so they render in the background!
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, null, true,[], currentLocalChest, currentLocalNPCBoats);
         
         FishingEngine.update(dt, isReeling);
         FishingRenderer.update(FishingEngine, dt, isReeling);
@@ -610,7 +719,7 @@ function gameLoop(timestamp) {
                         name: 'Sunken Chest',
                         art: caughtFish.art, 
                         imageDataUrl: caughtFish.art.imageDataUrl,
-                        chestSeed: caughtFish.chestSeed // <-- ADDED: Save it to the inventory item
+                        chestSeed: caughtFish.chestSeed 
                     });
                     
                     EventManager.Treasure.clearChest(globalX, globalY); 
@@ -650,8 +759,7 @@ function gameLoop(timestamp) {
                         }
                     });
 
-                    // --- NEW: XP & LEVEL UP LOGIC ---
-                    // Apply Intelligence stat multiplier to the fish's base XP
+                    // --- XP & LEVEL UP LOGIC ---
                     const finalXpGain = Math.round(caughtFish.economy.baseXp * effStats.economy.generalXpMult);
                     const leveledUp = PlayerEngine.addXp(player, finalXpGain);
                     
@@ -661,6 +769,19 @@ function gameLoop(timestamp) {
                     }
 
                     handleEndFishing(`Caught a ${caughtFish.identity.name} (+${finalXpGain} XP)!`, "safe");
+                    
+                    // --- TOURNAMENT FEEDBACK ---
+                    if (activeTournament && activeTournament.isPlayerParticipating && !activeTournament.isFinished) {
+                        let isRelevant = true;
+                        // If it's a specialist tournament, ensure we only warn about the specific target fish
+                        if (activeTournament.objectiveType === 'specialist' && caughtFish.id !== activeTournament.targetSpeciesId) {
+                            isRelevant = false;
+                        }
+                        if (isRelevant) {
+                            HUD.logAction(`Tournament Catch! Deliver it quickly!`, "warn");
+                        }
+                    }
+
                     saveCurrentState();
                 }
             } else {

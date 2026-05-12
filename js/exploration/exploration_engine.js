@@ -14,46 +14,44 @@ export const ExplorationEngine = {
     velocity: 0,
     heading: -Math.PI / 2, 
     currentNoise: 0, 
-    fishermanPos: null, 
+    npcBoats:[], // <-- REPLACED fishermanPos with an array
     
-    // --- NEW: Hazard State ---
+    // --- Hazard State ---
     biomeId: null,
     weather: null,
     volcanicTimer: 0,
     crystalTimer: 0,
-    isWarping: false, // <-- NEW
+    isWarping: false,
     
     // --- Data References ---
     boatStats: null,
     localMap: null,
     
     // --- Engine Constants ---
-    collisionRadius: 6, // Radius of the boat's hitbox in grid pixels
-    waterFriction: 1.5, // How quickly the boat glides to a stop
+    collisionRadius: 6, 
+    waterFriction: 1.5, 
     
     // --- Event Callbacks ---
     onDamage: null,
     onZoneTransition: null,
     onDockInteract: null,
 
-    init(startX, startY, effectiveExplorationStats, localMapData, heading = -Math.PI / 2, velocity = 0, fishermanPos = null, biomeId = null, weather = null) {
+    init(startX, startY, effectiveExplorationStats, localMapData, heading = -Math.PI / 2, velocity = 0, npcBoats =[], biomeId = null, weather = null) {
         this.x = startX;
         this.y = startY;
         this.velocity = velocity; 
         this.heading = heading;   
         this.currentNoise = 0;    
-        this.fishermanPos = fishermanPos; 
+        this.npcBoats = npcBoats; // <-- UPDATED
         
         this.biomeId = biomeId;
         this.weather = weather;
         this.volcanicTimer = 5.0; 
         this.crystalTimer = getRandomInRange(5.0, 15.0);
-        this.isWarping = false; // <-- NEW
+        this.isWarping = false; 
         
         this.boatStats = effectiveExplorationStats; 
         this.localMap = localMapData;
-        
-        console.log("🧭 Exploration Engine Initialized at", startX, startY);
     },
 
     update(dt, input) {
@@ -194,20 +192,22 @@ export const ExplorationEngine = {
             }
         }
 
-        // B. NEW: Check against Fisherman Boat
-        if (this.fishermanPos) {
-            const distX = this.x - this.fishermanPos.x;
-            const distY = this.y - this.fishermanPos.y;
-            const distance = Math.hypot(distX, distY);
-            
-            // The fisherman's boat has roughly a 6 grid-tile radius
-            const minSafeDistance = this.collisionRadius + 6;
+        // B. NEW: Check against Array of NPC Boats
+        if (this.npcBoats && this.npcBoats.length > 0) {
+            for (const npc of this.npcBoats) {
+                const distX = this.x - npc.x;
+                const distY = this.y - npc.y;
+                const distance = Math.hypot(distX, distY);
+                
+                // NPC boats have roughly a 6 grid-tile radius
+                const minSafeDistance = this.collisionRadius + 6;
 
-            if (distance < minSafeDistance) {
-                hit = true;
-                const overlap = minSafeDistance - distance;
-                this.x += (distX / distance) * overlap;
-                this.y += (distY / distance) * overlap;
+                if (distance < minSafeDistance) {
+                    hit = true;
+                    const overlap = minSafeDistance - distance;
+                    this.x += (distX / distance) * overlap;
+                    this.y += (distY / distance) * overlap;
+                }
             }
         }
 

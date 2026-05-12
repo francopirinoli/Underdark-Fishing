@@ -525,6 +525,7 @@ export const HubUI = {
             const row = document.createElement('div');
             row.className = 'shop-item-row';
             
+            // --- FIX 1: Cargo check and Equipment check for Upgrades ---
             let disableReason = null;
             if (item.type === 'boat') {
                 let newCargoLimit = item.itemData.stats.cargoSpace;
@@ -532,9 +533,8 @@ export const HubUI = {
                 if (currentInvCount > newCargoLimit) disableReason = "Cargo Too Full To Swap";
             } 
             else if (item.type === 'upgrade') {
-                if (item.id.includes('lantern') && player.gear.boat.upgrades.lantern && player.gear.boat.upgrades.lantern.id === item.id) disableReason = "Owned";
-                if (item.id === 'upg_cargo_net' && player.gear.boat.upgrades.storage) disableReason = "Owned";
-                if (item.id === 'upg_iron_plating' && player.gear.boat.upgrades.plating) disableReason = "Owned";
+                if (currentInvCount >= maxCargo) disableReason = "Cargo Full";
+                else if (player.gear.boat.upgrades[item.slot] && player.gear.boat.upgrades[item.slot].id === item.id) disableReason = "Equipped";
             }
 
             const canAfford = player.vitals.gold >= item.price;
@@ -547,7 +547,6 @@ export const HubUI = {
 
             const isDisabled = disableReason || !canAfford || !hasStock;
 
-            // NEW: Grab the pixel art if it exists
             let imgSrc = '';
             if (item.type === 'boat') imgSrc = item.itemData.art.profileDataUrl;
             
@@ -556,14 +555,14 @@ export const HubUI = {
             const itemName = item.name || (item.identity ? item.identity.name : 'Item');
             const nameColor = getItemColor(item.itemData || item);
 
-                row.innerHTML = `
-                    <div style="display:flex; gap: 1rem; align-items:center;">
-                        ${imgHtml}
-                        <div class="shop-item-info">
-                            <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
-                            <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
-                        </div>
+            row.innerHTML = `
+                <div style="display:flex; gap: 1rem; align-items:center;">
+                    ${imgHtml}
+                    <div class="shop-item-info">
+                        <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.type || item.rarity}]</span>
+                        <p>${item.desc || `Stock: ${item.stock === 99 ? 'Infinite' : item.stock}`}</p>
                     </div>
+                </div>
                 <div class="shop-buy">
                     <span class="shop-price">${item.price}g</span>
                     <button class="menu-btn btn-buy" style="width: auto; padding: 0.4rem 1rem; margin:0; font-size:1.2rem; ${isDisabled ? 'opacity:0.4; cursor:not-allowed; border-color:var(--panel-border); color:var(--text-muted);' : ''}" ${isDisabled ? 'disabled' : ''}>${btnText}</button>
@@ -580,29 +579,18 @@ export const HubUI = {
                     player.vitals.gold -= item.price;
                     if (item.stock !== 99) item.stock--;
                     
+                    // --- FIX 2: Send directly to inventory so player can install at Safehouse! ---
                     if (item.type === 'upgrade') {
-                        if (item.id.includes('lantern')) player.gear.boat.upgrades.lantern = item;
-                        else if (item.id === 'upg_cargo_net') {
-                            player.gear.boat.upgrades.storage = item;
-                            player.gear.boat.stats.cargoSpace += 10;
-                        } else if (item.id === 'upg_iron_plating') {
-                            player.gear.boat.upgrades.plating = item;
-                            player.gear.boat.stats.maxHp += 50;
-                        }
+                        player.inventory.push({ ...item, invType: 'upgrade' });
                     } else if (item.type === 'boat') {
                         const oldUpgrades = player.gear.boat.upgrades;
                         const newBoat = item.itemData;
                         newBoat.invType = 'boat'; 
                         newBoat.upgrades = oldUpgrades; 
                         
-                        if (oldUpgrades.storage) newBoat.stats.cargoSpace += 10;
-                        if (oldUpgrades.plating) newBoat.stats.maxHp += 50;
-                        
-                        // Push old boat to inventory (safely reset its upgrades so they aren't duplicated)
+                        // Push old boat to inventory (resetting its upgrades safely)
                         const oldBoatCopy = JSON.parse(JSON.stringify(player.gear.boat));
-                        oldBoatCopy.upgrades = { lantern: { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 }, plating: null, engine: null, storage: null };
-                        if (oldUpgrades.storage) oldBoatCopy.stats.cargoSpace -= 10;
-                        if (oldUpgrades.plating) oldBoatCopy.stats.maxHp -= 50;
+                        oldBoatCopy.upgrades = { lantern: { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 }, plating: null, engine: null, prow: null, storage: null };
                         player.inventory.push(oldBoatCopy);
 
                         player.gear.boat = newBoat;
@@ -960,6 +948,13 @@ export const HubUI = {
                 if (safehouse.stash.length < safehouse.stashCapacity) safehouse.stash.push(item);
                 else player.inventory.push(item);
 
+                // --- FIX 3: Revert Stats when unequipped ---
+                if (item.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace -= 10;
+                if (item.id === 'upg_iron_plating') {
+                    player.gear.boat.stats.maxHp -= 50;
+                    player.vitals.hp = Math.min(player.vitals.hp, player.gear.boat.stats.maxHp);
+                }
+
                 if (slot === 'lantern') player.gear.boat.upgrades.lantern = { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 };
                 else player.gear.boat.upgrades[slot] = null;
 
@@ -970,7 +965,8 @@ export const HubUI = {
         });
 
         const upgradeList = document.getElementById('sh-upgrade-list');
-        const allAvailableUpgrades =[...safehouse.stash.filter(i=>i.type==='upgrade'), ...player.inventory.filter(i=>i.type==='upgrade')];
+        // Check for both 'type' (Shop) and 'invType' (Inventory) to be totally safe
+        const allAvailableUpgrades =[...safehouse.stash.filter(i=>i.type==='upgrade' || i.invType==='upgrade'), ...player.inventory.filter(i=>i.type==='upgrade' || i.invType==='upgrade')];
         
         if (allAvailableUpgrades.length === 0) {
             upgradeList.innerHTML = `<span style="color:var(--text-muted); font-style:italic;">No upgrades found in Stash or Cargo.</span>`;
@@ -988,8 +984,23 @@ export const HubUI = {
                 if (oldItem && oldItem.id !== 'lantern_basic') {
                     if (safehouse.stash.length < safehouse.stashCapacity) safehouse.stash.push(oldItem);
                     else player.inventory.push(oldItem);
+
+                    // --- FIX 4: Revert old stats before applying new ones ---
+                    if (oldItem.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace -= 10;
+                    if (oldItem.id === 'upg_iron_plating') {
+                        player.gear.boat.stats.maxHp -= 50;
+                        player.vitals.hp = Math.min(player.vitals.hp, player.gear.boat.stats.maxHp);
+                    }
                 }
+                
                 player.gear.boat.upgrades[u.slot] = u;
+                
+                // --- FIX 5: Apply New Stats ---
+                if (u.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace += 10;
+                if (u.id === 'upg_iron_plating') {
+                    player.gear.boat.stats.maxHp += 50;
+                    player.vitals.hp += 50; // Give them the HP immediately
+                }
                 
                 const sIdx = safehouse.stash.findIndex(i => i.id === u.id);
                 if (sIdx > -1) safehouse.stash.splice(sIdx, 1);

@@ -361,7 +361,7 @@ export const ExplorationRenderer = {
         this.ctx.globalAlpha = 1.0; // Reset alpha
     },
 
-    render(engine, lightRadius, dt, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, fisherman = null) {
+    render(engine, lightRadius, dt, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, npcBoats =[]) {
         if (!this.offscreenMap || !this.boatImage) return;
 
         const playerPxX = engine.x * this.TILE_SIZE;
@@ -416,26 +416,41 @@ export const ExplorationRenderer = {
         const activeLights =[];
         activeLights.push({ x: screenBoatX, y: screenBoatY, radius: lightRadius });
 
-                // --- NEW: DRAW WANDERING FISHERMAN ---
-        if (fisherman && fisherman.img && !isFishingPhase) {
-            const fx = (fisherman.x * this.TILE_SIZE) - this.camX;
-            const fy = (fisherman.y * this.TILE_SIZE) - this.camY;
-            
-            // Add a gentle floating bob and wobble
-            const bob = Math.sin(Date.now() / 400) * 2;
-            const rot = Math.sin(Date.now() / 800) * 0.05;
-            
-            const fbw = fisherman.img.width * BOAT_VISUAL_SCALE;
-            const fbh = fisherman.img.height * BOAT_VISUAL_SCALE;
+// --- UPDATED: DRAW ALL NPC BOATS (Fishermen & Tournament Competitors) ---
+        if (npcBoats && npcBoats.length > 0 && !isFishingPhase) {
+            npcBoats.forEach(npc => {
+                const fx = (npc.x * this.TILE_SIZE) - this.camX;
+                const fy = (npc.y * this.TILE_SIZE) - this.camY;
+                
+                // Uniquely offset their bobbing so they don't all bounce in perfect sync
+                const bob = Math.sin((Date.now() + npc.bobOffset) / 400) * 2;
+                const rot = Math.sin((Date.now() + npc.bobOffset) / 800) * 0.05;
+                
+                const fbw = npc.img.width * BOAT_VISUAL_SCALE;
+                const fbh = npc.img.height * BOAT_VISUAL_SCALE;
 
-            this.ctx.save();
-            this.ctx.translate(fx, fy + bob);
-            this.ctx.rotate(rot);
-            this.ctx.drawImage(fisherman.img, -fbw / 2, -fbh / 2, fbw, fbh);
-            this.ctx.restore();
+                this.ctx.save();
+                this.ctx.translate(fx, fy + bob);
+                this.ctx.rotate(rot);
+                this.ctx.drawImage(npc.img, -fbw / 2, -fbh / 2, fbw, fbh);
+                
+                // --- NEW: Draw Golden Tournament Flags ---
+                if (npc.isTournament) {
+                    this.ctx.fillStyle = '#F59E0B'; // Gold flag
+                    this.ctx.fillRect(-2, -fbh/2 - 12, 2, 12); // Flagpole
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(0, -fbh/2 - 12);
+                    this.ctx.lineTo(12, -fbh/2 - 8);
+                    this.ctx.lineTo(0, -fbh/2 - 4);
+                    this.ctx.fill();
+                }
+                
+                this.ctx.restore();
 
-            // Give the fisherman a faint, warm lantern glow
-            activeLights.push({ x: fx, y: fy + bob, radius: 100, color: 'rgba(251, 191, 36, 0.4)' });
+                // Tournament boats get a Cyan glow, Fishermen get a Warm glow
+                const glowColor = npc.isTournament ? 'rgba(34, 211, 238, 0.4)' : 'rgba(251, 191, 36, 0.4)';
+                activeLights.push({ x: fx, y: fy + bob, radius: 100, color: glowColor });
+            });
         }
 
         if (this.dockPositions.length > 0) {

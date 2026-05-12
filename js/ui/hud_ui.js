@@ -137,13 +137,10 @@ export const HUD = {
         
         if (type === 'danger') div.style.color = 'var(--red-danger)';
         if (type === 'safe') div.style.color = 'var(--green-safe)';
+        if (type === 'warn') div.style.color = 'var(--gold-warn)'; // <-- NEW
         
         logBox.appendChild(div);
         
-        // --- NEW: Dynamic Height Check ---
-        // Instead of a hard limit, we check if the text is spilling out of the box.
-        // If the inner scroll height is larger than the physical box, we delete the oldest message.
-        // We use a +2 pixel buffer to prevent browser zoom sub-pixel rounding bugs.
         while (logBox.scrollHeight > logBox.clientHeight + 2 && logBox.children.length > 1) {
             logBox.removeChild(logBox.firstChild);
         }

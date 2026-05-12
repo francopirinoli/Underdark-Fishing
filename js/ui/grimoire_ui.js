@@ -129,26 +129,35 @@ export const GrimoireUI = {
             return true;
         });
         
-// Pass Weather Nodes to renderer
-        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, EventManager.Weather.activeNodes);
+        // Pass Weather Nodes and Tournament Nodes to renderer
+        const activeWeather = EventManager.Weather.activeNodes;
+        const activeTournaments = EventManager.Tournament.activeNodes;
 
-        // Calculate Hazard Text for the info panel
+        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, activeWeather, activeTournaments);
+
+        // Calculate Detail Text for the info panel
         const weather = EventManager.Weather.getWeather(this.selectedMapNode.x, this.selectedMapNode.y);
-        let hazardHtml = '';
+        const tournament = EventManager.Tournament.getTournament(this.selectedMapNode.x, this.selectedMapNode.y);
+        let infoHtml = '';
         
-        // --- FIX: Only reveal hazards if the player has actually discovered the node! ---
+        // Only reveal hazards/events if the player has actually discovered the node!
         if (this.selectedMapNode.isDiscovered) {
             // Permanent Hazards
-            if (this.selectedMapNode.biomeId === 'volcanic') hazardHtml = `<div style="color:var(--red-danger); font-size:1.1rem; margin-top:0.3rem;">⚠ Boiling Waters</div>`;
-            if (this.selectedMapNode.biomeId === 'frozen') hazardHtml = `<div style="color:var(--cyan-glow); font-size:1.1rem; margin-top:0.3rem;">⚠ Pack Ice</div>`;
+            if (this.selectedMapNode.biomeId === 'volcanic') infoHtml += `<div style="color:var(--red-danger); font-size:1.1rem; margin-top:0.3rem;">⚠ Boiling Waters</div>`;
+            if (this.selectedMapNode.biomeId === 'frozen') infoHtml += `<div style="color:var(--cyan-glow); font-size:1.1rem; margin-top:0.3rem;">⚠ Pack Ice</div>`;
             
             // Dynamic Hazards
-            if (weather === 'spores') hazardHtml += `<div style="color:#86EFAC; font-size:1.1rem; margin-top:0.3rem;">⚠ Toxic Spore Storm</div>`;
-            else if (weather === 'shatter') hazardHtml += `<div style="color:#93C5FD; font-size:1.1rem; margin-top:0.3rem;">⚠ Crystal Shatter-Storm</div>`;
-            else if (weather === 'whirlpool') hazardHtml += `<div style="color:#A855F7; font-size:1.1rem; margin-top:0.3rem;">⚠ Void Whirlpool</div>`;
+            if (weather === 'spores') infoHtml += `<div style="color:#86EFAC; font-size:1.1rem; margin-top:0.3rem;">⚠ Toxic Spore Storm</div>`;
+            else if (weather === 'shatter') infoHtml += `<div style="color:#93C5FD; font-size:1.1rem; margin-top:0.3rem;">⚠ Crystal Shatter-Storm</div>`;
+            else if (weather === 'whirlpool') infoHtml += `<div style="color:#A855F7; font-size:1.1rem; margin-top:0.3rem;">⚠ Void Whirlpool</div>`;
+
+            // Active Events
+            if (tournament && !tournament.isFinished) {
+                infoHtml += `<div style="color:var(--gold-warn); font-size:1.1rem; margin-top:0.3rem;">🏆 Fishing Tournament Active</div>`;
+            }
         }
 
-        document.getElementById('grim-map-coords').innerHTML = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}] ${hazardHtml}`;
+        document.getElementById('grim-map-coords').innerHTML = `[${this.selectedMapNode.x}, ${this.selectedMapNode.y}] ${infoHtml}`;
 
         const ecoContainer = document.getElementById('grim-map-ecology');
         ecoContainer.innerHTML = '';
@@ -157,7 +166,6 @@ export const GrimoireUI = {
             document.getElementById('grim-map-title').innerText = this.selectedMapNode.name;
             const b = BIOMES[this.selectedMapNode.biomeId];
             document.getElementById('grim-map-biome').innerText = b.name;
-            // FIX: Use the new readable text color!
             document.getElementById('grim-map-biome').style.color = b.textColor || b.globalColor;
 
             const discoveredIds = this.selectedMapNode.discoveredSpecies ||[];
@@ -166,7 +174,6 @@ export const GrimoireUI = {
             if (knownSpecies.length > 0) {
                 knownSpecies.forEach(entry => {
                     const fish = entry.speciesData;
-                    const rColor = getRarityColor(fish.identity.rarity); // Get Rarity Color
                     ecoContainer.innerHTML += `
                         <div style="display: flex; align-items: center; gap: 0.8rem; font-size: 1.1rem; padding-bottom: 0.2rem; border-bottom: 1px dashed var(--panel-border);">
                             <img src="${fish.art.imageDataUrl}" style="width: 28px; height: 28px; background: #000; border: 1px solid var(--panel-border); border-radius: 2px; image-rendering: pixelated;" />

@@ -5,7 +5,7 @@
 
 import { TILE } from './local_map.js';
 
-export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[], weatherNodes = {}) {
+export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[], weatherNodes = {}, tournamentNodes = {}) {
     const ctx = canvas.getContext('2d');
     const tileW = canvas.width / globalMap.width;
     const tileH = canvas.height / globalMap.height;
@@ -17,12 +17,13 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Pass 1: Backgrounds, Fog of War, & Quest Borders
+    // Pass 1: Backgrounds, Fog of War, & Tint Overlays
     for (let y = 0; y < globalMap.height; y++) {
         for (let x = 0; x < globalMap.width; x++) {
             const node = globalMap.nodes[y][x];
             const isQuestTarget = questNodes.has(`${x},${y}`);
-            const hasWeather = weatherNodes[`${x},${y}`]; // <-- NEW
+            const hasWeather = weatherNodes[`${x},${y}`];
+            const hasTournament = tournamentNodes[`${x},${y}`];
             
             if (node.isDiscovered) {
                 ctx.fillStyle = biomes[node.biomeId].globalColor;
@@ -31,9 +32,15 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
             }
             ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             
-            // --- NEW: Hazard Overlay ---
+            // Hazard Overlay
             if (node.isDiscovered && hasWeather) {
                 ctx.fillStyle = 'rgba(239, 68, 68, 0.25)'; // Red tint
+                ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
+            }
+
+            // Tournament Overlay
+            if (node.isDiscovered && hasTournament && !hasTournament.isFinished) {
+                ctx.fillStyle = 'rgba(251, 191, 36, 0.15)'; // Gold tint
                 ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             }
             
@@ -49,7 +56,7 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
         }
     }
     
-    // Pass 2: Exits, Settlements & Question Marks
+    // Pass 2: Exits, Settlements & Icons
     ctx.lineWidth = 2;
     for (let y = 0; y < globalMap.height; y++) {
         for (let x = 0; x < globalMap.width; x++) {
@@ -57,7 +64,8 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
             const cx = x * tileW + tileW / 2;
             const cy = y * tileH + tileH / 2;
             const isQuestTarget = questNodes.has(`${x},${y}`);
-            const hasWeather = weatherNodes[`${x},${y}`]; // <-- NEW
+            const hasWeather = weatherNodes[`${x},${y}`];
+            const hasTournament = tournamentNodes[`${x},${y}`];
             
             if (node.isDiscovered) {
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
@@ -75,7 +83,7 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fill();
                 }
 
-                // --- NEW: Hazard Warning Icon ---
+                // Hazard Warning Icon (Top-Left)
                 if (hasWeather) {
                     ctx.fillStyle = '#EF4444';
                     ctx.font = `bold ${tileH * 0.4}px "Courier New", monospace`;
@@ -84,6 +92,16 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fillText('⚠', x * tileW + 2, y * tileH + 2);
                 }
 
+                // Tournament Icon (Bottom-Left)
+                if (hasTournament && !hasTournament.isFinished) {
+                    ctx.fillStyle = '#FBBF24';
+                    ctx.font = `${tileH * 0.45}px "Courier New", monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText('🏆', x * tileW + 2, y * tileH + tileH - 2);
+                }
+
+                // Quest Icon (Top-Right)
                 if (isQuestTarget) {
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `bold ${tileH * 0.5}px "Courier New", monospace`;
