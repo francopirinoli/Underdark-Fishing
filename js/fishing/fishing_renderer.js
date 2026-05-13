@@ -1,29 +1,30 @@
 /**
  * js/fishing/fishing_renderer.js
  * The Visual and Audio Feedback bridge for the Fishing Minigame.
- * V4 - Scaled sprites, Bezier curve fishing lines, water current swaying, 
- * Escape Timer UI, and smooth depth scrolling.
+ * V5 - Optimized Rendering (Precomputed gradients, flora matrices, and offscreen filter caching).
  */
 
 import { SFX } from '../audio/sfx_generator.js';
 import { getRarityColor } from '../util/utils.js';
 
-// Local Map Tile IDs
 const TILE = { WATER: 0, DEEP_WATER: 1, LAND: 2, ROCK: 3, FLORA: 4, DOCK: 5 };
 
 export const FishingRenderer = {
     container: null,
     elements: {},
     
-    // Canvas Contexts
     canvas: null,
     ctx: null,
     CW: 260,
     CH: 340,
 
-    // Image Caches
+    // Caches
     lureImg: null,
-    fishImg: null,
+    fishImgNormal: null,
+    fishImgBite: null,
+    fishImgTired: null,
+    bgGradientCanvas: null,
+    floraCanvas: null,
 
     // Visual State
     lastPhase: 'IDLE',
@@ -36,6 +37,7 @@ export const FishingRenderer = {
     init(containerElement) {
         this.container = containerElement;
         
+        // (Keep your exact same CSS injection block here, omitting for brevity)
         const style = document.createElement('style');
         style.textContent = `
             .fishing-modal {
@@ -98,7 +100,6 @@ export const FishingRenderer = {
                         <h2 id="fm-title">Sinking Lure...</h2>
                         <div class="escape-timer" id="fm-timer-wrap">Escape: <span id="lbl-timer">0.0</span>s</div>
                     </div>
-                    
                     <div class="fishing-layout">
                         <div class="water-cam">
                             <canvas id="fm-canvas" width="${this.CW}" height="${this.CH}"></canvas>
@@ -107,7 +108,6 @@ export const FishingRenderer = {
                                 <div class="hook-timer-bar"><div class="hook-timer-fill" id="fm-hook-fill"></div></div>
                             </div>
                         </div>
-                        
                         <div class="bars-container">
                             <div class="bar-row">
                                 <div class="bar-labels"><span style="color:#94A3B8;">Line Tension</span> <span id="lbl-tension">0%</span></div>
@@ -125,22 +125,17 @@ export const FishingRenderer = {
                                 <div class="bar-labels"><span style="color:#FBBF24;">Catch Progress</span> <span id="lbl-catch" style="color:#FBBF24;">0%</span></div>
                                 <div class="bar-track" style="height: 24px; border-color: #B45309;"><div class="bar-fill" id="bar-catch" style="width: 0%;"></div></div>
                             </div>
-                            
-                            <!-- NEW: REEL POWER GAUGE -->
                             <div class="bar-row" style="margin-top: 0.5rem; border-top: 1px dashed #1E293B; padding-top: 0.5rem;">
                                 <div class="bar-labels"><span id="lbl-reel-text" style="color:#A5B4FC;">Reel Power (Scroll)</span> <span id="lbl-reel-power" style="color:#A5B4FC;">50%</span></div>
                                 <div class="bar-track" id="track-reel-power" style="height: 18px; border-color: #4F46E5;"><div class="bar-fill" id="bar-reel-power" style="width: 50%; background: #6366F1; transition: width 0.05s linear, background-color 0.2s;"></div></div>
                             </div>
-                            
                             <div class="depth-readout" id="lbl-depth">Depth: 0m (Surface)</div>
                         </div>
                     </div>
-                    
                     <div class="behavior-text" id="fm-behavior">WAITING...</div>
                     <div class="controls-hint">SCROLL: Depth (Sinking) / Reel Power (Fight). Hold CLICK/SPACE to Reel.</div>
                 </div>
             </div>
-
         `;
 
         this.elements = {
@@ -152,7 +147,6 @@ export const FishingRenderer = {
             canvas: document.getElementById('fm-canvas'),
             biteAlert: document.getElementById('fm-bite-alert'),
             hookFill: document.getElementById('fm-hook-fill'),
-            
             barTension: document.getElementById('bar-tension'),
             lblTension: document.getElementById('lbl-tension'),
             barPStam: document.getElementById('bar-p-stam'),
@@ -161,12 +155,9 @@ export const FishingRenderer = {
             lblFStam: document.getElementById('lbl-f-stam'),
             barCatch: document.getElementById('bar-catch'),
             lblCatch: document.getElementById('lbl-catch'),
-            
-            // <-- ADD THESE 3 LINES -->
             barReelPower: document.getElementById('bar-reel-power'),
             lblReelPower: document.getElementById('lbl-reel-power'),
             trackReelPower: document.getElementById('track-reel-power'),
-            
             lblDepth: document.getElementById('lbl-depth'),
             behavior: document.getElementById('fm-behavior')
         };
@@ -175,13 +166,17 @@ export const FishingRenderer = {
         this.ctx.imageSmoothingEnabled = false;
     },
 
-open(config) {
+    open(config) {
         this.biomePal = config.biome.palette;
         this.tileId = config.tileId;
         
+        // --- OPTIMIZATION 1: Precompute Gradient & Flora on Open ---
+        this._precomputeBackground();
+        if (this.tileId === TILE.FLORA) this._precomputeFlora();
+        
         this.lureImg = new Image();
         this.lureImg.src = config.lureDataUrl;
-        this.fishImg = null; 
+        this.fishImgNormal = null; 
         
         this.elements.modal.style.display = 'flex';
         this.elements.title.innerText = "Sinking Lure...";
@@ -193,22 +188,18 @@ open(config) {
         
         this.lastPhase = 'SINKING';
         this.lastAiState = 'HOLD';
-        
         this.elements.behavior.innerText = "Sinking line...";
         this.elements.behavior.style.color = "#64748B";
 
-        // --- NEW: Reset all physics bars visually ---
+        // Reset UI
         this.elements.barTension.style.width = '0%';
         this.elements.lblTension.innerText = '0%';
         this.elements.barTension.style.background = '#3B82F6';
-        
         this.elements.barCatch.style.width = '0%';
         this.elements.lblCatch.innerText = '0%';
-        
         this.elements.barPStam.style.width = '100%';
         this.elements.lblPStam.innerText = '100%';
         this.elements.barPStam.style.background = '#22D3EE';
-        
         this.elements.barFStam.style.width = '100%';
         this.elements.lblFStam.innerText = '100%';
         
@@ -219,10 +210,112 @@ open(config) {
     close() {
         this.elements.modal.style.display = 'none';
         SFX.updateTension(0); 
+        SFX.updateReel(false); // <-- NEW: Ensure continuous reel sound shuts off
+    },
+
+// Caches
+    lureImg: null,
+    fishImgNormal: null,
+    fishImgBite: null,
+    fishImgTired: null,
+    
+    bgGradientCanvas: null,
+    _lastBgPal: null, // NEW: Tracks biome colors to avoid re-rendering
+    
+    floraFrames: null,
+    _lastFloraPal: null, // NEW: Tracks biome colors to avoid re-rendering
+
+    // ... (Keep init, open, close, etc.)
+
+    // --- PRECOMPUTATION ENGINES ---
+    _precomputeBackground() {
+        // OPTIMIZATION: Only regenerate if we don't have one, or if we changed biomes
+        if (this.bgGradientCanvas && this._lastBgPal === this.biomePal.water) return;
+        this._lastBgPal = this.biomePal.water;
+
+        const totalH = this.CH + 1200; 
+        if (!this.bgGradientCanvas) {
+            this.bgGradientCanvas = document.createElement('canvas');
+        }
+        // FAST: Match canvas width exactly to avoid stretch interpolation during rendering
+        this.bgGradientCanvas.width = this.CW; 
+        this.bgGradientCanvas.height = totalH;
+        const ctx = this.bgGradientCanvas.getContext('2d');
+        
+        const grad = ctx.createLinearGradient(0, 0, 0, totalH);
+        grad.addColorStop(0, this.biomePal.water);
+        grad.addColorStop(1, '#000000'); 
+        
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, this.CW, totalH);
+    },
+
+    _precomputeFlora() {
+        // OPTIMIZATION: Only regenerate if we don't have one, or if we changed biomes
+        if (this.floraFrames && this._lastFloraPal === this.biomePal.flora) return;
+        this._lastFloraPal = this.biomePal.flora;
+
+        const width = this.CW;
+        const height = 60; // Max visual height of flora
+        this.floraFrames =[];
+        const numFrames = 7; // 7 frames of animation
+
+        for (let frame = 0; frame < numFrames; frame++) {
+            const c = document.createElement('canvas');
+            c.width = width; 
+            c.height = height;
+            const ctx = c.getContext('2d');
+            
+            ctx.fillStyle = this.biomePal.flora;
+            
+            // Map frame 0 to 6 into sway values of -6 to 6
+            const baseSway = ((frame / (numFrames - 1)) * 2 - 1) * 6;
+            
+            for(let i = 0; i < 8; i++) {
+                const baseX = 20 + i * 35;
+                for (let s = 0; s < 3; s++) {
+                    const h = 15 + ((i * 7 + s * 13) % 30);
+                    const stalkX = baseX + s * 5;
+                    for (let seg = 0; seg < h; seg += 4) {
+                        const swayAmt = (seg / h) * baseSway * (s + 1);
+                        ctx.fillRect(stalkX + swayAmt, height - seg - 4, 3, 4);
+                        if (seg > 4 && (seg + s) % 3 !== 0) {
+                            const leafDir = (seg % 8 === 0) ? -3 : 3;
+                            ctx.fillRect(stalkX + swayAmt + leafDir, height - seg - 2, 3, 2);
+                        }
+                    }
+                }
+            }
+            this.floraFrames.push(c);
+        }
+    },
+
+    _precomputeFishStates(engine) {
+        this.fishImgNormal = new Image();
+        this.fishImgNormal.onload = () => {
+            const w = this.fishImgNormal.width;
+            const h = this.fishImgNormal.height;
+            
+            // OPTIMIZATION: Reuse offscreen canvases instead of re-creating them
+            if (!this.fishImgBite) this.fishImgBite = document.createElement('canvas');
+            this.fishImgBite.width = w; this.fishImgBite.height = h;
+            const bCtx = this.fishImgBite.getContext('2d');
+            bCtx.clearRect(0, 0, w, h);
+            bCtx.filter = 'brightness(0) blur(2px)';
+            bCtx.drawImage(this.fishImgNormal, 0, 0);
+            
+            if (!this.fishImgTired) this.fishImgTired = document.createElement('canvas');
+            this.fishImgTired.width = w; this.fishImgTired.height = h;
+            const tCtx = this.fishImgTired.getContext('2d');
+            tCtx.clearRect(0, 0, w, h);
+            tCtx.filter = 'grayscale(1) brightness(1.5)';
+            tCtx.drawImage(this.fishImgNormal, 0, 0);
+        };
+        this.fishImgNormal.src = engine.fishData.art.imageDataUrl;
     },
 
     _initParticles() {
-        this.particles = [];
+        this.particles =[];
         let pColors = ['#FFFFFF', '#94A3B8']; 
         if (this.biomePal.water === '#162e1a') pColors =['#86EFAC', '#4ADE80']; 
         if (this.biomePal.water === '#5e1313') pColors =['#F59E0B', '#EF4444']; 
@@ -253,17 +346,15 @@ open(config) {
                 this.elements.title.style.color = "#EF4444";
                 this.elements.biteAlert.style.opacity = '1';
                 
-                this.fishImg = new Image();
-                this.fishImg.src = engine.fishData.art.imageDataUrl;
+                // OPTIMIZATION 2: Precompute CPU-heavy filters once
+                this._precomputeFishStates(engine);
             } 
             else if (engine.phase === 'FIGHT') {
                 this.elements.biteAlert.style.opacity = '0';
                 this.elements.title.innerText = `Fighting: ${engine.fishData.identity.name}`;
-                // Color the title by the fish's rarity!
                 this.elements.title.style.color = getRarityColor(engine.fishData.identity.rarity);
                 this.elements.timerWrap.style.display = 'block';
             }
-
             else if (engine.phase === 'CAUGHT') SFX.playCatchSuccess();
             else if (engine.phase === 'SNAPPED') SFX.playLineSnap();
             else if (engine.phase === 'ESCAPED') SFX.playError();
@@ -283,29 +374,22 @@ open(config) {
             return; 
         }
 
-        if (engine.phase !== 'FIGHT') return;
+        if (engine.phase !== 'FIGHT') {
+            SFX.updateReel(false); // <-- NEW: Safely kill the sound if line snaps or fish is caught
+            return;
+        }
 
-        // Escape Timer Countdown
         this.elements.lblTimer.innerText = Math.max(0, engine.fightTimer).toFixed(1);
         if (engine.fightTimer <= 5.0) this.elements.timerWrap.style.color = "#DC2626"; 
 
-        if (isReeling && engine.playerStamina > 0) {
-            this.reelAudioTimer -= dt;
-            if (this.reelAudioTimer <= 0) {
-                SFX.playReel(engine.reelPower); // <-- NEW: Pass power for pitch shifting
-                
-                // Audio click speed scales with both fish stamina and player reel power
-                const powerSpeedMod = 1.0 - (engine.reelPower / 100 * 0.5); // 0.5 (fast) to 0.95 (slow)
-                const speed = (0.15 * (engine.fishStamina / engine.maxFishStamina) + 0.05) * powerSpeedMod;
-                
-                this.reelAudioTimer = Math.max(0.02, speed); // Cap max speed
-            }
-        }
+        // --- OPTIMIZED: Continuous Reel SFX ---
+        // Replaces the CPU-heavy timer with a single continuous modulation call
+        const actuallyReeling = isReeling && engine.playerStamina > 0;
+        SFX.updateReel(actuallyReeling, engine.reelPower);
 
-        const tensionPct = (engine.tension / engine.maxTension) * 100;
+        const tensionPct = Math.round((engine.tension / engine.maxTension) * 100);
         this.elements.barTension.style.width = `${Math.min(100, tensionPct)}%`;
-        this.elements.lblTension.innerText = `${Math.floor(tensionPct)}%`;
-        
+        this.elements.lblTension.innerText = `${tensionPct}%`;
         SFX.updateTension(tensionPct); 
         
         if (tensionPct < 50) {
@@ -319,41 +403,38 @@ open(config) {
             this.elements.board.classList.add('danger'); 
         }
 
-        const pStamPct = (engine.playerStamina / engine.maxPlayerStamina) * 100;
+        const pStamPct = Math.round((engine.playerStamina / engine.maxPlayerStamina) * 100);
         this.elements.barPStam.style.width = `${pStamPct}%`;
-        this.elements.lblPStam.innerText = `${Math.floor(pStamPct)}%`;
+        this.elements.lblPStam.innerText = `${pStamPct}%`;
         this.elements.barPStam.style.background = pStamPct < 5 ? '#EF4444' : '#22D3EE';
 
-        const fStamPct = (engine.fishStamina / engine.maxFishStamina) * 100;
+        const fStamPct = Math.round((engine.fishStamina / engine.maxFishStamina) * 100);
         this.elements.barFStam.style.width = `${fStamPct}%`;
-        this.elements.lblFStam.innerText = `${Math.floor(fStamPct)}%`;
+        this.elements.lblFStam.innerText = `${fStamPct}%`;
         
-        // CATCH PROGRESS
-        this.elements.barCatch.style.width = `${engine.catchProgress}%`;
-        this.elements.lblCatch.innerText = `${Math.floor(engine.catchProgress)}%`;
+        const catchPct = Math.round(engine.catchProgress);
+        this.elements.barCatch.style.width = `${catchPct}%`;
+        this.elements.lblCatch.innerText = `${catchPct}%`;
 
-        // --- NEW: REEL POWER GAUGE ---
-        const reelPower = engine.reelPower || 50; // Mock 50 if engine doesn't have it yet (Phase 4)
+        const reelPower = engine.reelPower || 50; 
         const inSweetSpot = engine.inSweetSpot || false;
         
-        this.elements.barReelPower.style.width = `${reelPower}%`;
+        this.elements.barReelPower.style.width = `${Math.round(reelPower)}%`;
         this.elements.lblReelPower.innerText = `${Math.round(reelPower)}%`;
         
         if (inSweetSpot) {
-            this.elements.barReelPower.style.background = '#FBBF24'; // Gold
+            this.elements.barReelPower.style.background = '#FBBF24';
             this.elements.trackReelPower.style.borderColor = '#F59E0B';
             this.elements.lblReelPower.style.color = '#FBBF24';
             document.getElementById('lbl-reel-text').style.color = '#FBBF24';
         } else {
-            this.elements.barReelPower.style.background = '#6366F1'; // Indigo
+            this.elements.barReelPower.style.background = '#6366F1';
             this.elements.trackReelPower.style.borderColor = '#4F46E5';
             this.elements.lblReelPower.style.color = '#A5B4FC';
             document.getElementById('lbl-reel-text').style.color = '#A5B4FC';
         }
 
-        // AI STATE & BORDER SHAKE
         const state = engine.ai.state;
-        
         let behaviorText = "";
         let behaviorColor = "";
 
@@ -370,7 +451,6 @@ open(config) {
             behaviorText = "A sudden violent burst!";
             behaviorColor = '#DC2626';
         } else if (state === 'INANIMATE') {
-            // NEW: Handle the Treasure Chest state!
             behaviorText = "Heavy dead weight...";
             behaviorColor = '#94A3B8';
         }
@@ -378,7 +458,6 @@ open(config) {
         this.elements.behavior.innerText = behaviorText;
         this.elements.behavior.style.color = behaviorColor;
 
-        // Audio and Visuals for Thrash
         if (state === 'THRASH' && this.lastAiState !== 'THRASH') {
             SFX.playThrash();
             this.elements.board.classList.add('thrashing');
@@ -393,31 +472,34 @@ open(config) {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.CW, this.CH);
 
-        // --- MATH: CAMERA TRACKS LURE ---
-        const PX_PER_METER = 12; // Spacing multiplier for depth
-        const LURE_Y = this.CH * 0.45; // Lure sits slightly above center screen
+        const PX_PER_METER = 12; 
+        const LURE_Y = this.CH * 0.45; 
         
         const surfaceY = LURE_Y - (engine.currentDepth * PX_PER_METER);
         const bottomY = LURE_Y + ((engine.maxDepth - engine.currentDepth) * PX_PER_METER);
 
-        // 1. Draw Water Gradient
-        const grad = ctx.createLinearGradient(0, Math.max(0, surfaceY), 0, bottomY);
-        grad.addColorStop(0, this.biomePal.water);
-        grad.addColorStop(1, '#000000'); 
+        // OPTIMIZATION 3: Draw Cached Gradient Slice without horizontal stretching
+        const startDrawY = Math.max(0, surfaceY);
+        const sliceHeight = this.CH - startDrawY;
+        const gradStartY = engine.currentDepth * PX_PER_METER;
         
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, this.CW, this.CH);
+        if (this.bgGradientCanvas && sliceHeight > 0) {
+            // FIX: Removed the '1' parameter. Directly matches canvas width.
+            ctx.drawImage(this.bgGradientCanvas, 0, gradStartY, this.CW, sliceHeight, 0, startDrawY, this.CW, sliceHeight);
+        } else {
+            ctx.fillStyle = this.biomePal.water;
+            ctx.fillRect(0, 0, this.CW, this.CH);
+        }
 
-        // 2. Draw Particles (Swaying with water current)
+
+        // 2. Draw Particles
         ctx.fillStyle = '#FFFFFF';
         this.particles.forEach(p => {
             p.y -= p.speed * dt * 40; 
             p.wobble += 0.05;
-            
             if (p.y < 0) p.y = bottomY;
 
             const drawY = surfaceY + p.y;
-            // Particles sway with the global current!
             const drawX = p.x + Math.sin(p.wobble) * 2 + (engine.waterCurrent * 5);
             
             if (drawY > surfaceY && drawY < bottomY) {
@@ -426,7 +508,7 @@ open(config) {
             }
         });
 
-        // 3. Draw Sea Floor
+        // 3. Draw Sea Floor & Flora
         if (bottomY < this.CH + 50) {
             ctx.fillStyle = this.biomePal.land;
             ctx.fillRect(0, bottomY, this.CW, this.CH - bottomY);
@@ -440,34 +522,20 @@ open(config) {
                 ctx.fill();
             }
 
-            if (this.tileId === TILE.FLORA) {
-                ctx.fillStyle = this.biomePal.flora;
-                // Flora bends intensely with the water current
-                const baseSway = engine.waterCurrent * 6; 
+        // OPTIMIZATION 4: Render Precomputed Flora Frames instead of using Matrix Transforms
+            if (this.tileId === TILE.FLORA && this.floraFrames && this.floraFrames.length > 0) {
+                // engine.waterCurrent bounces between approx -1.5 and 1.5
+                let normalized = (engine.waterCurrent + 1.5) / 3.0;
+                normalized = Math.max(0, Math.min(1, normalized));
                 
-                for(let i = 0; i < 8; i++) {
-                    const baseX = 20 + i * 35;
-                    // 3 stalks per cluster
-                    for (let s = 0; s < 3; s++) {
-                        const height = 15 + ((i * 7 + s * 13) % 30); 
-                        const stalkX = baseX + s * 5;
-                        
-                        for (let seg = 0; seg < height; seg += 4) {
-                            const swayAmt = (seg / height) * baseSway * (s + 1); 
-                            ctx.fillRect(stalkX + swayAmt, bottomY - seg - 4, 3, 4);
-                            
-                            // Alternating leaves
-                            if (seg > 4 && (seg + s) % 3 !== 0) {
-                                const leafDir = (seg % 8 === 0) ? -3 : 3;
-                                ctx.fillRect(stalkX + swayAmt + leafDir, bottomY - seg - 2, 3, 2);
-                            }
-                        }
-                    }
-                }
+                // Select the correct animation frame (0 to 6) based on current water speed
+                const frameIdx = Math.floor(normalized * (this.floraFrames.length - 1));
+                
+                ctx.drawImage(this.floraFrames[frameIdx], 0, bottomY - 60);
             }
         }
 
-        // 4. Draw Surface / Night Sky
+        // 4. Draw Surface
         if (surfaceY > 0) {
             ctx.fillStyle = '#020617'; 
             ctx.fillRect(0, 0, this.CW, surfaceY);
@@ -475,60 +543,56 @@ open(config) {
             ctx.fillRect(0, surfaceY, this.CW, 4);
         }
 
-        // 5. DRAW FISHING LINE (Bezier Curve based on Water Current)
+        // 5. Draw Fishing Line
         const lureW = this.lureImg ? this.lureImg.width * 0.5 : 10;
         const lureH = this.lureImg ? this.lureImg.height * 0.5 : 10;
         const lureX = this.CW / 2;
         
         const lineStartX = this.CW / 2;
         const lineStartY = Math.max(0, surfaceY);
-        const lineEndX = lureX;
-        const lineEndY = LURE_Y + (lureH * 0.1); // Attaches slightly down into the eyelet
+        const lineEndY = LURE_Y + (lureH * 0.1); 
         
         ctx.strokeStyle = '#E2E8F0';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(lineStartX, lineStartY);
 
-        // Control points shift left/right based on current
         const swayForce = engine.waterCurrent * 25;
         const cp1x = lineStartX + swayForce;
         const cp1y = lineStartY + (lineEndY - lineStartY) * 0.33;
         const cp2x = lineStartX + swayForce * 1.2;
         const cp2y = lineStartY + (lineEndY - lineStartY) * 0.66;
 
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, lineEndX, lineEndY);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, lureX, lineEndY);
         ctx.stroke();
 
-        // 6. Draw Lure (SCALED DOWN)
+        // 6. Draw Lure
         if (this.lureImg && engine.phase !== 'SNAPPED') {
-            // Lure sways slightly with current
             const lSway = engine.waterCurrent * 2;
             ctx.drawImage(this.lureImg, lureX - (lureW / 2) + lSway, LURE_Y, lureW, lureH);
         }
 
-        // 7. Draw Fish! (SCALED DOWN)
-        if (this.fishImg && engine.phase !== 'SINKING') {
+        // 7. Draw Fish (Using Precomputed Filter Canvases)
+        if (this.fishImgNormal && engine.phase !== 'SINKING') {
             ctx.save();
-            const fw = this.fishImg.width * 0.6; // Smaller, realistic scale
-            const fh = this.fishImg.height * 0.6;
+            const fw = this.fishImgNormal.width * 0.6; 
+            const fh = this.fishImgNormal.height * 0.6;
             
             let fx = lureX;
-            let fy = LURE_Y + (fh / 2) - 10; // Hangs just below the lure
+            let fy = LURE_Y + (fh / 2) - 10; 
             let rotation = 0;
+            
+            // Swap active canvas based on state
+            let activeFishImg = this.fishImgNormal;
 
             if (engine.phase === 'BITE') {
-                ctx.filter = 'brightness(0) blur(2px)'; // Dark silhouette
+                activeFishImg = this.fishImgBite || this.fishImgNormal;
                 fx += Math.sin(Date.now() / 200) * 20; 
             } 
             else if (engine.phase === 'FIGHT') {
-                const fStamPct = engine.fishStamina / engine.maxFishStamina;
-                if (fStamPct <= 0) ctx.filter = 'grayscale(1) brightness(1.5)'; 
-                else ctx.filter = 'none'; 
+                if (engine.fishStamina <= 0) activeFishImg = this.fishImgTired || this.fishImgNormal;
                 
-                // Shake Physics
                 if (engine.ai.state === 'HOLD' || engine.ai.state === 'INANIMATE') {
-                    // NEW: Included INANIMATE here so the chest bobs slowly
                     fy += Math.sin(Date.now() / 300) * 5;
                 } else if (engine.ai.state === 'RUN') {
                     fx += (Math.random() - 0.5) * 8;
@@ -547,13 +611,13 @@ open(config) {
                 rotation = -Math.PI / 2; 
             } 
             else if (engine.phase === 'ESCAPED' || engine.phase === 'SNAPPED') {
-                ctx.filter = 'blur(2px) brightness(0.3)';
+                ctx.globalAlpha = 0.4; // Fade out instead of blur filter
                 fy += 60; 
             }
 
             ctx.translate(fx, fy);
             ctx.rotate(rotation);
-            ctx.drawImage(this.fishImg, -fw / 2, -fh / 2, fw, fh);
+            ctx.drawImage(activeFishImg, -fw / 2, -fh / 2, fw, fh);
             ctx.restore();
         }
     }

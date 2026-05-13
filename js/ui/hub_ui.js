@@ -671,9 +671,15 @@ export const HubUI = {
         // --- 1. TURN IN COMPLETED QUESTS ---
         player.activeQuests.forEach((q, index) => {
             let isComplete = false;
-            if (q.type === 'hunt') isComplete = q.currentAmount >= q.requiredAmount;
-            else if (q.type === 'trophy') isComplete = q.currentBestWeight >= q.requiredWeight;
-            else if (q.type === 'research') {
+            
+            // FIX: Dynamic inventory counting
+            if (q.type === 'hunt') {
+                const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
+                isComplete = count >= q.requiredAmount;
+            } else if (q.type === 'trophy') {
+                const maxW = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).reduce((max, f) => Math.max(max, f.actualWeight), 0);
+                isComplete = maxW >= q.requiredWeight;
+            } else if (q.type === 'research') {
                 let curLvl = 0;
                 const bestiaryEntry = player.bestiary[q.targetSpeciesId];
                 if (bestiaryEntry) {
@@ -686,27 +692,8 @@ export const HubUI = {
             else if (q.type === 'bounty') isComplete = q.isComplete;
 
             if (isComplete) {
-                hasTurnIns = true;
-                turnInSection.style.display = 'block';
+                // ... Keep existing card HTML generation ...
                 
-                const card = document.createElement('div');
-                card.className = 'shop-item-row';
-                card.style.borderColor = 'var(--green-safe)';
-                
-                let rewardText = `+${q.rewards.gold}g, +${q.rewards.xp} XP`;
-                if (q.rewards.item) {
-                    const itemName = q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    rewardText += `, +${q.rewards.item.qty}x ${itemName}`;
-                }
-
-                card.innerHTML = `
-                    <div>
-                        <b style="color:var(--cyan-glow); font-size: 1.2rem;">${q.title}</b>
-                        <p style="color:var(--gold-warn); font-size: 1rem; margin-top:0.2rem;">Rewards: ${rewardText}</p>
-                    </div>
-                    <button class="menu-btn" style="width: auto; padding: 0.5rem 1rem; margin:0; font-size: 1.2rem; border-color: var(--green-safe); color: var(--green-safe);">Claim</button>
-                `;
-
                 card.querySelector('button').onclick = () => {
                     SFX.playCatchSuccess();
                     
@@ -716,16 +703,14 @@ export const HubUI = {
                     
                     if (q.rewards.item) {
                         player.inventory.push({ 
-                            id: `part_${Date.now()}`,
-                            invType: 'part',
+                            id: `part_${Date.now()}`, invType: 'part',
                             name: q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                            visualId: q.rewards.item.id.replace('part_', ''),
-                            rarity: 'Rare',
+                            visualId: q.rewards.item.id.replace('part_', ''), rarity: 'Rare',
                             stats: { color: 10, sound: 10, light: 10, weight: 10 }
                         });
                     }
 
-                    // --- NEW: Consume Fish for Hunt Quests ---
+                    // --- FIX: Consume Fish for Hunt AND Trophy Quests ---
                     if (q.type === 'hunt') {
                         let removed = 0;
                         for (let i = player.inventory.length - 1; i >= 0; i--) {
@@ -735,13 +720,21 @@ export const HubUI = {
                                 if (removed >= q.requiredAmount) break;
                             }
                         }
+                    } else if (q.type === 'trophy') {
+                        let heaviestIdx = -1;
+                        let heaviestW = 0;
+                        for (let i = 0; i < player.inventory.length; i++) {
+                            const f = player.inventory[i];
+                            if (f.invType === 'fish' && f.id === q.targetSpeciesId && f.actualWeight >= q.requiredWeight) {
+                                if (f.actualWeight > heaviestW) { heaviestW = f.actualWeight; heaviestIdx = i; }
+                            }
+                        }
+                        if (heaviestIdx > -1) player.inventory.splice(heaviestIdx, 1);
                     }
 
-                    // Safely remove from Active Quests
                     const activeIdx = player.activeQuests.findIndex(aq => aq.id === q.id);
                     if (activeIdx > -1) player.activeQuests.splice(activeIdx, 1);
 
-                    // --- NEW: Remove from the Town's board so it doesn't reappear ---
                     const boardIdx = this.currentQuests.findIndex(bq => bq.id === q.id);
                     if (boardIdx > -1) this.currentQuests.splice(boardIdx, 1);
 
@@ -948,15 +941,13 @@ export const HubUI = {
                 if (safehouse.stash.length < safehouse.stashCapacity) safehouse.stash.push(item);
                 else player.inventory.push(item);
 
-                // --- FIX 3: Revert Stats when unequipped ---
-                if (item.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace -= 10;
-                if (item.id === 'upg_iron_plating') {
-                    player.gear.boat.stats.maxHp -= 50;
-                    player.vitals.hp = Math.min(player.vitals.hp, player.gear.boat.stats.maxHp);
-                }
-
+                // FIX: Only remove the upgrade object. Never mutate base stats!
                 if (slot === 'lantern') player.gear.boat.upgrades.lantern = { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 };
                 else player.gear.boat.upgrades[slot] = null;
+
+                // Ensure HP clamps to the newly calculated Effective HP
+                const newEff = PlayerEngine.getEffectiveStats(player);
+                player.vitals.hp = Math.min(player.vitals.hp, newEff.exploration.maxHp);
 
                 SFX.playLineSnap();
                 if (this.callbacks.onSave) this.callbacks.onSave();
@@ -984,23 +975,13 @@ export const HubUI = {
                 if (oldItem && oldItem.id !== 'lantern_basic') {
                     if (safehouse.stash.length < safehouse.stashCapacity) safehouse.stash.push(oldItem);
                     else player.inventory.push(oldItem);
-
-                    // --- FIX 4: Revert old stats before applying new ones ---
-                    if (oldItem.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace -= 10;
-                    if (oldItem.id === 'upg_iron_plating') {
-                        player.gear.boat.stats.maxHp -= 50;
-                        player.vitals.hp = Math.min(player.vitals.hp, player.gear.boat.stats.maxHp);
-                    }
                 }
                 
                 player.gear.boat.upgrades[u.slot] = u;
                 
-                // --- FIX 5: Apply New Stats ---
-                if (u.id === 'upg_cargo_net') player.gear.boat.stats.cargoSpace += 10;
-                if (u.id === 'upg_iron_plating') {
-                    player.gear.boat.stats.maxHp += 50;
-                    player.vitals.hp += 50; // Give them the HP immediately
-                }
+                // Ensure HP climbs to the newly calculated Effective HP
+                const newEff = PlayerEngine.getEffectiveStats(player);
+                player.vitals.hp = Math.min(player.vitals.hp, newEff.exploration.maxHp);
                 
                 const sIdx = safehouse.stash.findIndex(i => i.id === u.id);
                 if (sIdx > -1) safehouse.stash.splice(sIdx, 1);

@@ -218,7 +218,9 @@ export const PlayerEngine = {
 
         // --- 3. ECONOMY & CRAFTING STATS ---
         let storeDiscount = stats.bartering * 0.08; 
-        let sellBonus = 1 + (stats.bartering * 0.08); 
+        
+        // FIX: Sell prices are a markdown. Base is 0.4x, scales up to 0.8x at Lv 5 Bartering.
+        let sellMultiplier = 0.4 + (stats.bartering * 0.08); 
         let fuelEfficiencyMult = 1 - (stats.intelligence * 0.10); 
         let dissectionBudgetMult = 1 + (stats.lureCrafting * 0.2);
         let lureDurabilityMult = 1 + (stats.lureCrafting * 0.2);
@@ -242,7 +244,7 @@ export const PlayerEngine = {
                 maxTension: effectiveMaxTension,
                 flexibility: Number(effectiveFlexibility.toFixed(2)),
                 sweetSpotTolerance: Number(effectiveSweetSpotTolerance.toFixed(1)),
-                reelScrollSpeed: Number(effectiveReelScrollSpeed.toFixed(2)) // <-- NEW
+                reelScrollSpeed: Number(effectiveReelScrollSpeed.toFixed(2))
             },
             exploration: {
                 maxHp: Math.round(effectiveMaxHp),
@@ -253,11 +255,14 @@ export const PlayerEngine = {
                 collisionDamageMult: Number(collisionDamageMult.toFixed(2)),
                 cargoSpace: effectiveCargo,
                 fuelEfficiencyMult: Number(Math.max(0.1, fuelEfficiencyMult).toFixed(2)),
-                immunities: immunities // Exposing hazard immunities to the physics engine
+                immunities: immunities 
             },
             economy: {
                 discountMultiplier: Number((1 - storeDiscount).toFixed(2)), 
-                sellMultiplier: Number(sellBonus.toFixed(2)),
+                
+                // FIX: Change 'sellBonus' to 'sellMultiplier' here
+                sellMultiplier: Number(sellMultiplier.toFixed(2)), 
+                
                 knowledgeXpMult: Number(knowledgeXpMult.toFixed(2)),
                 generalXpMult: Number(generalXpMult.toFixed(2)),
                 dissectionBudgetMult: Number(dissectionBudgetMult.toFixed(2)),

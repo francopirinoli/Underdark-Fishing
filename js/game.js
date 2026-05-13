@@ -754,13 +754,7 @@ function gameLoop(timestamp) {
                     }
 
                     player.activeQuests.forEach(q => {
-                        if (q.targetSpeciesId === caughtFish.id) {
-                            if (q.type === 'hunt' && q.currentAmount < q.requiredAmount) {
-                                q.currentAmount++;
-                            } else if (q.type === 'trophy' && caughtFish.actualWeight > q.currentBestWeight) {
-                                q.currentBestWeight = caughtFish.actualWeight;
-                            }
-                        }
+                        // FIX: Removed manual Hunt/Trophy counters. Handled dynamically in UI.
                         if (q.type === 'bounty' && !q.isComplete) {
                             if (caughtFish.identity.rarity === 'Boss' && globalX === q.targetNode.x && globalY === q.targetNode.y) {
                                 q.isComplete = true;
@@ -932,9 +926,9 @@ function handleEndFishing(msg, type) {
 
     // --- LURE DURABILITY DEGRADATION ---
     const lure = player.gear.lure;
-    if (lure && lure.invType === 'lure' && lure.durability > 0) {
+    // FIX: Only degrade if the lure has a maxDurability > 0 (Ignores Bare Hooks)
+    if (lure && lure.maxDurability > 0) {
         
-        // Line Snaps = -3 durability. Caught fish = -1 durability.
         if (FishingEngine.phase === 'SNAPPED') {
             lure.durability -= 3;
         } else if (FishingEngine.phase === 'CAUGHT') {
@@ -944,12 +938,11 @@ function handleEndFishing(msg, type) {
         if (lure.durability <= 0) {
             HUD.logAction(`Your ${lure.name} broke!`, "danger");
             SFX.playLineSnap();
-            // Revert to a basic bare hook fallback
             player.gear.lure = {
                 name: 'Bare Hook',
                 stats: { color: 0, sound: 0, light: 0, weight: 0 },
                 durability: 0, maxDurability: 0,
-                imageDataUrl: '' // Clears the image for the HUD
+                imageDataUrl: ''
             };
         }
     }

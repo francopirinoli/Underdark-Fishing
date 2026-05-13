@@ -1,18 +1,25 @@
 /**
  * js/audio/sfx_generator.js
  * Procedural Sound Effects synthesizer.
- * V2 - Adjusted volume balancing across the board and completely redesigned
- * the Tension sound to simulate physical rope strain and creaking.
+ * V3 - Audio thread optimization: Lookahead scheduling, queue flushing, 
+ * and continuous reel/tension modulation to prevent buffer underruns.
  */
 
 import { AudioEngine } from './audio_engine.js';
-import { getRandomInRange, getRandomInt } from '../util/utils.js';
+import { getRandomInRange } from '../util/utils.js';
 
 const SYNTHS = {};
 let isTensionPlaying = false;
+let isReelingPlaying = false;
 let speechTimeout = null;
 
+// Throttling trackers
+const LOOKAHEAD = 0.05; // 50ms buffer to prevent crackling
+
 export const SFX = {
+    _lastTension: 0,
+    _lastReelPower: 0,
+
     init() {
         if (!AudioEngine.isInitialized) return;
 
@@ -28,11 +35,11 @@ export const SFX = {
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.uiSelect.volume.value = -14; 
 
-        // UI: Error / Deny (Dull thud) - VOL BOOSTED
+        // UI: Error / Deny (Dull thud)
         SYNTHS.error = new Tone.MembraneSynth({
             pitchDecay: 0.05, octaves: 1, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 }
         }).connect(AudioEngine.sfxNode);
-        SYNTHS.error.volume.value = -2; // Was -12
+        SYNTHS.error.volume.value = -2;
 
         // Coins / Gold
         SYNTHS.gold = new Tone.MetalSynth({
@@ -41,11 +48,11 @@ export const SFX = {
         }).connect(AudioEngine.sfxNode);
         SYNTHS.gold.volume.value = -16;
 
-        // Fishing Cast (Sine sweep) - VOL BOOSTED
+        // Fishing Cast (Sine sweep)
         SYNTHS.cast = new Tone.Synth({
             oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.4 }
         }).connect(AudioEngine.sfxReverb);
-        SYNTHS.cast.volume.value = -6; // Was -14
+        SYNTHS.cast.volume.value = -6;
 
         // Splash (Filtered noise burst)
         SYNTHS.splashFilter = new Tone.Filter(1000, "lowpass").connect(AudioEngine.sfxReverb);
@@ -54,24 +61,18 @@ export const SFX = {
         }).connect(SYNTHS.splashFilter);
         SYNTHS.splash.volume.value = -8; 
 
-        // Boat Move / Water Ripple - VOL BOOSTED
+        // Boat Move / Water Ripple
         SYNTHS.rippleFilter = new Tone.Filter(400, "bandpass").connect(AudioEngine.sfxNode);
         SYNTHS.ripple = new Tone.NoiseSynth({
             noise: { type: "pink" }, envelope: { attack: 0.2, decay: 0.5, sustain: 0, release: 0.5 }
         }).connect(SYNTHS.rippleFilter);
-        SYNTHS.ripple.volume.value = -8; // Was -20
+        SYNTHS.ripple.volume.value = -8;
 
-        // Reeling Ratchet (Square wave clicks)
-        SYNTHS.reel = new Tone.Synth({
-            oscillator: { type: 'square' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 }
-        }).connect(AudioEngine.sfxNode);
-        SYNTHS.reel.volume.value = -16;
-
-        // Line Snap (Harsh Sawtooth) - VOL BOOSTED
+        // Line Snap (Harsh Sawtooth)
         SYNTHS.snap = new Tone.Synth({
             oscillator: { type: 'sawtooth' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
         }).connect(AudioEngine.sfxReverb);
-        SYNTHS.snap.volume.value = -2; // Was -8
+        SYNTHS.snap.volume.value = -2;
 
         // Success / Catch (PolySynth Arpeggio)
         SYNTHS.catch = new Tone.PolySynth(Tone.Synth, {
@@ -91,83 +92,77 @@ export const SFX = {
         }).connect(AudioEngine.sfxNode);
         SYNTHS.dialogue.volume.value = -16;
 
-        // --- NEW: TENSION ROPE CREAK ---
-        // Uses Brown noise (deep rumble) filtered tightly and chopped by a Tremolo
+        // --- OPTIMIZED: REELING RATCHET (Continuous Tremolo) ---
+        SYNTHS.reelOsc = new Tone.Oscillator({ type: 'square' }).start();
+        SYNTHS.reelFilter = new Tone.Filter(1000, "bandpass", -24);
+        SYNTHS.reelVol = new Tone.Volume(-Infinity).connect(AudioEngine.sfxNode);
+        SYNTHS.reelTremolo = new Tone.Tremolo({ frequency: 10, type: "square", depth: 1, spread: 0 }).start();
+        
+        SYNTHS.reelOsc.connect(SYNTHS.reelFilter);
+        SYNTHS.reelFilter.connect(SYNTHS.reelTremolo);
+        SYNTHS.reelTremolo.connect(SYNTHS.reelVol);
+
+        // --- OPTIMIZED: TENSION ROPE CREAK ---
         SYNTHS.tensionNoise = new Tone.NoiseSynth({
             noise: { type: 'brown' },
             envelope: { attack: 0.5, decay: 0, sustain: 1, release: 0.5 }
         });
         SYNTHS.tensionFilter = new Tone.Filter(300, "bandpass", -24);
         SYNTHS.tensionVol = new Tone.Volume(-Infinity).connect(AudioEngine.sfxNode);
-        
-        SYNTHS.tensionTremolo = new Tone.Tremolo({
-            frequency: 2, type: "square", depth: 1, spread: 180
-        }).start();
+        SYNTHS.tensionTremolo = new Tone.Tremolo({ frequency: 2, type: "square", depth: 1, spread: 180 }).start();
 
         SYNTHS.tensionNoise.connect(SYNTHS.tensionFilter);
         SYNTHS.tensionFilter.connect(SYNTHS.tensionTremolo);
         SYNTHS.tensionTremolo.connect(SYNTHS.tensionVol);
     },
 
-    playUIHover() { try { if (SYNTHS.uiHover) SYNTHS.uiHover.triggerAttackRelease("C3", "32n", Tone.now()); } catch(e){} },
-    playUISelect() { try { if (SYNTHS.uiSelect) SYNTHS.uiSelect.triggerAttackRelease("E6", "16n", Tone.now()); } catch(e){} },
-    playError() { try { if (SYNTHS.error) SYNTHS.error.triggerAttackRelease("C2", "8n", Tone.now()); } catch(e){} },
-    playGold() { try { if (SYNTHS.gold) SYNTHS.gold.triggerAttackRelease("16n", Tone.now()); } catch(e){} },
+    // Standard UI Triggers with Lookahead
+    playUIHover() { try { if (SYNTHS.uiHover) SYNTHS.uiHover.triggerAttackRelease("C3", "32n", Tone.now() + LOOKAHEAD); } catch(e){} },
+    playUISelect() { try { if (SYNTHS.uiSelect) SYNTHS.uiSelect.triggerAttackRelease("E6", "16n", Tone.now() + LOOKAHEAD); } catch(e){} },
+    playError() { try { if (SYNTHS.error) SYNTHS.error.triggerAttackRelease("C2", "8n", Tone.now() + LOOKAHEAD); } catch(e){} },
+    playGold() { try { if (SYNTHS.gold) SYNTHS.gold.triggerAttackRelease("16n", Tone.now() + LOOKAHEAD); } catch(e){} },
     
     playCast() {
         if (!SYNTHS.cast) return;
-        SYNTHS.cast.frequency.setValueAtTime("A3", Tone.now());
-        SYNTHS.cast.frequency.exponentialRampToValueAtTime("A6", Tone.now() + 0.4);
-        SYNTHS.cast.triggerAttackRelease("4n");
+        const now = Tone.now() + LOOKAHEAD;
+        SYNTHS.cast.frequency.setValueAtTime("A3", now);
+        SYNTHS.cast.frequency.exponentialRampToValueAtTime("A6", now + 0.4);
+        SYNTHS.cast.triggerAttackRelease("4n", now);
     },
     
     playSplash() {
         if (!SYNTHS.splash) return;
-        SYNTHS.splashFilter.frequency.value = getRandomInRange(600, 1500);
-        SYNTHS.splash.triggerAttackRelease("8n");
+        const now = Tone.now() + LOOKAHEAD;
+        SYNTHS.splashFilter.frequency.setValueAtTime(getRandomInRange(600, 1500), now);
+        SYNTHS.splash.triggerAttackRelease("8n", now);
     },
 
     playThrash() {
-        // A heavier, lower, longer splash for when the fish fights back
         if (!SYNTHS.splash) return;
-        SYNTHS.splashFilter.frequency.value = getRandomInRange(300, 800);
-        SYNTHS.splash.triggerAttackRelease("4n");
+        const now = Tone.now() + LOOKAHEAD;
+        SYNTHS.splashFilter.frequency.setValueAtTime(getRandomInRange(300, 800), now);
+        SYNTHS.splash.triggerAttackRelease("4n", now);
     },
     
     playBoatMove() {
         if (!SYNTHS.ripple) return;
-        SYNTHS.rippleFilter.frequency.setValueAtTime(150, Tone.now());
-        SYNTHS.rippleFilter.frequency.exponentialRampToValueAtTime(600, Tone.now() + 0.3);
-        SYNTHS.ripple.triggerAttackRelease("4n");
-    },
-    
-    playReel(powerPct = 50) {
-        if (!SYNTHS.reel) return;
-        const notes =["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-        
-        // Map 10-100 power to an octave shift of roughly -1 to +1
-        const shift = (powerPct - 50) / 50; 
-        const totalSemitones = Math.round(shift * 12);
-        
-        let finalIdx = 0 + totalSemitones; // Base note C
-        let oct = 5;
-        
-        while (finalIdx >= 12) { finalIdx -= 12; oct++; }
-        while (finalIdx < 0) { finalIdx += 12; oct--; }
-        
-        SYNTHS.reel.triggerAttackRelease(`${notes[finalIdx]}${oct}`, "64n");
+        const now = Tone.now() + LOOKAHEAD;
+        SYNTHS.rippleFilter.frequency.setValueAtTime(150, now);
+        SYNTHS.rippleFilter.frequency.exponentialRampToValueAtTime(600, now + 0.3);
+        SYNTHS.ripple.triggerAttackRelease("4n", now);
     },
     
     playLineSnap() {
         if (!SYNTHS.snap) return;
-        SYNTHS.snap.frequency.setValueAtTime("C3", Tone.now());
-        SYNTHS.snap.frequency.exponentialRampToValueAtTime("C1", Tone.now() + 0.2);
-        SYNTHS.snap.triggerAttackRelease("8n");
+        const now = Tone.now() + LOOKAHEAD;
+        SYNTHS.snap.frequency.setValueAtTime("C3", now);
+        SYNTHS.snap.frequency.exponentialRampToValueAtTime("C1", now + 0.2);
+        SYNTHS.snap.triggerAttackRelease("8n", now);
     },
     
     playCatchSuccess() {
         if (!SYNTHS.catch) return;
-        const now = Tone.now();
+        const now = Tone.now() + LOOKAHEAD;
         SYNTHS.catch.triggerAttackRelease("C5", "8n", now);
         SYNTHS.catch.triggerAttackRelease("E5", "8n", now + 0.1);
         SYNTHS.catch.triggerAttackRelease("G5", "4n", now + 0.2);
@@ -176,7 +171,7 @@ export const SFX = {
     
     playLevelUp() {
         if (!SYNTHS.levelUp) return;
-        const now = Tone.now();
+        const now = Tone.now() + LOOKAHEAD;
         SYNTHS.levelUp.triggerAttackRelease(["C4", "G4", "D5"], "2n", now);
         SYNTHS.levelUp.triggerAttackRelease(["E4", "B4", "G5"], "1n", now + 0.2);
     },
@@ -215,7 +210,8 @@ export const SFX = {
             if (char.match(/[a-zA-Z0-9]/)) {
                 const charCodeOffset = (char.charCodeAt(0) % 15) * 5; 
                 const inflection = (index % 2 === 0) ? charCodeOffset : -charCodeOffset;
-                SYNTHS.dialogue.triggerAttackRelease(baseFreq + inflection, "32n");
+                // Add lookahead internally for speech stability
+                SYNTHS.dialogue.triggerAttackRelease(baseFreq + inflection, "32n", Tone.now() + LOOKAHEAD);
             } 
             else if (char === '.' || char === '!' || char === '?') delay += 250;
             else if (char === ',') delay += 100;
@@ -227,6 +223,42 @@ export const SFX = {
         playNextCharacter();
     },
 
+// --- CONTINUOUS REEL UPDATE ---
+    updateReel(isReeling, powerPct = 50) {
+        if (!SYNTHS.reelOsc) return;
+
+        if (isReeling) {
+            if (!isReelingPlaying) {
+                // .rampTo glides the volume up safely without popping
+                SYNTHS.reelVol.volume.rampTo(-14, 0.05);
+                isReelingPlaying = true;
+            }
+
+            if (Math.abs(powerPct - this._lastReelPower) < 1.0) return;
+            this._lastReelPower = powerPct;
+
+            // .rampTo handles smoothing automatically without disconnecting the signal stream!
+            const speed = 5 + (powerPct / 100) * 20;
+            SYNTHS.reelTremolo.frequency.rampTo(speed, 0.1);
+
+            const pitch = 300 + (powerPct * 5);
+            SYNTHS.reelOsc.frequency.rampTo(pitch, 0.1);
+
+        } else {
+            if (isReelingPlaying) {
+                SYNTHS.reelVol.volume.rampTo(-Infinity, 0.05);
+                isReelingPlaying = false;
+                this._lastReelPower = 0;
+            }
+        }
+    },
+
+    // To prevent immediate crashes before we update the renderer, map old API to new
+    playReel(powerPct = 50) {
+        this.updateReel(true, powerPct);
+    },
+
+    // --- OPTIMIZED TENSION CONTINUOUS UPDATE ---
     updateTension(tensionValue) {
         if (!SYNTHS.tensionNoise) return;
 
@@ -236,23 +268,24 @@ export const SFX = {
                 isTensionPlaying = true;
             }
             
-            // Map tension (50-100) to Volume (-20dB to -5dB)
+            if (Math.abs(tensionValue - this._lastTension) < 1.0) return;
+            this._lastTension = tensionValue;
+
             const vol = -20 + ((tensionValue - 50) / 50) * 15;
             SYNTHS.tensionVol.volume.rampTo(vol, 0.1);
             
-            // Map tension to stutter speed (Rope creaks faster)
-            const tremFreq = 3 + ((tensionValue - 50) / 50) * 15; // 3Hz to 18Hz
+            const tremFreq = 3 + ((tensionValue - 50) / 50) * 15; 
             SYNTHS.tensionTremolo.frequency.rampTo(tremFreq, 0.1);
             
-            // Map tension to filter pitch (Creak gets tighter/higher pitched)
-            const cutoff = 300 + ((tensionValue - 50) / 50) * 800; // 300Hz to 1100Hz
+            const cutoff = 300 + ((tensionValue - 50) / 50) * 800;
             SYNTHS.tensionFilter.frequency.rampTo(cutoff, 0.1);
 
         } else {
             if (isTensionPlaying) {
-                SYNTHS.tensionNoise.triggerRelease();
-                SYNTHS.tensionVol.volume.rampTo(-Infinity, 0.2); // Fade out safely
+                SYNTHS.tensionNoise.triggerRelease(Tone.now());
+                SYNTHS.tensionVol.volume.rampTo(-Infinity, 0.1); 
                 isTensionPlaying = false;
+                this._lastTension = 0;
             }
         }
     }

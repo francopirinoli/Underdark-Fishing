@@ -119,8 +119,14 @@ export const GrimoireUI = {
         const player = this.gameState.player;
 
         const incompleteQuests = player.activeQuests.filter(q => {
-            if (q.type === 'hunt') return q.currentAmount < q.requiredAmount;
-            if (q.type === 'trophy') return q.currentBestWeight < q.requiredWeight;
+            if (q.type === 'hunt') {
+                const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
+                return count < q.requiredAmount;
+            }
+            if (q.type === 'trophy') {
+                const maxW = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).reduce((max, f) => Math.max(max, f.actualWeight), 0);
+                return maxW < q.requiredWeight;
+            }
             if (q.type === 'bounty') return !q.isComplete;
             if (q.type === 'research') {
                 const entry = player.bestiary[q.targetSpeciesId];
@@ -1040,19 +1046,21 @@ renderBestiary() {
             let isComplete = false;
 
             if (q.type === 'hunt') {
-                isComplete = q.currentAmount >= q.requiredAmount;
+                const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
+                isComplete = count >= q.requiredAmount;
                 progressHtml = `
                     <div style="margin-top: 1rem;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;"><span>Progress</span> <span style="color:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}">${q.currentAmount} / ${q.requiredAmount} Caught</span></div>
-                        <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, (q.currentAmount/q.requiredAmount)*100)}%; background:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}"></div></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;"><span>Progress</span> <span style="color:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}">${count} / ${q.requiredAmount} Caught</span></div>
+                        <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, (count/q.requiredAmount)*100)}%; background:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}"></div></div>
                     </div>
                 `;
             } else if (q.type === 'trophy') {
-                isComplete = q.currentBestWeight >= q.requiredWeight;
+                const maxW = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).reduce((max, f) => Math.max(max, f.actualWeight), 0);
+                isComplete = maxW >= q.requiredWeight;
                 progressHtml = `
                     <div style="margin-top: 1rem;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;"><span>Record Weight</span> <span style="color:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}">${q.currentBestWeight}kg / ${q.requiredWeight}kg</span></div>
-                        <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, (q.currentBestWeight/q.requiredWeight)*100)}%; background:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}"></div></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;"><span>Record Weight</span> <span style="color:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}">${maxW}kg / ${q.requiredWeight}kg</span></div>
+                        <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, (maxW/q.requiredWeight)*100)}%; background:${isComplete ? 'var(--green-safe)' : 'var(--cyan-glow)'}"></div></div>
                     </div>
                 `;
             } else if (q.type === 'research') {

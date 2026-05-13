@@ -11,15 +11,17 @@ export const HUD = {
     _cache: {}, // Stores previous values to prevent redundant DOM updates
 
     update(player, gameDay, gameTimeMinutes) {
+        // OPTIMIZATION: Round percentages to integers to prevent sub-pixel DOM layout thrashing
+
         // 1. HP Bar
-        const hpPct = Math.max(0, player.vitals.hp / player.gear.boat.stats.maxHp * 100).toFixed(1);
+        const hpPct = Math.round(Math.max(0, player.vitals.hp / player.gear.boat.stats.maxHp * 100));
         if (this._cache.hpPct !== hpPct) {
             document.getElementById('hud-hp-bar').style.width = `${hpPct}%`;
             this._cache.hpPct = hpPct;
         }
 
         // 2. Fuel Bar
-        const fuelPct = Math.max(0, player.vitals.fuel).toFixed(1);
+        const fuelPct = Math.round(Math.max(0, player.vitals.fuel));
         if (this._cache.fuelPct !== fuelPct) {
             document.getElementById('hud-fuel-bar').style.width = `${fuelPct}%`;
             this._cache.fuelPct = fuelPct;
@@ -58,7 +60,9 @@ export const HUD = {
         // NEW: Noise Meter
         // Grab currentNoise from the exploration engine (defaults to 0 if fishing)
         const noiseLvl = window.ExplorationEngine ? window.ExplorationEngine.currentNoise : 0;
-        const noisePct = Math.min(100, Math.max(0, noiseLvl || 0)).toFixed(1);
+        
+        // OPTIMIZATION: Round to nearest whole number
+        const noisePct = Math.round(Math.min(100, Math.max(0, noiseLvl || 0)));
         
         if (this._cache.noisePct !== noisePct) {
             const bar = document.getElementById('hud-noise-bar');

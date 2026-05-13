@@ -54,14 +54,13 @@ export const MerchantGenerator = {
         const rng = createRng(seed);
         const inventory =[];
 
-        // Base discount based on bartering stat (5% per level, max 50%)
-        const discountMultiplier = Math.max(0.5, 1.0 - (playerBarterLevel * 0.05));
+        // FIX: Merchants mark UP items.
+        const buyMultiplier = Math.max(1.1, 1.6 - (playerBarterLevel * 0.1));
 
         // Helper to format an item for the shop
         const formatItem = (item, stock) => {
-            // Add a little RNG fuzz to the base price before discount
             const fuzzedPrice = item.basePrice * rng.float(0.9, 1.1);
-            const finalPrice = Math.max(1, Math.round(fuzzedPrice * discountMultiplier));
+            const finalPrice = Math.max(1, Math.round(fuzzedPrice * buyMultiplier));
             
             return {
                 ...item,
@@ -100,7 +99,7 @@ export const MerchantGenerator = {
             inventory.push(formattedPart);
         }
 
-        // 3. Equipment (Rods)
+// 3. Equipment (Rods)
         const numRods = rng.int(1, 3);
         for (let i = 0; i < numRods; i++) {
             const rodData = generateRodData({ seed: rng.next() * 100000 });
@@ -112,7 +111,10 @@ export const MerchantGenerator = {
                 name: rodData.identity.name,
                 type: 'rod',
                 itemData: rodData, // Stores the full object for equipping
-                price: Math.max(1, Math.round(rodData.economy.value * discountMultiplier)),
+                
+                // FIX: Use buyMultiplier here!
+                price: Math.max(1, Math.round(rodData.economy.value * buyMultiplier)),
+                
                 stock: 1,
                 desc: `Power: ${rodData.stats.power}x | Tension: ${rodData.stats.maxTension}`
             });
@@ -127,7 +129,10 @@ export const MerchantGenerator = {
                     name: boatData.identity.name,
                     type: 'boat',
                     itemData: boatData,
-                    price: Math.max(1, Math.round(boatData.economy.value * discountMultiplier)),
+                    
+                    // FIX: Use buyMultiplier here!
+                    price: Math.max(1, Math.round(boatData.economy.value * buyMultiplier)),
+                    
                     stock: 1,
                     desc: `Type: ${boatData.art.boatType.toUpperCase()} | HP: ${boatData.stats.hp}`
                 });

@@ -56,28 +56,28 @@ export const MusicEngine = {
         this.tapeChorus.connect(this.warmFilter);
         this.warmFilter.connect(AudioEngine.musicReverb);
 
-        // --- NORMALIZED VOLUMES & POLYPHONY LIMITS ---
+// --- NORMALIZED VOLUMES & POLYPHONY LIMITS ---
         this.synths.padChoir = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "fatcustom", partials:[1, 0.4, 0.1], spread: 30, count: 3 },
-            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 2 } // Shortened release
+            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 1.2 } // Reduced release
         }).connect(this.tapeChorus);
-        this.synths.padChoir.maxPolyphony = 6;
+        this.synths.padChoir.maxPolyphony = 8; // INCREASED to handle track transitions
         this.synths.padChoir.volume.value = -16;
 
         this.synths.padStrings = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
-            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 2 }, // Shortened release
-            filterEnvelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 2, baseFrequency: 300, octaves: 2 }
+            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 1.2 }, // Reduced release
+            filterEnvelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 1.2, baseFrequency: 300, octaves: 2 }
         }).connect(this.tapeChorus);
-        this.synths.padStrings.maxPolyphony = 6;
+        this.synths.padStrings.maxPolyphony = 8; // INCREASED to handle track transitions
         this.synths.padStrings.volume.value = -16;
 
         this.synths.bassDrone = new Tone.PolySynth(Tone.MonoSynth, {
             oscillator: { type: "square" },
-            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 1.5 },
-            filterEnvelope: { attack: 0.2, decay: 1, sustain: 0.4, release: 2, baseFrequency: 60, octaves: 3 },
+            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 1.0 }, // Reduced release
+            filterEnvelope: { attack: 0.2, decay: 1, sustain: 0.4, release: 1.0, baseFrequency: 60, octaves: 3 },
         }).connect(this.warmFilter);
-        this.synths.bassDrone.maxPolyphony = 2; // Bass rarely needs to overlap
+        this.synths.bassDrone.maxPolyphony = 3; // INCREASED slightly
         this.synths.bassDrone.volume.value = -12;
 
         const vibrato = new Tone.Vibrato(4, 0.05).connect(this.echoDelay);
@@ -106,13 +106,13 @@ export const MusicEngine = {
         this.synths.arpLute.maxPolyphony = 8;
         this.synths.arpLute.volume.value = -14;
 
-        // CRITICAL FIX: Chimes had a 3.0s release. Brought down to 1.5s.
+        // OPTIMIZATION: Chimes release brought down to 0.8s, polyphony capped tighter.
         this.synths.chimesGlass = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 3.5, modulationIndex: 5,
             oscillator: { type: "sine" },
-            envelope: { attack: 0.05, decay: 1, sustain: 0, release: 1.5 } 
+            envelope: { attack: 0.05, decay: 1, sustain: 0, release: 0.8 } 
         }).connect(this.longDelay);
-        this.synths.chimesGlass.maxPolyphony = 6;
+        this.synths.chimesGlass.maxPolyphony = 4; // Was 6
         this.synths.chimesGlass.volume.value = -16;
 
         this.synths.kickCavern = new Tone.MembraneSynth({

@@ -22,20 +22,20 @@ export const AudioEngine = {
         this.musicNode = new Tone.Volume(0).connect(this.masterVolume);
         this.sfxNode = new Tone.Volume(0).connect(this.masterVolume);
 
-        // Music Reverb (Long, cavernous)
+        // REVERT: Bring back Tone.Reverb (Convolution) for music. 
+        // Freeverb's comb filters cause metallic "tremolo" ringing on long sustained pads.
         this.musicReverb = new Tone.Reverb({ decay: 3.5, preDelay: 0.05 });
         await this.musicReverb.generate(); 
         this.musicReverb.wet.value = 0.35; 
         this.musicReverb.connect(this.musicNode);
 
-        // SFX Reverb (Slightly shorter, punchier)
-        this.sfxReverb = new Tone.Reverb({ decay: 2.0, preDelay: 0.05 });
-        await this.sfxReverb.generate();
-        this.sfxReverb.wet.value = 0.3;
+        // KEEP: Freeverb for SFX. It's cheap and fine for short sounds like splashes and clicks.
+        this.sfxReverb = new Tone.Freeverb({ roomSize: 0.6, dampening: 4000 });
+        this.sfxReverb.wet.value = 0.25;
         this.sfxReverb.connect(this.sfxNode);
 
         this.isInitialized = true;
-        console.log("🎵 Audio Engine Initialized (Dual Bus)");
+        console.log("🎵 Audio Engine Initialized (Hybrid Reverbs)");
     },
 
     setMusicVolume(val) {

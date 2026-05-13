@@ -32,6 +32,7 @@ export const ExplorationRenderer = {
     ambientRipples:[],    // NEW
     currentBiome: null,    // NEW: Store the biome for colored effects
     currentWeather: null,
+    whirlpoolCanvas: null, 
 
     init(containerElement, width = 800, height = 600) {
         this.container = containerElement;
@@ -150,7 +151,12 @@ export const ExplorationRenderer = {
     initHazards(biomeId, weather) {
         this.currentBiomeId = biomeId;
         this.currentWeather = weather;
-        this.hazardParticles =[];
+        this.hazardParticles = [];
+
+        // Precompute the whirlpool once if this node has it
+        if (weather === 'whirlpool') {
+            this._precomputeWhirlpool();
+        }
 
         // Base Biome Particles
         if (biomeId === 'volcanic') {
@@ -158,7 +164,7 @@ export const ExplorationRenderer = {
                 this.hazardParticles.push({
                     x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
                     vx: (Math.random() - 0.5) * 20, vy: -(Math.random() * 50 + 20),
-                    size: Math.random() * 2 + 1, color: Math.random() > 0.5 ? '#F59E0B' : '#EF4444' // Embers
+                    size: Math.random() * 2 + 1, color: Math.random() > 0.5 ? '#F59E0B' : '#EF4444'
                 });
             }
         } else if (biomeId === 'frozen') {
@@ -166,7 +172,7 @@ export const ExplorationRenderer = {
                 this.hazardParticles.push({
                     x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
                     vx: Math.random() * 30 + 10, vy: Math.random() * 50 + 20,
-                    size: Math.random() * 2 + 1, color: Math.random() > 0.3 ? '#FFFFFF' : '#93C5FD' // Snow
+                    size: Math.random() * 2 + 1, color: Math.random() > 0.3 ? '#FFFFFF' : '#93C5FD'
                 });
             }
         }
@@ -177,17 +183,53 @@ export const ExplorationRenderer = {
                 this.hazardParticles.push({
                     x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
                     vx: (Math.random() - 0.5) * 15, vy: Math.random() * 20 + 5,
-                    size: Math.random() * 3 + 2, color: Math.random() > 0.5 ? '#4ADE80' : '#86EFAC' // Large spores
+                    size: Math.random() * 3 + 2, color: Math.random() > 0.5 ? '#4ADE80' : '#86EFAC'
                 });
             }
         } else if (weather === 'shatter') {
             for (let i = 0; i < 30; i++) {
                 this.hazardParticles.push({
                     x: Math.random() * this.VIEW_W, y: Math.random() * this.VIEW_H,
-                    vx: 0, vy: Math.random() * 300 + 200, // Very fast falling
-                    size: Math.random() * 15 + 10, color: '#22D3EE' // Crystal shards (length)
+                    vx: 0, vy: Math.random() * 300 + 200,
+                    size: Math.random() * 15 + 10, color: '#22D3EE'
                 });
             }
+        }
+    },
+
+    _precomputeWhirlpool() {
+        if (this.whirlpoolCanvas) return;
+        const RADIUS = 70;
+        this.whirlpoolCanvas = document.createElement('canvas');
+        this.whirlpoolCanvas.width = RADIUS * 2;
+        this.whirlpoolCanvas.height = RADIUS * 2;
+        const ctx = this.whirlpoolCanvas.getContext('2d');
+        
+        const voidGrad = ctx.createRadialGradient(RADIUS, RADIUS, 0, RADIUS, RADIUS, RADIUS);
+        voidGrad.addColorStop(0, '#000000');
+        voidGrad.addColorStop(0.4, 'rgba(15, 23, 42, 0.9)'); 
+        voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = voidGrad;
+        ctx.fillRect(0, 0, RADIUS * 2, RADIUS * 2);
+
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 6; i++) {
+            ctx.beginPath();
+            const startAngle = (i * Math.PI / 3); 
+            for (let r = 5; r < RADIUS; r += 4) {
+                const angle = startAngle - (r * 0.045);
+                const px = RADIUS + Math.cos(angle) * r;
+                const py = RADIUS + Math.sin(angle) * r;
+                if (r === 5) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            const armGrad = ctx.createRadialGradient(RADIUS, RADIUS, 10, RADIUS, RADIUS, RADIUS);
+            armGrad.addColorStop(0, 'rgba(168, 85, 247, 0.9)'); 
+            armGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.5)'); 
+            armGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            
+            ctx.strokeStyle = armGrad;
+            ctx.stroke();
         }
     },
 
@@ -205,12 +247,10 @@ export const ExplorationRenderer = {
             this.ctx.fillRect(0, 0, this.VIEW_W, this.VIEW_H);
         }
 
-        // Particles
+        // Standard Particles
         this.hazardParticles.forEach(p => {
             p.x += p.vx * dt;
             p.y += p.vy * dt;
-
-            // Screen wrap
             if (p.x < 0) p.x = this.VIEW_W;
             if (p.x > this.VIEW_W) p.x = 0;
             if (p.y < 0) p.y = this.VIEW_H;
@@ -218,64 +258,36 @@ export const ExplorationRenderer = {
 
             this.ctx.fillStyle = p.color;
             if (this.currentWeather === 'shatter') {
-                // Draw shards as vertical lines
                 this.ctx.fillRect(p.x, p.y, 2, p.size); 
             } else {
-                // Draw embers, snow, and spores as squares
                 this.ctx.fillRect(p.x, p.y, p.size, p.size);
             }
         });
 
-// Abyssal Whirlpool (Anchored to the exact center of the map!)
-        if (this.currentWeather === 'whirlpool') {
-            const mapCenterPx = (512 / 2) * this.TILE_SIZE; // LOCAL_MAP_SIZE = 512
+        // OPTIMIZED WHIRLPOOL: No more procedural math in the loop
+        if (this.currentWeather === 'whirlpool' && this.whirlpoolCanvas) {
+            const mapCenterPx = (512 / 2) * this.TILE_SIZE;
             const screenCX = mapCenterPx - this.camX;
             const screenCY = mapCenterPx - this.camY;
 
-            // Only draw if it's currently on screen
             if (screenCX > -100 && screenCX < this.VIEW_W + 100 && screenCY > -100 && screenCY < this.VIEW_H + 100) {
                 const time = Date.now() / 1000;
-                const RADIUS = 70; // SCALED DOWN: Was 120
+                const RADIUS = 70;
                 
-                // 1. The Dark Void (Event Horizon)
-                const voidGrad = this.ctx.createRadialGradient(screenCX, screenCY, 0, screenCX, screenCY, RADIUS);
-                voidGrad.addColorStop(0, '#000000');
-                voidGrad.addColorStop(0.4, 'rgba(15, 23, 42, 0.9)'); 
-                voidGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                this.ctx.fillStyle = voidGrad;
-                this.ctx.fillRect(screenCX - RADIUS, screenCY - RADIUS, RADIUS * 2, RADIUS * 2);
+                this.ctx.save();
+                this.ctx.translate(screenCX, screenCY);
+                // Rotate the entire cached canvas instead of redrawing the arms
+                this.ctx.rotate(time * 3.5); 
+                this.ctx.drawImage(this.whirlpoolCanvas, -RADIUS, -RADIUS);
+                this.ctx.restore();
 
-                // 2. Rotating Spiral Arms
-                this.ctx.lineWidth = 3;
-                for (let i = 0; i < 6; i++) {
-                    this.ctx.beginPath();
-                    const startAngle = (i * Math.PI / 3) + (time * 3.5); 
-                    
-                    for (let r = 5; r < RADIUS; r += 4) {
-                        const angle = startAngle - (r * 0.045); // Tighter twist
-                        const px = screenCX + Math.cos(angle) * r;
-                        const py = screenCY + Math.sin(angle) * r;
-                        if (r === 5) this.ctx.moveTo(px, py);
-                        else this.ctx.lineTo(px, py);
-                    }
-                    
-                    const armGrad = this.ctx.createRadialGradient(screenCX, screenCY, 10, screenCX, screenCY, RADIUS);
-                    armGrad.addColorStop(0, 'rgba(168, 85, 247, 0.9)'); 
-                    armGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.5)'); 
-                    armGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                    
-                    this.ctx.strokeStyle = armGrad;
-                    this.ctx.stroke();
-                }
-
-                // 3. Debris / Particles getting sucked in
+                // 2. Simple Debris (Keep this as small individual rects)
                 this.ctx.fillStyle = '#E2E8F0';
                 for(let i = 0; i < 15; i++) {
                     const angle = (i * Math.PI * 2 / 15) + (time * 4);
                     const r = RADIUS - ((time * 50 + i * 25) % RADIUS); 
                     const px = screenCX + Math.cos(angle - (r * 0.045)) * r;
                     const py = screenCY + Math.sin(angle - (r * 0.045)) * r;
-                    
                     this.ctx.globalAlpha = Math.max(0, r / RADIUS); 
                     this.ctx.fillRect(px, py, 2, 2);
                 }
