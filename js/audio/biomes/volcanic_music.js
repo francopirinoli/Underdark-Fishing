@@ -2,30 +2,31 @@
  * js/audio/biomes/volcanic_music.js
  * Sulphur Springs (Volcanic)
  * Vibe: Aggressive, fiery, driving, hostile, tribal.
- * Instruments: War drums (Kick/Toms), Galloping Bass, Brassy Pads, Blazing Arpeggios.
+ * Instruments: War drums, Galloping Bass, Brassy Pads, Sweeping Arpeggios.
  */
 
 export function compose(engine, rng, theory) {
     const { getNoteInScale, SCALES, safeVel } = theory;
 
-    // Fast, urgent tempo to simulate boiling rapids and danger
-    Tone.Transport.bpm.value = rng.int(100, 115); 
+    // Fast, urgent tempo
+    Tone.Transport.bpm.value = rng.int(105, 120); 
     const root = rng.int(0, 11); 
     
-    // Harmonic Minor gives a gothic, boss-fight feel. 
-    // Phrygian Dominant gives a fiery, exotic, desert/volcano feel.
-    const scale = rng.pick([SCALES.harmonic_minor, SCALES.phrygian_dominant]); 
+    // Expanded scales for more variance
+    const scale = rng.pick([SCALES.harmonic_minor, SCALES.phrygian_dominant, SCALES.double_harmonic, SCALES.minor]); 
 
-    // Turn up the tape hiss to simulate roaring steam vents
     engine.synths.noiseTape.volume.value = -22; 
-
-    // Use brassy or saw-wave pads for a harsh, aggressive texture
     const padSynth = rng.pick(['padBrass', 'padStrings']);
-    const leadSynth = 'leadOboe'; // Oboe cuts through the mix with an aggressive bite
+    const leadSynth = 'leadOboe'; 
 
-    // --- 1. AGGRESSIVE CHORDS & GALLOPING BASS (4 Measure Loop) ---
-    // Fast chord changes driving the tension
-    const chordProgressions = [[0, 5, 4, 0], // i, VI, V, i (Classic boss-fight progression)[0, 2, 5, 4], // i, III, VI, V[0, 1, 4, 5], // i, II, V, VI (Very Phrygian Dominant)[0, 7, 5, 4]  // i, vii, VI, V (Descending)
+    // --- 1. AGGRESSIVE CHORDS (8 Measure Loop) ---
+    // Expanded chord dictionaries
+    const chordProgressions = [
+        [0, 5, 4, 0], // i, VI, V, i 
+        [0, 1, 4, 5], // i, II, V, VI 
+        [0, 3, 7, 4], // i, iv, VII, V
+        [0, 7, 6, 5], // Descending tension
+        [0, 2, 5, 4]  // i, III, VI, V
     ];
     const prog = rng.pick(chordProgressions);
     
@@ -33,60 +34,55 @@ export function compose(engine, rng, theory) {
     const bassEvents =[];
 
     for (let i = 0; i < 4; i++) {
-        const time = `${i}:0:0`; // Chord changes every measure
+        // Stretch chords across 2 measures for a grander feel
+        const time = `${i * 2}:0:0`; 
         const deg = prog[i];
         
-        // Power chords (Root + 5th) for an aggressive, heavy sound, sometimes adding the minor/major 3rd
         const voicing = [deg, deg + 4]; 
-        if (rng.chance(0.6)) voicing.push(deg + 2); 
+        if (rng.chance(0.6)) voicing.push(deg + rng.pick([2, 3])); // Add minor/major 3rd
         
         padEvents.push({ 
             time, 
             note: voicing.map(d => getNoteInScale(root, 3, scale, d)), 
-            duration: "1m", 
+            duration: "2m", 
             velocity: safeVel(rng.float(0.5, 0.7)) 
         });
         
-        // The Galloping Bassline
-        // Uses a relentless driving rhythm: ONE-and-a-TWO-and-a...
+        // Dynamic Galloping Bassline
         const bNote1 = getNoteInScale(root, 2, scale, deg);
-        const bNote2 = getNoteInScale(root, 2, scale, deg + rng.pick([0, 0, 4])); // Occasionally bounces to the 5th
+        const bNote2 = getNoteInScale(root, 2, scale, deg + rng.pick([0, 4, 7])); 
         
-        for (let beat = 0; beat < 4; beat++) {
-            // Downbeat
-            bassEvents.push({ time: `${i}:${beat}:0`, note: bNote1, duration: "8n", velocity: safeVel(0.9) });
-            // Syncopated 16th notes
-            if (rng.chance(0.8)) {
-                bassEvents.push({ time: `${i}:${beat}:2`, note: bNote2, duration: "16n", velocity: safeVel(0.7) });
-                bassEvents.push({ time: `${i}:${beat}:3`, note: bNote1, duration: "16n", velocity: safeVel(0.6) });
+        for (let mOffset = 0; mOffset < 2; mOffset++) {
+            const m = (i * 2) + mOffset;
+            for (let beat = 0; beat < 4; beat++) {
+                bassEvents.push({ time: `${m}:${beat}:0`, note: bNote1, duration: "8n", velocity: safeVel(0.9) });
+                // Groove variance: Don't hammer every single 16th note
+                if (rng.chance(0.6)) {
+                    bassEvents.push({ time: `${m}:${beat}:2`, note: rng.chance(0.7) ? bNote1 : bNote2, duration: "16n", velocity: safeVel(0.7) });
+                }
             }
         }
     }
     
-    engine.scheduleTrack('pad', padSynth, padEvents, "4m");
-    engine.scheduleTrack('bass', 'bassDrone', bassEvents, "4m");
-
+    engine.scheduleTrack('pad', padSynth, padEvents, "8m");
+    engine.scheduleTrack('bass', 'bassDrone', bassEvents, "8m");
 
     // --- 2. TRIBAL WAR DRUMS (2 Measure Loop) ---
-    // A heavy, repeating syncopated drum groove that drives the entire track
     const kickEvents = [];
     const percEvents =[];
     
     for (let m = 0; m < 2; m++) {
-        // Core Kick Pattern
         kickEvents.push({ time: `${m}:0:0`, note: "C1", duration: "8n", velocity: safeVel(1.0) });
-        kickEvents.push({ time: `${m}:1:2`, note: "C1", duration: "8n", velocity: safeVel(0.8) }); // Syncopated hit
+        kickEvents.push({ time: `${m}:1:2`, note: "C1", duration: "8n", velocity: safeVel(0.8) }); 
         kickEvents.push({ time: `${m}:2:0`, note: "C1", duration: "8n", velocity: safeVel(1.0) });
         
-        if (rng.chance(0.5)) kickEvents.push({ time: `${m}:3:2`, note: "C1", duration: "8n", velocity: safeVel(0.8) });
+        if (rng.chance(0.6)) kickEvents.push({ time: `${m}:3:2`, note: "C1", duration: "8n", velocity: safeVel(0.8) });
 
-        // Tom/Click Fills
         percEvents.push({ time: `${m}:1:0`, note: "G2", duration: "16n", velocity: safeVel(0.6) });
         percEvents.push({ time: `${m}:2:2`, note: "C3", duration: "16n", velocity: safeVel(0.5) });
         percEvents.push({ time: `${m}:3:0`, note: "D2", duration: "16n", velocity: safeVel(0.6) });
         
-        // Fast 16th note rolling fill at the end of the 2nd measure
-        if (m === 1 && rng.chance(0.7)) {
+        if (m === 1 && rng.chance(0.8)) {
             percEvents.push({ time: `${m}:3:1`, note: "G2", duration: "16n", velocity: safeVel(0.4) });
             percEvents.push({ time: `${m}:3:2`, note: "C3", duration: "16n", velocity: safeVel(0.5) });
             percEvents.push({ time: `${m}:3:3`, note: "D3", duration: "16n", velocity: safeVel(0.6) });
@@ -95,71 +91,78 @@ export function compose(engine, rng, theory) {
     engine.scheduleTrack('kick', 'kickCavern', kickEvents, "2m");
     engine.scheduleTrack('perc', 'percToms', percEvents, "2m");
 
-
-    // --- 3. BUBBLING MAGMA ARPEGGIOS (3 Measure Loop) ---
-    // Fast, repeating motifs (pedal points) mimicking spitting fire and bubbling lava
+    // --- 3. MAGMA BURST ARPEGGIOS (4 Measure Loop) ---
+    // Drastically optimized. Generates sweeping runs instead of a relentless 16th-note wall.
     const arpEvents =[];
-    const pedalNote = rng.pick([0, 4]); // Anchors on Root or 5th
-    const topNote = pedalNote + rng.pick([2, 3, 5]); // Trills up to a higher scale degree
-    
-    for (let m = 0; m < 3; m++) {
-        for (let beat = 0; beat < 4; beat++) {
-            if (rng.chance(0.8)) { // 80% chance to play a blazing 16th-note run this beat
-                arpEvents.push({ time: `${m}:${beat}:0`, note: getNoteInScale(root, 5, scale, topNote), duration: "16n", velocity: safeVel(0.7) });
-                arpEvents.push({ time: `${m}:${beat}:1`, note: getNoteInScale(root, 4, scale, pedalNote), duration: "16n", velocity: safeVel(0.5) });
-                arpEvents.push({ time: `${m}:${beat}:2`, note: getNoteInScale(root, 5, scale, topNote - 1), duration: "16n", velocity: safeVel(0.6) });
-                arpEvents.push({ time: `${m}:${beat}:3`, note: getNoteInScale(root, 4, scale, pedalNote), duration: "16n", velocity: safeVel(0.4) });
-            }
-        }
-    }
-    engine.scheduleTrack('arp', 'arpLute', arpEvents, "3m");
+    for (let m = 0; m < 4; m++) {
+        const bursts = rng.int(1, 2); // 1 or 2 bursts per measure
+        for (let b = 0; b < bursts; b++) {
+            const startBeat = rng.int(0, 3);
+            const runLength = rng.int(4, 9); // Run of 4 to 9 notes
+            let currentDeg = rng.pick([0, 4, 5, 7]);
+            const dir = rng.pick([1, -1]); // Sweep up or down
 
-
-    // --- 4. FRANTIC LEAD MELODY (7 Measure Loop) ---
-    // A wandering, aggressive melody that cuts through the chaos
-    const leadEvents =[];
-    for (let m = 0; m < 7; m++) {
-        if (rng.chance(0.65)) {
-            const startBeat = rng.pick([0, 1, 2]);
-            const startDeg = rng.pick([0, 2, 4, 7]); 
-            
-            leadEvents.push({ 
-                time: `${m}:${startBeat}:0`, 
-                note: getNoteInScale(root, 4, scale, startDeg), 
-                duration: "8n", 
-                velocity: safeVel(0.8) 
-            });
-            
-            leadEvents.push({ 
-                time: `${m}:${startBeat}:2`, 
-                note: getNoteInScale(root, 4, scale, startDeg + rng.pick([1, 2, -1])), 
-                duration: "8n", 
-                velocity: safeVel(0.7) 
-            });
-            
-            // Sustained bending note
-            if (rng.chance(0.5)) {
-                leadEvents.push({ 
-                    time: `${m}:${startBeat + 1}:0`, 
-                    note: getNoteInScale(root, 4, scale, startDeg + rng.pick([3, 4])), 
-                    duration: rng.pick(["4n", "2n"]), 
-                    velocity: safeVel(0.8) 
+            for (let i = 0; i < runLength; i++) {
+                currentDeg += dir;
+                arpEvents.push({ 
+                    time: `${m}:${startBeat}:${i}`, // 16th note spacing
+                    note: getNoteInScale(root, 5, scale, currentDeg), 
+                    duration: "32n", 
+                    velocity: safeVel(0.4 + (Math.sin(i * 0.5) * 0.2)) // Humanized swelling volume
                 });
             }
         }
     }
-    engine.scheduleTrack('lead', leadSynth, leadEvents, "7m");
+    engine.scheduleTrack('arp', 'arpLute', arpEvents, "4m");
 
+    // --- 4. STRUCTURED WAR MOTIF (16 Measure Loop) ---
+    // Creates a hummable, aggressive melody using an A-B-A-C structure
+    function generateWarMotif(baseDeg) {
+        const events =[];
+        let beat = 0;
+        let currentDeg = baseDeg + rng.pick([0, 4, 7]);
+
+        while (beat < 8) { // 2 measure motif
+            if (rng.chance(0.6)) {
+                currentDeg += rng.pick([1, -1, 2, -2, 0]);
+                events.push({
+                    time: `0:${Math.floor(beat)}:${Math.floor((beat % 1) * 4)}`,
+                    note: getNoteInScale(root, 4, scale, currentDeg),
+                    duration: rng.pick(["8n", "16n", "4n"]),
+                    velocity: safeVel(rng.float(0.7, 0.9))
+                });
+            }
+            beat += rng.pick([0.5, 0.5, 1.0]); // Fast, syncopated steps
+        }
+        return events;
+    }
+
+    const motifA = generateWarMotif(prog[0]);
+    const motifB = generateWarMotif(prog[1]);
+    const motifC = generateWarMotif(prog[3]);
+
+    const shiftMotif = (motif, targetMeasure) => {
+        return motif.map(e => {
+            const parts = e.time.split(':');
+            return { ...e, time: `${parseInt(parts[0]) + targetMeasure}:${parts[1]}:${parts[2]}` };
+        });
+    };
+
+    const leadEvents =[];
+    leadEvents.push(...shiftMotif(motifA, 0));
+    leadEvents.push(...shiftMotif(motifB, 4));
+    leadEvents.push(...shiftMotif(motifA, 8));
+    leadEvents.push(...shiftMotif(motifC, 12));
+
+    engine.scheduleTrack('lead', leadSynth, leadEvents, "16m");
 
     // --- 5. SPARKS & CINDERS (5 Measure Loop) ---
-    // Sudden, sharp glass pings that sound like rocks shattering in the heat
     const chimeEvents =[];
     for (let m = 0; m < 5; m++) {
-        if (rng.chance(0.4)) {
+        if (rng.chance(0.3)) { // Reduced frequency to save CPU
             const beat = rng.int(0, 3);
             const sixteenth = rng.pick([0, 2]);
             
-            // Sharp, dissonant cluster
             chimeEvents.push({ 
                 time: `${m}:${beat}:${sixteenth}`, 
                 note:[
@@ -167,7 +170,7 @@ export function compose(engine, rng, theory) {
                     getNoteInScale(root, 6, scale, rng.pick([1, 5]))
                 ], 
                 duration: "16n", 
-                velocity: safeVel(rng.float(0.6, 0.9)) 
+                velocity: safeVel(rng.float(0.5, 0.8)) 
             });
         }
     }

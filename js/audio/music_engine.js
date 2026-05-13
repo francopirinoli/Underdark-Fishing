@@ -48,7 +48,6 @@ export const MusicEngine = {
     init() {
         if (!AudioEngine.isInitialized || this.synths.padChoir) return;
 
-         // Change globalReverb to musicReverb for these three:
         this.echoDelay = new Tone.FeedbackDelay("8n.", 0.4).connect(AudioEngine.musicReverb);
         this.longDelay = new Tone.FeedbackDelay("2n", 0.6).connect(AudioEngine.musicReverb);
 
@@ -57,53 +56,63 @@ export const MusicEngine = {
         this.tapeChorus.connect(this.warmFilter);
         this.warmFilter.connect(AudioEngine.musicReverb);
 
-        // --- NORMALIZED VOLUMES ---
+        // --- NORMALIZED VOLUMES & POLYPHONY LIMITS ---
         this.synths.padChoir = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "fatcustom", partials:[1, 0.4, 0.1], spread: 30, count: 3 },
-            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 4 }
+            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 2 } // Shortened release
         }).connect(this.tapeChorus);
+        this.synths.padChoir.maxPolyphony = 6;
         this.synths.padChoir.volume.value = -16;
 
         this.synths.padStrings = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
-            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 3 },
+            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 2 }, // Shortened release
             filterEnvelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 2, baseFrequency: 300, octaves: 2 }
         }).connect(this.tapeChorus);
+        this.synths.padStrings.maxPolyphony = 6;
         this.synths.padStrings.volume.value = -16;
 
         this.synths.bassDrone = new Tone.PolySynth(Tone.MonoSynth, {
             oscillator: { type: "square" },
-            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 3 },
+            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 1.5 },
             filterEnvelope: { attack: 0.2, decay: 1, sustain: 0.4, release: 2, baseFrequency: 60, octaves: 3 },
         }).connect(this.warmFilter);
+        this.synths.bassDrone.maxPolyphony = 2; // Bass rarely needs to overlap
         this.synths.bassDrone.volume.value = -12;
 
         const vibrato = new Tone.Vibrato(4, 0.05).connect(this.echoDelay);
         
         this.synths.leadFlute = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "triangle" },
-            envelope: { attack: 0.2, decay: 0.3, sustain: 0.6, release: 1.5 }
+            envelope: { attack: 0.2, decay: 0.3, sustain: 0.6, release: 1.0 }
         }).connect(vibrato);
+        this.synths.leadFlute.maxPolyphony = 4;
         this.synths.leadFlute.volume.value = -12;
 
         this.synths.leadOboe = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
-            envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 1 }
+            envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.5 }
         }).connect(vibrato);
+        this.synths.leadOboe.maxPolyphony = 4;
         this.synths.leadOboe.volume.value = -14;
 
+        // CRITICAL FIX: Arp was causing massive voice leaks. 
+        // Reduced release from 0.2 to 0.05 and hard-capped polyphony.
         this.synths.arpLute = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 1.5, modulationIndex: 2,
             oscillator: { type: "triangle" },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }
+            envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.05 } 
         }).connect(this.echoDelay);
+        this.synths.arpLute.maxPolyphony = 8;
         this.synths.arpLute.volume.value = -14;
 
+        // CRITICAL FIX: Chimes had a 3.0s release. Brought down to 1.5s.
         this.synths.chimesGlass = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 3.5, modulationIndex: 5,
             oscillator: { type: "sine" },
-            envelope: { attack: 0.05, decay: 1, sustain: 0, release: 3 }
+            envelope: { attack: 0.05, decay: 1, sustain: 0, release: 1.5 } 
         }).connect(this.longDelay);
+        this.synths.chimesGlass.maxPolyphony = 6;
         this.synths.chimesGlass.volume.value = -16;
 
         this.synths.kickCavern = new Tone.MembraneSynth({
@@ -114,18 +123,17 @@ export const MusicEngine = {
 
         this.synths.percToms = new Tone.MembraneSynth({
             pitchDecay: 0.1, octaves: 4, oscillator: { type: "square" },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } // Snappier toms
         }).connect(this.echoDelay);
         this.synths.percToms.volume.value = -14;
 
-        // Vintage rumble
         this.synths.noiseTape = new Tone.NoiseSynth({
             noise: { type: "brown" },
             envelope: { attack: 2, decay: 0, sustain: 1, release: 2 }
         }).connect(this.warmFilter);
         this.synths.noiseTape.volume.value = -40; 
 
-        console.log("🎹 Dungeon Synth Rack Initialized");
+        console.log("🎹 Dungeon Synth Rack Initialized (Optimized Polyphony)");
     },
 
     clearTracks() {

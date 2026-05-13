@@ -543,7 +543,7 @@ export const GrimoireUI = {
                 <div style="display:flex; justify-content:space-between;"><span>Power:</span> <span>${item.stats.power}x ${this.formatDelta(item.stats.power, eqRod.stats.power)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Max Tension:</span> <span>${item.stats.maxTension} ${this.formatDelta(item.stats.maxTension, eqRod.stats.maxTension)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Flexibility:</span> <span>${item.stats.flexibility}x ${this.formatDelta(item.stats.flexibility, eqRod.stats.flexibility)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Hook Window:</span> <span>${item.stats.sensitivity}ms ${this.formatDelta(item.stats.sensitivity, eqRod.stats.sensitivity)}</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Sensitivity:</span> <span>${item.stats.sensitivity}ms ${this.formatDelta(item.stats.sensitivity, eqRod.stats.sensitivity)}</span></div>
             `;
             
             btnEquip.style.display = 'block';
@@ -570,7 +570,7 @@ export const GrimoireUI = {
             document.getElementById('grim-item-stats').innerHTML = `
                 <div style="display:flex; justify-content:space-between;"><span>Hull HP:</span> <span>${item.stats.maxHp} ${this.formatDelta(item.stats.maxHp, eqBoat.stats.maxHp)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Speed:</span> <span>${item.stats.speed} ${this.formatDelta(item.stats.speed, eqBoat.stats.speed)}</span></div>
-                <div style="display:flex; justify-content:space-between;"><span>Stealth:</span> <span>${item.stats.stealth}x ${this.formatDelta(item.stats.stealth, eqBoat.stats.stealth, true)}</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Stealth:</span> <span>${item.stats.stealth}x ${this.formatDelta(item.stats.stealth, eqBoat.stats.stealth)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Base Cargo:</span> <span>${item.stats.cargoSpace} ${this.formatDelta(item.stats.cargoSpace, eqBoat.stats.cargoSpace)}</span></div>
                 <div style="margin-top:1.5rem; text-align:center; color:var(--gold-warn); font-style:italic; font-size:1.1rem;">
                     Boats cannot be carried in your backpack.<br>Access your Safehouse Dry Dock to manage hulls.
@@ -830,7 +830,7 @@ export const GrimoireUI = {
             <div class="loadout-details" style="flex:1;">
                 <b style="color: ${getItemColor(rod)}">${rod.identity.name}</b>
                 <span style="display:block; font-size:1rem; margin-bottom:0.1rem;">Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</span>
-                <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Flex: ${rod.stats.flexibility}x | Hook Win: ${rod.stats.sensitivity}ms</span>
+                <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Flex: ${rod.stats.flexibility}x | Sensitivity: ${rod.stats.sensitivity}ms</span>
             </div>
         `;
         
@@ -863,6 +863,8 @@ export const GrimoireUI = {
                 <h3>🎣 Minigame Physics</h3>
                 <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Reeling Power</span> ${fmt(effStats.minigame.power, true)}</div>
                 <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Hook Window</span> <span style="color:var(--cyan-glow); font-weight:bold;">${effStats.minigame.hookWindowMs}ms</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Sweet Spot Tol.</span> <span class="dash-pos">±${effStats.minigame.sweetSpotTolerance}%</span></div>
+                <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Reel Scroll Speed</span> ${fmt(effStats.minigame.reelScrollSpeed, true)}</div>
                 <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Stamina Pool</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.stamina}</span></div>
                 <div class="grim-stat-row" style="font-size:1.2rem; padding:0.3rem 0;"><span>Max Line Tension</span> <span style="color:var(--text-main); font-weight:bold;">${effStats.minigame.maxTension}</span></div>
             </div>

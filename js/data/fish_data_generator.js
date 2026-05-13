@@ -151,7 +151,7 @@ export function generateFishData(options = {}) {
     let maxW = weightBrackets[sizeTier].max;
 
 // Base Combat stats (Unscaled)
-    const stamina = Math.round(arch.baseStamina * rng.float(0.85, 1.15));
+    const stamina = Math.round(arch.baseStamina * rng.float(1, 1.5));
     const speed = Math.round(arch.baseSpeed * rng.float(0.85, 1.15));
     let aggression = Number(clamp(arch.baseAggro * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
     const hookWindowMs = 1000; // Base generic window

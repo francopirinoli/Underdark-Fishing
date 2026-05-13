@@ -137,9 +137,10 @@ export const FishingRenderer = {
                     </div>
                     
                     <div class="behavior-text" id="fm-behavior">WAITING...</div>
-                    <div class="controls-hint">SCROLL to change depth. Hold CLICK/SPACE to Reel. Release to Rest.</div>
+                    <div class="controls-hint">SCROLL: Depth (Sinking) / Reel Power (Fight). Hold CLICK/SPACE to Reel.</div>
                 </div>
             </div>
+
         `;
 
         this.elements = {
@@ -441,10 +442,27 @@ open(config) {
 
             if (this.tileId === TILE.FLORA) {
                 ctx.fillStyle = this.biomePal.flora;
-                const sway = engine.waterCurrent * 8; // Flora bends with current
-                for(let i=0; i<8; i++) {
-                    ctx.fillRect(20 + i*30 + sway, bottomY - 20, 4, 20);
-                    ctx.fillRect(18 + i*30 + sway, bottomY - 24, 8, 4); 
+                // Flora bends intensely with the water current
+                const baseSway = engine.waterCurrent * 6; 
+                
+                for(let i = 0; i < 8; i++) {
+                    const baseX = 20 + i * 35;
+                    // 3 stalks per cluster
+                    for (let s = 0; s < 3; s++) {
+                        const height = 15 + ((i * 7 + s * 13) % 30); 
+                        const stalkX = baseX + s * 5;
+                        
+                        for (let seg = 0; seg < height; seg += 4) {
+                            const swayAmt = (seg / height) * baseSway * (s + 1); 
+                            ctx.fillRect(stalkX + swayAmt, bottomY - seg - 4, 3, 4);
+                            
+                            // Alternating leaves
+                            if (seg > 4 && (seg + s) % 3 !== 0) {
+                                const leafDir = (seg % 8 === 0) ? -3 : 3;
+                                ctx.fillRect(stalkX + swayAmt + leafDir, bottomY - seg - 2, 3, 2);
+                            }
+                        }
+                    }
                 }
             }
         }

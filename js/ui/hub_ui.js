@@ -6,7 +6,7 @@
 
 import { SFX } from '../audio/sfx_generator.js';
 import { createRng } from '../util/rng.js';
-import { getRarityColor, getItemColor } from '../util/utils.js';
+import { getRarityColor, getItemColor, buildStatSlider } from '../util/utils.js';
 import { generateSettlementArt } from '../art/settlement_generator.js';
 import { generateNPCData } from '../data/npc_data_generator.js';
 import { generateFishData } from '../data/fish_data_generator.js';
@@ -1421,10 +1421,27 @@ export const HubUI = {
 
                 if (themeId !== 'abyssal') {
                     ctx.fillStyle = pal.flora;
-                    const sway = Math.sin(time / 1000) * 4;
-                    for(let i = 0; i < canvas.width / 50 + 1; i++) {
-                        ctx.fillRect(20 + i*50 + sway, floorY - 20, 4, 20);
-                        ctx.fillRect(18 + i*50 + sway, floorY - 24, 8, 4); 
+                    const baseSway = Math.sin(time / 1000) * 3;
+                    
+                    for(let i = 0; i < canvas.width / 40 + 1; i++) {
+                        const baseX = 10 + i * 40;
+                        // Draw 3 overlapping stalks per cluster to create a dense forest
+                        for (let s = 0; s < 3; s++) {
+                            const height = 15 + ((i * 7 + s * 13) % 30); // Random organic heights
+                            const stalkX = baseX + s * 6;
+                            
+                            for (let seg = 0; seg < height; seg += 4) {
+                                // The top segments of the kelp sway further than the roots
+                                const sway = (seg / height) * baseSway * (s + 1.5);
+                                ctx.fillRect(stalkX + sway, floorY - seg - 4, 3, 4);
+                                
+                                // Draw alternating leaves/fronds
+                                if (seg > 4 && (seg + s) % 3 !== 0) {
+                                    const leafDir = (seg % 8 === 0) ? -3 : 3;
+                                    ctx.fillRect(stalkX + sway + leafDir, floorY - seg - 2, 3, 2);
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -1587,20 +1604,28 @@ export const HubUI = {
             html += `<div class="tt-row"><span>Power:</span> <span>${ns.power}x ${this.formatDelta(ns.power, eq.power)}</span></div>
                      <div class="tt-row"><span>Tension:</span> <span>${ns.maxTension} ${this.formatDelta(ns.maxTension, eq.maxTension)}</span></div>
                      <div class="tt-row"><span>Flex:</span> <span>${ns.flexibility}x ${this.formatDelta(ns.flexibility, eq.flexibility)}</span></div>
-                     <div class="tt-row"><span>Hook Win:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
+                     <div class="tt-row"><span>Sensitivity:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
         } else if (item.type === 'boat') {
             const eq = player.gear.boat.stats;
             const ns = item.itemData.stats;
             html += `<div class="tt-row"><span>Hull HP:</span> <span>${ns.maxHp} ${this.formatDelta(ns.maxHp, eq.maxHp)}</span></div>
                      <div class="tt-row"><span>Speed:</span> <span>${ns.speed} ${this.formatDelta(ns.speed, eq.speed)}</span></div>
-                     <div class="tt-row"><span>Stealth:</span> <span>${ns.stealth}x ${this.formatDelta(ns.stealth, eq.stealth, true)}</span></div>
+                     <div class="tt-row"><span>Stealth:</span> <span>${ns.stealth}x ${this.formatDelta(ns.stealth, eq.stealth)}</span></div>
                      <div class="tt-row"><span>Cargo:</span> <span>${ns.cargoSpace} ${this.formatDelta(ns.cargoSpace, eq.cargoSpace)}</span></div>`;
-        } else if (item.type === 'part' || item.visualId) {
-            const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
-            html += `<div class="tt-row"><span>Color:</span> <span>${fmt(item.stats.color)}</span></div>
-                     <div class="tt-row"><span>Sound:</span> <span>${fmt(item.stats.sound)}</span></div>
-                     <div class="tt-row"><span>Light:</span> <span>${fmt(item.stats.light)}</span></div>
-                     <div class="tt-row"><span>Weight:</span> <span>${fmt(item.stats.weight)}</span></div>`;
+        } else if (item.type === 'part' || item.visualId || item.invType === 'lure') {
+            // Use the "loadout-details" class to automatically shrink the sliders to fit nicely in the tooltip!
+            html += `<div class="loadout-details" style="margin-top: 0.5rem;">`;
+            if (item.invType === 'lure') {
+                html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem; font-size:1.1rem;">
+                            <span>Durability:</span> <span>${item.durability}/${item.maxDurability}</span>
+                         </div>`;
+            }
+            html += `
+                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
+                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
+                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
+                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
+            </div>`;
         } else if (item.invType === 'fish') {
             // NEW: Enriched Fish Info
             const familyName = item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1);

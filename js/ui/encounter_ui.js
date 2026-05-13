@@ -7,7 +7,7 @@ import { SFX } from '../audio/sfx_generator.js';
 import { createRng } from '../util/rng.js';
 import { DialogueGenerator } from '../economy/dialogue_generator.js';
 import { PlayerEngine } from '../data/player_data.js';
-import { getRarityColor, getItemColor } from '../util/utils.js';
+import { getRarityColor, getItemColor, buildStatSlider } from '../util/utils.js';
 
 export const EncounterUI = {
     gameState: null,
@@ -248,13 +248,20 @@ export const EncounterUI = {
             html += `<div class="tt-row"><span>Power:</span> <span>${ns.power}x ${this.formatDelta(ns.power, eq.power)}</span></div>
                      <div class="tt-row"><span>Tension:</span> <span>${ns.maxTension} ${this.formatDelta(ns.maxTension, eq.maxTension)}</span></div>
                      <div class="tt-row"><span>Flex:</span> <span>${ns.flexibility}x ${this.formatDelta(ns.flexibility, eq.flexibility)}</span></div>
-                     <div class="tt-row"><span>Hook Win:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
-        } else if (item.type === 'part' || item.visualId) {
-            const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
-            html += `<div class="tt-row"><span>Color:</span> <span>${fmt(item.stats.color)}</span></div>
-                     <div class="tt-row"><span>Sound:</span> <span>${fmt(item.stats.sound)}</span></div>
-                     <div class="tt-row"><span>Light:</span> <span>${fmt(item.stats.light)}</span></div>
-                     <div class="tt-row"><span>Weight:</span> <span>${fmt(item.stats.weight)}</span></div>`;
+                     <div class="tt-row"><span>Sensitivity:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
+        } else if (item.type === 'part' || item.visualId || item.invType === 'lure') {
+            html += `<div class="loadout-details" style="margin-top: 0.5rem;">`;
+            if (item.invType === 'lure') {
+                html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem; font-size:1.1rem;">
+                            <span>Durability:</span> <span>${item.durability}/${item.maxDurability}</span>
+                         </div>`;
+            }
+            html += `
+                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
+                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
+                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
+                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
+            </div>`;
         } else if (item.invType === 'fish') {
             const familyName = item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1);
             html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem;">

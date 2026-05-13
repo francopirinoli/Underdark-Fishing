@@ -39,8 +39,9 @@ export const DissectionEngine = {
         const rng = createRng(seed);
         
         // 1. Calculate Knowledge Gain (XP towards unlocking this fish's stats)
+        // INCREASED: Dissecting now yields 2x the normal knowledge of just catching the fish.
         const knowledgeGain = {
-            'Common': 10, 'Uncommon': 20, 'Rare': 40, 'Legendary': 70, 'Boss': 100
+            'Common': 20, 'Uncommon': 40, 'Rare': 80, 'Legendary': 140, 'Boss': 200
         }[fish.identity.rarity];
 
         // 2. Determine Part Yield (Massive fish drop more parts)

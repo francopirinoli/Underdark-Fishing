@@ -38,13 +38,14 @@ export const FishingEngine = {
     catchProgress: 0, 
     reelPower: 50,      // <-- NEW
     inSweetSpot: false, // <-- NEW
+    currentTimeMins: 480, // <-- NEW
     hookTimerMs: 0,
     fightTimer: 0,    
     maxFightTimer: 0,
     
     ai: { state: 'HOLD', timer: 0, aggression: 0 },
 
-    startCast(effectivePlayerStats, rawPlayerStaminaStat, fishPool, maxDepth) {
+    startCast(effectivePlayerStats, rawPlayerStaminaStat, fishPool, maxDepth, currentTimeMins = 480) {
         this.playerStats = effectivePlayerStats;
         this.lureStats = effectivePlayerStats.activeLure;
         this.fishPool = fishPool;
@@ -54,6 +55,7 @@ export const FishingEngine = {
         this.currentDepth = 0; 
         this.targetDepth = 0;
         this.waterCurrent = 0;
+        this.currentTimeMins = currentTimeMins; // <-- NEW
 
         this.maxPlayerStamina = this.playerStats.minigame.stamina;
         this.playerStamina = this.maxPlayerStamina;
@@ -100,10 +102,25 @@ export const FishingEngine = {
 
         const currentZone = this.getDepthZone();
         const lure = this.lureStats;
+        const currentHour = this.currentTimeMins / 60; // <-- NEW
         let validCandidates =[];
 
         for (const fish of this.fishPool) {
             if (fish.environment.depthPref !== currentZone) continue;
+
+            // --- NEW: Time of Day Activity Check ---
+            const activeHours = fish.environment.activeHours;
+            let isActive = false;
+            
+            if (activeHours === 'Always Active') {
+                isActive = true;
+            } else if (activeHours === 'Diurnal') {
+                isActive = (currentHour >= 6 && currentHour < 18); // 6am to 6pm
+            } else if (activeHours === 'Nocturnal') {
+                isActive = (currentHour >= 18 || currentHour < 6); // 6pm to 6am
+            } else if (activeHours === 'Crepuscular') {
+                isActive = ((currentHour >= 4 && currentHour <= 8) || (currentHour >= 16 && currentHour <= 20)); // Dawn & Dusk
+            }
 
             const prefs = fish.lurePrefs;
             const diffColor = Math.abs(prefs.color - lure.color);
@@ -112,10 +129,16 @@ export const FishingEngine = {
             const diffWeight = Math.abs(prefs.weight - lure.weight);
             
             const totalDiff = diffColor + diffSound + diffLight + diffWeight;
-            const maxAllowedDiff = prefs.tolerance * 800;
+            
+            // Inactive fish are asleep/lethargic: they demand a much more accurate lure to be tempted
+            const maxAllowedDiff = prefs.tolerance * 800 * (isActive ? 1.0 : 0.5);
 
             if (totalDiff <= maxAllowedDiff) {
-                const matchScore = 1.0 - (totalDiff / maxAllowedDiff);
+                let matchScore = 1.0 - (totalDiff / maxAllowedDiff);
+                
+                // Inactive fish are severely out-competed by active fish for the bait
+                if (!isActive) matchScore *= 0.15; 
+                
                 validCandidates.push({ fish, matchScore });
             }
         }
@@ -125,8 +148,7 @@ export const FishingEngine = {
             return false;
         }
 
-        // --- NEW: ABSOLUTE PRIORITY FOR CHESTS ---
-        // If the player hit the right depth and the chest is here, it ALWAYS bites.
+        // --- ABSOLUTE PRIORITY FOR CHESTS ---
         const chestCandidate = validCandidates.find(c => c.fish.invType === 'chest_encounter');
         if (chestCandidate) {
             this.fishData = chestCandidate.fish;
@@ -135,7 +157,7 @@ export const FishingEngine = {
             return true;
         }
 
-        // Normal Fish Fallback Selection
+        // Normal Fish Selection
         validCandidates.sort((a, b) => b.matchScore - a.matchScore);
 
         let selectedCandidate = validCandidates[0];

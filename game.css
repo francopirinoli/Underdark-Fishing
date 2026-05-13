@@ -124,7 +124,19 @@ body, html {
 .fill-fuel { background: var(--gold-warn); }
 
 /* Minimap & Clock */
-.clock-text { font-size: 1.5rem; color: var(--cyan-glow); margin-bottom: 0.5rem; text-shadow: 0 0 5px rgba(34, 211, 238, 0.4); }
+.digital-clock {
+    background: #000;
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    color: var(--cyan-glow);
+    text-shadow: 0 0 5px rgba(34, 211, 238, 0.4);
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+}
 #minimap-container { background: rgba(0, 0, 0, 0.8); border: 2px solid var(--panel-border); }
 
 /* Action Log */
@@ -733,11 +745,18 @@ body, html {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
 }
-#shop-tooltip b { 
+#shop-tooltip > b { 
     color: var(--gold-warn); 
     font-size: 1.4rem; 
     display: block; 
     margin-bottom: 0.5rem; 
+}
+
+/* Ensure the slider text resets correctly inside the tooltip */
+#shop-tooltip .pref-labels b {
+    color: var(--text-main);
+    display: inline;
+    margin-bottom: 0;
 }
 #shop-tooltip .tt-row { 
     display: flex; 

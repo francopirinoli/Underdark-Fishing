@@ -32,12 +32,27 @@ export const HUD = {
         }
 
         // 4. Clock
-        const hrs = Math.floor(gameTimeMinutes / 60).toString().padStart(2, '0');
-        const mins = Math.floor(gameTimeMinutes % 60).toString().padStart(2, '0');
-        const timeStr = `Day ${gameDay} - ${hrs}:${mins}`;
-        if (this._cache.timeStr !== timeStr) {
-            document.getElementById('hud-clock').innerText = timeStr;
-            this._cache.timeStr = timeStr;
+        const hrs = Math.floor(gameTimeMinutes / 60);
+        const mins = Math.floor(gameTimeMinutes % 60);
+        
+        let timeLabel = "NIGHT";
+        if (hrs >= 4 && hrs < 8) timeLabel = "DAWN";
+        else if (hrs >= 8 && hrs < 16) timeLabel = "DAY";
+        else if (hrs >= 16 && hrs < 20) timeLabel = "DUSK";
+
+        const hrsStr = hrs.toString().padStart(2, '0');
+        const minsStr = mins.toString().padStart(2, '0');
+        
+        // Build an inset digital display format
+        const timeHtml = `
+            <span style="color:var(--text-muted); font-size:0.85rem; width:45px; text-align:left;">DAY ${gameDay}</span>
+            <span style="font-size:1.3rem; letter-spacing:0.1em; font-weight:bold;">${hrsStr}:${minsStr}</span>
+            <span style="color:var(--text-muted); font-size:0.85rem; width:45px; text-align:right;">${timeLabel}</span>
+        `;
+        
+        if (this._cache.timeStr !== timeHtml) {
+            document.getElementById('hud-clock').innerHTML = timeHtml; // Note: Use .innerHTML instead of .innerText now!
+            this._cache.timeStr = timeHtml;
         }
 
         // NEW: Noise Meter

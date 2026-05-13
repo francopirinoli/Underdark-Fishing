@@ -728,7 +728,7 @@ function gameLoop(timestamp) {
                     saveCurrentState();
                 }
 
-                // --- PROCESS NORMAL FISH CATCH ---
+// --- PROCESS NORMAL FISH CATCH ---
                 else {
                     player.inventory.push(caughtFish);
                     
@@ -736,7 +736,17 @@ function gameLoop(timestamp) {
                         const template = currentLocalFishPool.find(f => f.id === caughtFish.id) || caughtFish;
                         player.bestiary[caughtFish.id] = { xp: 0, caught: 0, speciesData: JSON.parse(JSON.stringify(template)) };
                     }
+                    
+                    const prevKnowledge = player.bestiary[caughtFish.id].xp;
                     player.bestiary[caughtFish.id].caught++;
+
+                    // --- NEW: Passive Bestiary XP from Catching ---
+                    // Catching gives half the knowledge of dissecting, still scaling with Intelligence
+                    const baseKnowledge = { 'Common': 10, 'Uncommon': 20, 'Rare': 40, 'Legendary': 70, 'Boss': 100 }[caughtFish.identity.rarity] || 10;
+                    const knowledgeXpGain = Math.round(baseKnowledge * effStats.economy.knowledgeXpMult);
+                    player.bestiary[caughtFish.id].xp += knowledgeXpGain;
+                    
+                    const newKnowledge = player.bestiary[caughtFish.id].xp;
 
                     const targetNode = world.nodes[globalY][globalX];
                     if (!targetNode.discoveredSpecies.includes(caughtFish.id)) {
@@ -770,10 +780,13 @@ function gameLoop(timestamp) {
 
                     handleEndFishing(`Caught a ${caughtFish.identity.name} (+${finalXpGain} XP)!`, "safe");
                     
+                    // Trigger a notification if the passive XP pushed the Bestiary to a new tier!
+                    if (prevKnowledge < 100 && newKnowledge >= 100) HUD.logAction(`Bestiary Updated: ${caughtFish.identity.name} (Lv.2)`, "warn");
+                    if (prevKnowledge < 250 && newKnowledge >= 250) HUD.logAction(`Bestiary Updated: ${caughtFish.identity.name} (MAX)`, "warn");
+                    
                     // --- TOURNAMENT FEEDBACK ---
                     if (activeTournament && activeTournament.isPlayerParticipating && !activeTournament.isFinished) {
                         let isRelevant = true;
-                        // If it's a specialist tournament, ensure we only warn about the specific target fish
                         if (activeTournament.objectiveType === 'specialist' && caughtFish.id !== activeTournament.targetSpeciesId) {
                             isRelevant = false;
                         }
@@ -894,7 +907,8 @@ function handleAttemptCast() {
             document.getElementById('z50-action').style.display = 'flex';
             document.getElementById('z50-action').style.background = 'transparent';
 
-            FishingEngine.startCast(effStats, player.stats.stamina, castPool, maxDepth);
+            // --- FIX: Pass gameTimeMinutes as the 5th parameter ---
+            FishingEngine.startCast(effStats, player.stats.stamina, castPool, maxDepth, gameTimeMinutes);
             
             FishingRenderer.open({ lureDataUrl: player.gear.lure.imageDataUrl || '', biome: currentBiome, tileId: tId });
             HUD.logAction(`Line cast to ${maxDepth}m. Scroll to sink.`);

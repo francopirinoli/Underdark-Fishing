@@ -26,14 +26,18 @@
         <!-- ========================================== -->
         <!-- Z-10 | THE SIDEBAR HUD                     -->
         <!-- ========================================== -->
+
         <div id="z10-hud">
             <!-- Navigation & Time -->
             <div class="hud-panel" style="text-align: center; padding: 0.8rem;">
-                <div class="clock-text" id="hud-clock" style="font-size: 1.6rem;">Day 1 - 08:00</div>
+                <div class="digital-clock" id="hud-clock">
+                    <!-- Injected via JS -->
+                </div>
                 <div id="minimap-container" style="margin: 0.5rem auto 0 auto; width: 200px; height: 200px;">
                     <canvas id="minimap-canvas" width="200" height="200"></canvas>
                 </div>
             </div>
+
 
             <!-- Vitals -->
             <div class="hud-panel" style="padding: 1rem 0.8rem;">
@@ -506,7 +510,7 @@
                             <li><b style="color: var(--gold-warn);">W A S D</b> - Steer Boat</li>
                             <li><b style="color: var(--gold-warn);">Mouse</b> - Aim Cast</li>
                             <li><b style="color: var(--gold-warn);">Hold Click</b> - Charge Cast</li>
-                            <li><b style="color: var(--gold-warn);">Scroll</b> - Adjust Lure Depth</li>
+                            <li><b style="color: var(--gold-warn);">Scroll</b> - Adjust Depth / Reel Power</li>
                             <li><b style="color: var(--gold-warn);">Hold Space</b> - Reel In</li>
                             <li><b style="color: var(--gold-warn);">E</b> - Interact / Dock</li>
                             <li><b style="color: var(--gold-warn);">TAB</b> - Open Grimoire</li>
