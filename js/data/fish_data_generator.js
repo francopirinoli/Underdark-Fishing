@@ -2,7 +2,7 @@
  * js/data/fish_data_generator.js
  * The Master Fish Data Factory.
  * Wraps procedural pixel art in a comprehensive, mathematically balanced gameplay stat block.
- * V2 - Enforces Biome restrictions and separates Species Data from Individual Fish Instances.
+ * V3 - Flattened Rarity Scaling (Stamina Sponges instead of Speed Demons), Buffed Easy Fish.
  */
 
 import { createRng } from '../util/rng.js';
@@ -29,63 +29,65 @@ const ART_GENERATORS = {
 };
 
 // --- RARITY MULTIPLIERS ---
+// V4: Slightly bumped Speed Multipliers to make higher rarities punchier, 
+// and tightened hook/tolerance windows for a sharper challenge.
 const RARITY_TIERS =[
-    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 10,  xpBase: 5,   tolerance: 0.8, hookMod: 1.0 },
-    { name: 'Uncommon',  weight: 30, statMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.6, hookMod: 0.8 },
-    { name: 'Rare',      weight: 14, statMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.4, hookMod: 0.6 },
-    { name: 'Legendary', weight: 5,  statMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.2, hookMod: 0.4 },
-    { name: 'Boss',      weight: 1,  statMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.1, hookMod: 0.25 }
+    { name: 'Common',    weight: 50, stamMult: 1.0, speedMult: 1.0,  weightMult: 1.0, valBase: 10,  xpBase: 5,   tolerance: 0.75, hookMod: 1.0 },
+    { name: 'Uncommon',  weight: 30, stamMult: 1.5, speedMult: 1.15, weightMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.55, hookMod: 0.8 },
+    { name: 'Rare',      weight: 14, stamMult: 2.5, speedMult: 1.3,  weightMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.35, hookMod: 0.6 },
+    { name: 'Legendary', weight: 5,  stamMult: 4.0, speedMult: 1.45, weightMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.2,  hookMod: 0.4 },
+    { name: 'Boss',      weight: 1,  stamMult: 6.0, speedMult: 1.65, weightMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.1,  hookMod: 0.25 }
 ];
 
 // --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---
 const ARCHETYPES = {
     'fish': {
         sizes:['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
-        baseStamina: 50, baseSpeed: 50, baseAggro: 0.3,
-        optimalReelRange: [40, 60], // <-- NEW
-        prefBias: { color: 0, sound: 0, light: 0, weight: 0 } // Neutral, highly variable
+        baseStamina: 60, baseSpeed: 55, baseAggro: 0.4, // Buffed all-around
+        optimalReelRange: [40, 60],
+        prefBias: { color: 0, sound: 0, light: 0, weight: 0 } 
     },
     'shark': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Surface', 'Mid-water'],
-        baseStamina: 40, baseSpeed: 95, baseAggro: 0.85, // Fast, aggressive, tires out quickly
-        optimalReelRange: [75, 95], // <-- NEW: Wants fast reeling
-        prefBias: { color: 70, sound: 80, light: 10, weight: 20 } // Warm (blood), loud
+        baseStamina: 55, baseSpeed: 105, baseAggro: 0.90, // Extremely fast and aggressive
+        optimalReelRange: [75, 95], 
+        prefBias: { color: 70, sound: 80, light: 10, weight: 20 } 
     },
     'eel': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Bottom-feeder'],
-        baseStamina: 110, baseSpeed: 40, baseAggro: 0.2, // Endurance fighters, slow tension climb
-        optimalReelRange:[25, 45], // <-- NEW: Wants slow, steady reeling
-        prefBias: { color: -40, sound: -80, light: -50, weight: 60 } // Dark, silent, heavy
+        baseStamina: 130, baseSpeed: 45, baseAggro: 0.3, // Massive stamina sponge
+        optimalReelRange:[25, 45], 
+        prefBias: { color: -40, sound: -80, light: -50, weight: 60 } 
     },
     'ray': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Bottom-feeder'],
-        baseStamina: 80, baseSpeed: 45, baseAggro: 0.3, // Heavy, stubborn bottom huggers
-        optimalReelRange:[30, 50], // <-- NEW
-        prefBias: { color: 0, sound: -40, light: 0, weight: 80 } // Heavy, quiet
+        baseStamina: 95, baseSpeed: 55, baseAggro: 0.4, 
+        optimalReelRange:[30, 50],
+        prefBias: { color: 0, sound: -40, light: 0, weight: 80 } 
     },
     'crustacean': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Bottom-feeder'],
-        baseStamina: 90, baseSpeed: 20, baseAggro: 0.4, // Tanky, very slow
-        optimalReelRange:[15, 30], // <-- NEW: Wants very slow winching
-        prefBias: { color: -20, sound: 0, light: -20, weight: 90 } // Very heavy
+        baseStamina: 140, baseSpeed: 35, baseAggro: 0.6, // Very high stamina, fights back more often
+        optimalReelRange:[15, 30], 
+        prefBias: { color: -20, sound: 0, light: -20, weight: 90 } 
     },
     'jellyfish': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Surface', 'Mid-water'],
-        baseStamina: 20, baseSpeed: 20, baseAggro: 0.05, // Extremely easy to reel in
-        optimalReelRange:[10, 30], // <-- NEW: Wants delicate, slow reeling
-        prefBias: { color: 0, sound: -90, light: 80, weight: -80 } // Silent, shiny, feather-light
+        baseStamina: 55, baseSpeed: 40, baseAggro: 0.3, // No longer a free catch
+        optimalReelRange:[10, 30], 
+        prefBias: { color: 0, sound: -90, light: 80, weight: -80 } 
     },
     'cephalopod': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Mid-water', 'Bottom-feeder'],
-        baseStamina: 70, baseSpeed: 60, baseAggro: 0.5, // Puzzle fighters
-        optimalReelRange:[45, 65], // <-- NEW
-        prefBias: { color: -60, sound: -50, light: 0, weight: 10 } // Cold, quiet
+        baseStamina: 85, baseSpeed: 70, baseAggro: 0.6, // Smart, tricky fighters
+        optimalReelRange:[45, 65],
+        prefBias: { color: -60, sound: -50, light: 0, weight: 10 } 
     },
     'deepsea': {
         sizes:['Medium', 'Large', 'Massive'], depths: ['Bottom-feeder'],
-        baseStamina: 100, baseSpeed: 70, baseAggro: 0.7, // Terrifying all-rounders
-        optimalReelRange:[50, 85], // <-- NEW: Erratic, usually fast
-        prefBias: { color: -80, sound: 50, light: -90, weight: 70 } // Cold, loud, pitch black
+        baseStamina: 125, baseSpeed: 85, baseAggro: 0.8, // Terrifying baseline
+        optimalReelRange:[50, 85], 
+        prefBias: { color: -80, sound: 50, light: -90, weight: 70 } 
     }
 };
 
@@ -150,12 +152,15 @@ export function generateFishData(options = {}) {
     let minW = weightBrackets[sizeTier].min;
     let maxW = weightBrackets[sizeTier].max;
 
-// Base Combat stats (Unscaled)
+    // Base Combat stats (Unscaled)
     const stamina = Math.round(arch.baseStamina * rng.float(1, 1.5));
     const speed = Math.round(arch.baseSpeed * rng.float(0.85, 1.15));
     let aggression = Number(clamp(arch.baseAggro * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
-    const hookWindowMs = 1000; // Base generic window
-    const optimalReel = rng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); // <-- NEW
+    
+    // TIGHTENED: Base generic window dropped from 1000ms to 850ms to demand faster reflexes
+    const hookWindowMs = 850; 
+    
+    const optimalReel = rng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]);
 
     // Base Economy
     const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
@@ -173,7 +178,7 @@ export function generateFishData(options = {}) {
         environment: { biomes, depthPref, tempPref, activeHours },
         lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: 0.8 }, 
         physical: { sizeTier, weightRange: { min: minW, max: maxW } },
-        combat: { stamina, speed, aggression, hookWindowMs, optimalReel }, // <-- ADDED optimalReel HERE
+        combat: { stamina, speed, aggression, hookWindowMs, optimalReel },
         economy: { baseValue: Math.max(1, baseValue), baseXp: Math.max(5, baseXp) }
     };
 }
@@ -198,8 +203,10 @@ export function generateFishInstance(speciesData, rng) {
     instance.identity.rarity = rarityObj.name;
     instance.identity.name = speciesData.identity.name; 
     
-    instance.combat.stamina = Math.round(instance.combat.stamina * rarityObj.statMult);
-    instance.combat.speed = Math.round(Math.min(120, instance.combat.speed * Math.pow(rarityObj.statMult, 0.5))); // Speed scales slower
+    // V3: Separated Speed and Stamina multipliers to fix physics snaps
+    instance.combat.stamina = Math.round(instance.combat.stamina * rarityObj.stamMult);
+    instance.combat.speed = Math.round(instance.combat.speed * rarityObj.speedMult);
+    
     instance.combat.aggression = rarityObj.name === 'Boss' ? 1.0 : instance.combat.aggression;
     instance.combat.hookWindowMs = Math.max(250, Math.round(instance.combat.hookWindowMs * rarityObj.hookMod));
     
@@ -208,9 +215,9 @@ export function generateFishInstance(speciesData, rng) {
     instance.economy.baseValue = Math.round(instance.economy.baseValue * (rarityObj.valBase / 10));
     instance.economy.baseXp = Math.round((instance.economy.baseXp / 10) * rarityObj.xpBase);
     
-    // Roll the specific weight for this catch (boosted by rarity)
-    const minW = instance.physical.weightRange.min * rarityObj.statMult;
-    const maxW = instance.physical.weightRange.max * rarityObj.statMult;
+    // Roll the specific weight for this catch (boosted by rarity's weight multiplier)
+    const minW = instance.physical.weightRange.min * rarityObj.weightMult;
+    const maxW = instance.physical.weightRange.max * rarityObj.weightMult;
     instance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
     
     instance.instanceId = `inst_${rng.int(1000000, 9999999)}`;

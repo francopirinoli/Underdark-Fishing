@@ -118,10 +118,12 @@ body, html {
 /* Vital Bars */
 .vital-row { display: flex; align-items: center; margin-bottom: 0.5rem; }
 .vital-label { color: var(--text-muted); text-transform: uppercase; }
-.vital-bar-track { flex-grow: 1; background: var(--bg-void); border: 1px solid var(--panel-border); }
+.vital-bar-track { flex-grow: 1; background: var(--bg-void); border: 1px solid var(--panel-border); position: relative; }
 .vital-bar-fill { height: 100%; transition: width 0.2s; }
+.vital-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: bold; color: #FFF; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; pointer-events: none; }
 .fill-hp { background: var(--green-safe); }
 .fill-fuel { background: var(--gold-warn); }
+.fill-ration { background: var(--cyan-glow); }
 
 /* Minimap & Clock */
 .digital-clock {

@@ -278,7 +278,9 @@ export const HubUI = {
                 
                 let disableReason = null;
                 const isCargoItem = (item.type === 'part' || item.visualId || item.type === 'rod' || item.type === 'lure');
+                
                 if (isCargoItem && currentInvCount >= maxCargo) disableReason = "Cargo Full";
+                if (item.id === 'cons_ration' && player.vitals.rations >= 20) disableReason = "Rations Full";
                 
                 const canAfford = player.vitals.gold >= item.price;
                 const hasStock = item.stock > 0;
@@ -325,7 +327,7 @@ export const HubUI = {
                         player.vitals.gold -= item.price;
                         if (item.stock !== 99) item.stock--;
                         
-                        if (item.id === 'cons_ration') player.vitals.rations += 1;
+                        if (item.id === 'cons_ration') player.vitals.rations = Math.min(20, player.vitals.rations + 1);
                         else if (item.id === 'cons_fuel_oil') player.vitals.fuel = 100;
                         else if (item.id === 'cons_repair_kit') player.vitals.hp = Math.min(player.gear.boat.stats.maxHp, player.vitals.hp + 25);
                         else if (isCargoItem) {
@@ -672,7 +674,7 @@ export const HubUI = {
         player.activeQuests.forEach((q, index) => {
             let isComplete = false;
             
-            // FIX: Dynamic inventory counting
+            // Dynamic inventory counting
             if (q.type === 'hunt') {
                 const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
                 isComplete = count >= q.requiredAmount;
@@ -692,30 +694,31 @@ export const HubUI = {
             else if (q.type === 'bounty') isComplete = q.isComplete;
 
             if (isComplete) {
-                // ... Keep existing card HTML generation ...
+                hasTurnIns = true;
+                const card = document.createElement('div');
+                card.style.cssText = "background: var(--panel-base); border: 1px solid var(--green-safe); padding: 1rem; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;";
+                
+                card.innerHTML = `
+                    <div>
+                        <h3 style="margin:0 0 0.2rem 0; color:var(--cyan-glow); font-size:1.4rem;">${q.title}</h3>
+                        <div style="color:var(--green-safe); font-weight:bold;">Objective Complete</div>
+                    </div>
+                    <button class="menu-btn" style="width:auto; margin:0; padding:0.5rem 1.5rem; border-color:var(--green-safe); color:var(--green-safe);">Complete</button>
+                `;
                 
                 card.querySelector('button').onclick = () => {
                     SFX.playCatchSuccess();
                     
-                    player.vitals.gold += q.rewards.gold;
-                    const leveledUp = PlayerEngine.addXp(player, q.rewards.xp);
-                    if (leveledUp) SFX.playLevelUp();
-                    
-                    if (q.rewards.item) {
-                        player.inventory.push({ 
-                            id: `part_${Date.now()}`, invType: 'part',
-                            name: q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                            visualId: q.rewards.item.id.replace('part_', ''), rarity: 'Rare',
-                            stats: { color: 10, sound: 10, light: 10, weight: 10 }
-                        });
-                    }
+                    let fishValueBonus = 0;
+                    const effStats = PlayerEngine.getEffectiveStats(player);
 
-                    // --- FIX: Consume Fish for Hunt AND Trophy Quests ---
+                    // --- Consume Fish & Calculate Fair-Trade Payout ---
                     if (q.type === 'hunt') {
                         let removed = 0;
                         for (let i = player.inventory.length - 1; i >= 0; i--) {
                             if (player.inventory[i].invType === 'fish' && player.inventory[i].id === q.targetSpeciesId) {
-                                player.inventory.splice(i, 1);
+                                const f = player.inventory.splice(i, 1)[0];
+                                fishValueBonus += Math.max(1, Math.round(f.economy.baseValue * effStats.economy.sellMultiplier));
                                 removed++;
                                 if (removed >= q.requiredAmount) break;
                             }
@@ -729,7 +732,25 @@ export const HubUI = {
                                 if (f.actualWeight > heaviestW) { heaviestW = f.actualWeight; heaviestIdx = i; }
                             }
                         }
-                        if (heaviestIdx > -1) player.inventory.splice(heaviestIdx, 1);
+                        if (heaviestIdx > -1) {
+                            const f = player.inventory.splice(heaviestIdx, 1)[0];
+                            fishValueBonus += Math.max(1, Math.round(f.economy.baseValue * effStats.economy.sellMultiplier));
+                        }
+                    }
+                    
+                    // Add the base reward + the market value of the fish consumed
+                    player.vitals.gold += q.rewards.gold + fishValueBonus;
+                    
+                    const leveledUp = PlayerEngine.addXp(player, q.rewards.xp);
+                    if (leveledUp) SFX.playLevelUp();
+                    
+                    if (q.rewards.item) {
+                        player.inventory.push({ 
+                            id: `part_${Date.now()}`, invType: 'part',
+                            name: q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                            visualId: q.rewards.item.id.replace('part_', ''), rarity: 'Rare',
+                            stats: { color: 10, sound: 10, light: 10, weight: 10 }
+                        });
                     }
 
                     const activeIdx = player.activeQuests.findIndex(aq => aq.id === q.id);
@@ -738,7 +759,10 @@ export const HubUI = {
                     const boardIdx = this.currentQuests.findIndex(bq => bq.id === q.id);
                     if (boardIdx > -1) this.currentQuests.splice(boardIdx, 1);
 
-                    this.triggerDialogue(this.currentNPCs.tavern, "Well done! The guild sends their regards.");
+                    const dialogMsg = fishValueBonus > 0 
+                        ? `Well done! The guild sends their regards, plus ${fishValueBonus}g market value for the fish.` 
+                        : "Well done! The guild sends their regards.";
+                    this.triggerDialogue(this.currentNPCs.tavern, dialogMsg);
                     
                     if (this.callbacks.onSave) this.callbacks.onSave();
                     this.renderActiveTab();
@@ -747,13 +771,14 @@ export const HubUI = {
             }
         });
 
+        if (hasTurnIns) turnInSection.style.display = 'block';
+
         // --- 2. RENDER AVAILABLE QUESTS ---
         if (this.currentQuests.length === 0) {
             list.innerHTML = `<p style="color:var(--text-muted); font-size:1.2rem; grid-column: span 2; text-align: center;">No jobs posted today.</p>`;
             return;
         }
 
-        // CRITICAL FIX: The activeCount definition must exist here!
         const activeCount = player.activeQuests.length;
 
         this.currentQuests.forEach(q => {

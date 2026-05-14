@@ -446,27 +446,28 @@ export const GrimoireUI = {
                 if (this.callbacks.onSave) this.callbacks.onSave();
                 this.renderInventory();
             };
-            // --- NEW: COOK BUTTON LOGIC ---
+            // --- COOK BUTTON LOGIC ---
+            const rationsGained = { 'Tiny': 1, 'Small': 2, 'Medium': 4, 'Large': 8, 'Massive': 16 }[item.physical.sizeTier] || 1;
+            const isFull = player.vitals.rations >= 20;
+
             btnEquip.style.display = 'block';
-            btnEquip.innerText = '🔥 Cook';
-            btnEquip.style.borderColor = 'var(--warn)'; // Orange color
-            btnEquip.style.color = 'var(--warn)';
+            btnEquip.innerText = isFull ? 'Rations Full' : `🔥 Cook (+${rationsGained})`;
+            btnEquip.style.borderColor = isFull ? 'var(--panel-border)' : 'var(--warn)';
+            btnEquip.style.color = isFull ? 'var(--text-muted)' : 'var(--warn)';
+            btnEquip.disabled = isFull;
 
             btnEquip.onclick = () => {
-                SFX.playUISelect(); // Nice crisp UI sound
+                if (isFull) return;
+                SFX.playUISelect(); 
                 
-                // Calculate ration yield based on size
-                const rationYields = { 'Tiny': 1, 'Small': 2, 'Medium': 4, 'Large': 8, 'Massive': 16 };
-                const rationsGained = rationYields[item.physical.sizeTier] || 1;
-                
-                // Add rations and remove fish
-                player.vitals.rations += rationsGained;
+                player.vitals.rations = Math.min(20, player.vitals.rations + rationsGained);
                 player.inventory.splice(invIndex, 1);
                 
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderInventory(); // This will safely refresh the grid and hide the detail pane
-                this.renderCharacter(); // Updates the ration counter on the Character tab too
+                this.renderInventory(); 
+                this.renderCharacter(); 
             };
+
         } 
         // 2. PARTS
         else if (item.invType === 'part') {
@@ -537,7 +538,8 @@ export const GrimoireUI = {
         }
         // 4. RODS
         else if (item.invType === 'rod') {
-            const eqRod = player.gear.rod;
+            // FIX: Add a fallback object so we can calculate deltas against "nothing" if unequipped
+            const eqRod = player.gear.rod || { stats: { power: 0, maxTension: 0, flexibility: 0, sensitivity: 0 } };
             
             document.getElementById('grim-item-img').src = item.art.imageDataUrl;
             document.getElementById('grim-item-img').style.display = 'block';
@@ -558,7 +560,9 @@ export const GrimoireUI = {
                 SFX.playUISelect();
                 const oldRod = player.gear.rod;
                 player.gear.rod = player.inventory.splice(invIndex, 1)[0];
+                // Only push the old rod back to inventory if one was actually equipped!
                 if (oldRod) player.inventory.push(oldRod);
+                
                 if (this.callbacks.onSave) this.callbacks.onSave();
                 this.renderInventory();
             };
@@ -628,8 +632,11 @@ export const GrimoireUI = {
             btnAction.style.color = 'var(--gold-warn)';
             
             btnAction.onclick = () => {
-                const rng = createRng(Date.now());
-                const isMimic = rng.chance(0.3); // 30% chance for a mimic
+                // FIX: Use the deterministic seed saved to the chest when it was caught!
+                // This permanently locks the outcome of the chest, preventing save-scumming.
+                const chestSeed = item.chestSeed || Date.now();
+                const rng = createRng(chestSeed);
+                const isMimic = rng.chance(0.3); 
                 
                 // Remove the chest from inventory immediately
                 player.inventory.splice(invIndex, 1);
@@ -637,10 +644,7 @@ export const GrimoireUI = {
 
                 if (isMimic) {
                     SFX.playLineSnap(); // Crunch!
-                    
-                    // NEW: Use the original seed so the Mimic matches the chest perfectly!
-                    const mimicSeed = item.chestSeed || Date.now();
-                    const mimicArt = generateChest({ rng: createRng(mimicSeed), isMimic: true });
+                    const mimicArt = generateChest({ rng: createRng(chestSeed), isMimic: true });
                     
                     document.getElementById('grim-item-img').src = mimicArt.imageDataUrl;
                     document.getElementById('grim-item-name').innerText = 'Mimic!';
@@ -813,6 +817,9 @@ export const GrimoireUI = {
         const rod = player.gear.rod;
         const lure = player.gear.lure;
         
+        // Ensure player has space in their cargo to unequip items
+        const canUnequip = player.inventory.length < effStats.exploration.cargoSpace;
+
         // Compacted grid for boat upgrades
         let upgHtml = `<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 0.2rem; font-size:0.9rem; color:var(--text-muted); margin-top:0.4rem; line-height: 1.2;">`;
         upgHtml += `<div>Lantern: <span style="color:var(--cyan-glow)">${boat.upgrades.lantern ? boat.upgrades.lantern.name : 'Basic'}</span></div>`;
@@ -832,16 +839,20 @@ export const GrimoireUI = {
         `;
         
         document.querySelector('#loadout-rod .slot-content').innerHTML = `
-            <img src="${rod.art.imageDataUrl}" />
+            <img src="${rod ? rod.art.imageDataUrl : ''}" style="display:${rod ? 'block' : 'none'};"/>
             <div class="loadout-details" style="flex:1;">
-                <b style="color: ${getItemColor(rod)}">${rod.identity.name}</b>
-                <span style="display:block; font-size:1rem; margin-bottom:0.1rem;">Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</span>
-                <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Flex: ${rod.stats.flexibility}x | Sensitivity: ${rod.stats.sensitivity}ms</span>
+                ${rod ? `
+                    <b style="color: ${getItemColor(rod)}">${rod.identity.name}</b>
+                    <span style="display:block; font-size:1rem; margin-bottom:0.1rem;">Power: ${rod.stats.power}x | Tension: ${rod.stats.maxTension}</span>
+                    <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Flex: ${rod.stats.flexibility}x | Sensitivity: ${rod.stats.sensitivity}ms</span>
+                ` : `<b style="color:var(--text-muted);">No Rod Equipped</b><span style="display:block; font-size:0.9rem; color:var(--red-danger);">Cannot Cast</span>`}
             </div>
+            <button class="menu-btn btn-unequip-rod" style="padding: 0.4rem 0.8rem; font-size: 1rem; width: auto; margin:0;" ${!canUnequip || !rod ? 'disabled' : ''}>Unequip</button>
         `;
         
+        const isBareHook = lure.maxDurability === 0;
         const lureImg = lure.imageDataUrl ? `<img src="${lure.imageDataUrl}" />` : `<div style="width:50px;height:50px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.9rem;">Bare Hook</div>`;
-        const durText = lure.maxDurability > 0 ? `Durability: ${lure.durability}/${lure.maxDurability}` : `Durability: ∞`;
+        const durText = !isBareHook ? `Durability: ${lure.durability}/${lure.maxDurability}` : `Durability: ∞`;
 
         document.querySelector('#loadout-lure .slot-content').innerHTML = `
             ${lureImg}
@@ -853,7 +864,36 @@ export const GrimoireUI = {
                 ${buildStatSlider('Light', lure.stats.light, 'Dark', 'Glow')}
                 ${buildStatSlider('Weight', lure.stats.weight, 'Float', 'Sink')}
             </div>
+            <button class="menu-btn btn-unequip-lure" style="padding: 0.4rem 0.8rem; font-size: 1rem; width: auto; margin:0;" ${!canUnequip || isBareHook ? 'disabled' : ''}>Unequip</button>
         `;
+
+        // --- Attach Unequip Button Logic ---
+        const btnRod = document.querySelector('.btn-unequip-rod');
+        if (btnRod && !btnRod.disabled) {
+            btnRod.onclick = () => {
+                SFX.playUISelect();
+                player.inventory.push(player.gear.rod);
+                player.gear.rod = null; // Unequip
+                if (this.callbacks.onSave) this.callbacks.onSave();
+                this.renderLoadout();
+            };
+        }
+
+        const btnLure = document.querySelector('.btn-unequip-lure');
+        if (btnLure && !btnLure.disabled) {
+            btnLure.onclick = () => {
+                SFX.playUISelect();
+                player.inventory.push(player.gear.lure);
+                player.gear.lure = {
+                    name: 'Bare Hook',
+                    stats: { color: 0, sound: 0, light: 0, weight: 0 },
+                    durability: 0, maxDurability: 0,
+                    imageDataUrl: ''
+                };
+                if (this.callbacks.onSave) this.callbacks.onSave();
+                this.renderLoadout();
+            };
+        }
 
         const fmt = (v, isBonus=false) => {
             if (typeof v === 'number' && isBonus) {
@@ -861,9 +901,8 @@ export const GrimoireUI = {
                 if (v < 1) return `<span class="dash-neg">${v}x</span>`;
             }
             return `<span style="color:var(--text-main); font-weight:bold;">${v}</span>`;
-        }
+        };
         
-        // Compacted Dashboard slightly
         document.getElementById('grim-dashboard-content').innerHTML = `
             <div class="dashboard-group">
                 <h3>🎣 Minigame Physics</h3>

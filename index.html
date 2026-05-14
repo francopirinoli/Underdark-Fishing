@@ -43,19 +43,31 @@
             <div class="hud-panel" style="padding: 1rem 0.8rem;">
                 <div class="vital-row">
                     <span class="vital-label" style="font-size:0.9rem; width:50px;">HULL</span>
-                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div></div>
+                    <div class="vital-bar-track" style="height:14px;">
+                        <div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div>
+                        <div class="vital-text" id="hud-hp-text">50/50</div>
+                    </div>
                 </div>
                 <div class="vital-row">
                     <span class="vital-label" style="font-size:0.9rem; width:50px;">FUEL</span>
-                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 80%;"></div></div>
+                    <div class="vital-bar-track" style="height:14px;">
+                        <div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 100%;"></div>
+                        <div class="vital-text" id="hud-fuel-text">100%</div>
+                    </div>
                 </div>
                 <div class="vital-row">
-                    <span class="vital-label" style="font-size:0.9rem; width:50px;">NOISE</span>
-                    <div class="vital-bar-track" style="height:12px;"><div class="vital-bar-fill" id="hud-noise-bar" style="width: 0%; background: var(--green-safe); transition: width 0.1s linear, background-color 0.2s;"></div></div>
-                </div>
-                <div class="vital-row" style="margin-bottom: 0; margin-top: 0.8rem;">
                     <span class="vital-label" style="font-size:0.9rem; width:50px;">FOOD</span>
-                    <div style="flex-grow:1; text-align:right; font-weight:bold; color:var(--text-main); font-size:1.1rem;"><span id="hud-rations" style="color:var(--cyan-glow);">12</span> rations</div>
+                    <div class="vital-bar-track" style="height:14px;">
+                        <div class="vital-bar-fill fill-ration" id="hud-ration-bar" style="width: 50%;"></div>
+                        <div class="vital-text" id="hud-ration-text">10/20</div>
+                    </div>
+                </div>
+                <div class="vital-row" style="margin-bottom: 0;">
+                    <span class="vital-label" style="font-size:0.9rem; width:50px;">NOISE</span>
+                    <div class="vital-bar-track" style="height:14px;">
+                        <div class="vital-bar-fill" id="hud-noise-bar" style="width: 0%; background: var(--green-safe); transition: width 0.1s linear, background-color 0.2s;"></div>
+                        <div class="vital-text" id="hud-noise-text">0%</div>
+                    </div>
                 </div>
             </div>
 

@@ -14,23 +14,31 @@ export const HUD = {
         // OPTIMIZATION: Round percentages to integers to prevent sub-pixel DOM layout thrashing
 
         // 1. HP Bar
-        const hpPct = Math.round(Math.max(0, player.vitals.hp / player.gear.boat.stats.maxHp * 100));
-        if (this._cache.hpPct !== hpPct) {
+        const maxHp = player.gear.boat.stats.maxHp;
+        const currentHp = Math.floor(player.vitals.hp);
+        const hpPct = Math.round(Math.max(0, currentHp / maxHp * 100));
+        if (this._cache.hpPct !== hpPct || this._cache.currentHp !== currentHp) {
             document.getElementById('hud-hp-bar').style.width = `${hpPct}%`;
+            document.getElementById('hud-hp-text').innerText = `${currentHp}/${maxHp}`;
             this._cache.hpPct = hpPct;
+            this._cache.currentHp = currentHp;
         }
 
         // 2. Fuel Bar
         const fuelPct = Math.round(Math.max(0, player.vitals.fuel));
         if (this._cache.fuelPct !== fuelPct) {
             document.getElementById('hud-fuel-bar').style.width = `${fuelPct}%`;
+            document.getElementById('hud-fuel-text').innerText = `${fuelPct}%`;
             this._cache.fuelPct = fuelPct;
         }
 
-        // 3. Rations
-        if (this._cache.rations !== player.vitals.rations) {
-            document.getElementById('hud-rations').innerText = player.vitals.rations;
-            this._cache.rations = player.vitals.rations;
+        // 3. Rations Bar (Capped at 20)
+        const rations = player.vitals.rations;
+        if (this._cache.rations !== rations) {
+            const rationPct = Math.round((rations / 20) * 100);
+            document.getElementById('hud-ration-bar').style.width = `${rationPct}%`;
+            document.getElementById('hud-ration-text').innerText = `${rations}/20`;
+            this._cache.rations = rations;
         }
 
         // 4. Clock
@@ -58,10 +66,7 @@ export const HUD = {
         }
 
         // NEW: Noise Meter
-        // Grab currentNoise from the exploration engine (defaults to 0 if fishing)
         const noiseLvl = window.ExplorationEngine ? window.ExplorationEngine.currentNoise : 0;
-        
-        // OPTIMIZATION: Round to nearest whole number
         const noisePct = Math.round(Math.min(100, Math.max(0, noiseLvl || 0)));
         
         if (this._cache.noisePct !== noisePct) {
@@ -73,14 +78,23 @@ export const HUD = {
             else if (noisePct < 75) bar.style.background = 'var(--gold-warn)';
             else bar.style.background = 'var(--red-danger)';
             
+            // FIX: Actually push the text to the UI overlay!
+            document.getElementById('hud-noise-text').innerText = `${noisePct}%`;
+            
             this._cache.noisePct = noisePct;
         }
 
         // 5. Gear Text, Images & Durability
-        const rodName = player.gear.rod.identity.name;
-        const rodImg = player.gear.rod.art.imageDataUrl;
+        const rod = player.gear.rod;
+        const rodName = rod ? rod.identity.name : "No Rod Equipped";
+        const rodImg = rod ? rod.art.imageDataUrl : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='; // Transparent pixel fallback
+
         if (this._cache.rodName !== rodName) {
-            document.getElementById('hud-rod-name').innerText = rodName;
+            const nameEl = document.getElementById('hud-rod-name');
+            nameEl.innerText = rodName;
+            // Turn the text red to warn them they can't cast without a rod
+            nameEl.style.color = rod ? 'var(--cyan-glow)' : 'var(--red-danger)';
+            
             document.getElementById('hud-rod-img').src = rodImg;
             this._cache.rodName = rodName;
         }

@@ -56,28 +56,31 @@ export const MusicEngine = {
         this.tapeChorus.connect(this.warmFilter);
         this.warmFilter.connect(AudioEngine.musicReverb);
 
-// --- NORMALIZED VOLUMES & POLYPHONY LIMITS ---
+        // --- POLYPHONY LIMITS EXPANDED ---
+        // Increased maxPolyphony across the board to prevent overlapping release-tails from 
+        // dropping notes and throwing warnings in the console.
+
         this.synths.padChoir = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "fatcustom", partials:[1, 0.4, 0.1], spread: 30, count: 3 },
-            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 1.2 } // Reduced release
+            envelope: { attack: 2.5, decay: 1, sustain: 0.8, release: 1.2 } 
         }).connect(this.tapeChorus);
-        this.synths.padChoir.maxPolyphony = 8; // INCREASED to handle track transitions
+        this.synths.padChoir.maxPolyphony = 16; 
         this.synths.padChoir.volume.value = -16;
 
         this.synths.padStrings = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
-            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 1.2 }, // Reduced release
+            envelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 1.2 }, 
             filterEnvelope: { attack: 1.5, decay: 1, sustain: 0.5, release: 1.2, baseFrequency: 300, octaves: 2 }
         }).connect(this.tapeChorus);
-        this.synths.padStrings.maxPolyphony = 8; // INCREASED to handle track transitions
+        this.synths.padStrings.maxPolyphony = 16; 
         this.synths.padStrings.volume.value = -16;
 
         this.synths.bassDrone = new Tone.PolySynth(Tone.MonoSynth, {
             oscillator: { type: "square" },
-            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 1.0 }, // Reduced release
+            envelope: { attack: 0.5, decay: 2, sustain: 0.6, release: 1.0 }, 
             filterEnvelope: { attack: 0.2, decay: 1, sustain: 0.4, release: 1.0, baseFrequency: 60, octaves: 3 },
         }).connect(this.warmFilter);
-        this.synths.bassDrone.maxPolyphony = 3; // INCREASED slightly
+        this.synths.bassDrone.maxPolyphony = 4; 
         this.synths.bassDrone.volume.value = -12;
 
         const vibrato = new Tone.Vibrato(4, 0.05).connect(this.echoDelay);
@@ -86,33 +89,30 @@ export const MusicEngine = {
             oscillator: { type: "triangle" },
             envelope: { attack: 0.2, decay: 0.3, sustain: 0.6, release: 1.0 }
         }).connect(vibrato);
-        this.synths.leadFlute.maxPolyphony = 4;
+        this.synths.leadFlute.maxPolyphony = 8;
         this.synths.leadFlute.volume.value = -12;
 
         this.synths.leadOboe = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "sawtooth" },
             envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 0.5 }
         }).connect(vibrato);
-        this.synths.leadOboe.maxPolyphony = 4;
+        this.synths.leadOboe.maxPolyphony = 8;
         this.synths.leadOboe.volume.value = -14;
 
-        // CRITICAL FIX: Arp was causing massive voice leaks. 
-        // Reduced release from 0.2 to 0.05 and hard-capped polyphony.
         this.synths.arpLute = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 1.5, modulationIndex: 2,
             oscillator: { type: "triangle" },
             envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.05 } 
         }).connect(this.echoDelay);
-        this.synths.arpLute.maxPolyphony = 8;
+        this.synths.arpLute.maxPolyphony = 16;
         this.synths.arpLute.volume.value = -14;
 
-        // OPTIMIZATION: Chimes release brought down to 0.8s, polyphony capped tighter.
         this.synths.chimesGlass = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 3.5, modulationIndex: 5,
             oscillator: { type: "sine" },
             envelope: { attack: 0.05, decay: 1, sustain: 0, release: 0.8 } 
         }).connect(this.longDelay);
-        this.synths.chimesGlass.maxPolyphony = 4; // Was 6
+        this.synths.chimesGlass.maxPolyphony = 8; 
         this.synths.chimesGlass.volume.value = -16;
 
         this.synths.kickCavern = new Tone.MembraneSynth({
@@ -123,7 +123,7 @@ export const MusicEngine = {
 
         this.synths.percToms = new Tone.MembraneSynth({
             pitchDecay: 0.1, octaves: 4, oscillator: { type: "square" },
-            envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } // Snappier toms
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 } 
         }).connect(this.echoDelay);
         this.synths.percToms.volume.value = -14;
 
@@ -133,11 +133,10 @@ export const MusicEngine = {
         }).connect(this.warmFilter);
         this.synths.noiseTape.volume.value = -40; 
 
-        console.log("🎹 Dungeon Synth Rack Initialized (Optimized Polyphony)");
+        console.log("🎹 Dungeon Synth Rack Initialized");
     },
 
     clearTracks() {
-        // FIX for RangeError: Do NOT call part.stop(). Just safely dispose of it directly.
         Object.values(this.parts).forEach(part => {
             if (part) {
                 try { part.dispose(); } catch(e){} 
@@ -153,7 +152,6 @@ export const MusicEngine = {
             }
         });
         
-        // Hard cancel all queued events on the timeline
         try { Tone.Transport.cancel(0); } catch(e){} 
     },
 
@@ -161,9 +159,42 @@ export const MusicEngine = {
         const synth = this.synths[synthName];
         if (!synth || noteEvents.length === 0) return;
 
+        // --- NEW: CHRONOLOGICAL SORTER & MERGER ---
+        // Tone.Part crashes if events are scheduled backwards in time, or on the exact same millisecond.
+        // This takes our procedurally randomized events and organizes them cleanly.
+
+        // 1. Map absolute tick time
+        const processedEvents = noteEvents.map(e => ({
+            ...e,
+            tickTime: Tone.Time(e.time).toTicks()
+        }));
+
+        // 2. Sort chronologically
+        processedEvents.sort((a, b) => a.tickTime - b.tickTime);
+
+        // 3. Merge identical times together
+        const mergedEvents = [];
+        processedEvents.forEach(evt => {
+            if (mergedEvents.length > 0) {
+                const last = mergedEvents[mergedEvents.length - 1];
+                if (last.tickTime === evt.tickTime) {
+                    // Combine notes into an array for simultaneous triggering
+                    if (!Array.isArray(last.note)) last.note = [last.note];
+                    if (Array.isArray(evt.note)) {
+                        last.note.push(...evt.note);
+                    } else {
+                        last.note.push(evt.note);
+                    }
+                    return; // Skip pushing a new event
+                }
+            }
+            mergedEvents.push(evt);
+        });
+
+        // 4. Create the part with the sanitized array
         const part = new Tone.Part((time, event) => {
             synth.triggerAttackRelease(event.note, event.duration, time, event.velocity);
-        }, noteEvents);
+        }, mergedEvents);
 
         part.loop = true;
         part.loopStart = 0;
@@ -174,7 +205,7 @@ export const MusicEngine = {
     },
 
     stop() {
-        Tone.Transport.stop(0); // Safely stop transport at absolute 0
+        Tone.Transport.stop(0); 
         this.clearTracks();
         this.currentBiome = null;
     },

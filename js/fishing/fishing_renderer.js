@@ -82,6 +82,17 @@ export const FishingRenderer = {
             .bar-track { width: 100%; height: 16px; background: #020617; border: 1px solid #1E293B; border-radius: 4px; overflow: hidden; position: relative; }
             .bar-fill { height: 100%; transition: width 0.1s linear, background-color 0.2s; }
             
+            /* Reel Power Overlay Styling */
+            #track-reel-power { position: relative; }
+            #bar-reel-power { position: absolute; left: 0; z-index: 1; opacity: 0.8; }
+            #fm-sweet-spot { 
+                position: absolute; height: 100%; top: 0; z-index: 2;
+                background: rgba(251, 191, 36, 0.4); 
+                border-left: 2px solid #FBBF24; border-right: 2px solid #FBBF24; 
+                box-sizing: border-box; pointer-events: none; 
+                transition: left 0.1s ease-out, width 0.1s ease-out; 
+            }
+            
             #bar-tension { background: #3B82F6; } 
             #bar-catch { background: #FBBF24; }
             #bar-p-stam { background: #22D3EE; }
@@ -126,8 +137,11 @@ export const FishingRenderer = {
                                 <div class="bar-track" style="height: 24px; border-color: #B45309;"><div class="bar-fill" id="bar-catch" style="width: 0%;"></div></div>
                             </div>
                             <div class="bar-row" style="margin-top: 0.5rem; border-top: 1px dashed #1E293B; padding-top: 0.5rem;">
-                                <div class="bar-labels"><span id="lbl-reel-text" style="color:#A5B4FC;">Reel Power (Scroll)</span> <span id="lbl-reel-power" style="color:#A5B4FC;">50%</span></div>
-                                <div class="bar-track" id="track-reel-power" style="height: 18px; border-color: #4F46E5;"><div class="bar-fill" id="bar-reel-power" style="width: 50%; background: #6366F1; transition: width 0.05s linear, background-color 0.2s;"></div></div>
+                                <div class="bar-labels"><span id="lbl-reel-text" style="color:#A5B4FC;">Reel Power & Target</span> <span id="lbl-reel-power" style="color:#A5B4FC;">50%</span></div>
+                                <div class="bar-track" id="track-reel-power" style="height: 18px; border-color: #4F46E5;">
+                                    <div class="bar-fill" id="bar-reel-power" style="width: 50%; background: #6366F1;"></div>
+                                    <div id="fm-sweet-spot"></div>
+                                </div>
                             </div>
                             <div class="depth-readout" id="lbl-depth">Depth: 0m (Surface)</div>
                         </div>
@@ -158,6 +172,7 @@ export const FishingRenderer = {
             barReelPower: document.getElementById('bar-reel-power'),
             lblReelPower: document.getElementById('lbl-reel-power'),
             trackReelPower: document.getElementById('track-reel-power'),
+            sweetSpot: document.getElementById('fm-sweet-spot'), // <-- ADD THIS LINE
             lblDepth: document.getElementById('lbl-depth'),
             behavior: document.getElementById('fm-behavior')
         };
@@ -418,6 +433,15 @@ export const FishingRenderer = {
 
         const reelPower = engine.reelPower || 50; 
         const inSweetSpot = engine.inSweetSpot || false;
+        
+        // --- NEW: Position and Scale the Sweet Spot Target Zone ---
+        const tol = engine.playerStats.minigame.sweetSpotTolerance;
+        const leftLimit = Math.max(0, engine.currentSweetSpot - tol);
+        const rightLimit = Math.min(100, engine.currentSweetSpot + tol);
+        const dynamicWidth = rightLimit - leftLimit;
+
+        this.elements.sweetSpot.style.left = `${leftLimit}%`;
+        this.elements.sweetSpot.style.width = `${dynamicWidth}%`;
         
         this.elements.barReelPower.style.width = `${Math.round(reelPower)}%`;
         this.elements.lblReelPower.innerText = `${Math.round(reelPower)}%`;

@@ -805,6 +805,15 @@ function gameLoop(timestamp) {
 // --- ACTION HELPERS ---
 
 function handleAttemptCast() {
+    if (!player.gear.rod) {
+        HUD.logAction("Cannot cast without a fishing rod equipped!", "danger");
+        SFX.playError();
+        mouse.isCharging = false;
+        mouse.chargePct = 0;
+        ExplorationEngine.velocity = 0;
+        return;
+    }
+    
     const effStats = PlayerEngine.getEffectiveStats(player);
     
     // CRITICAL FIX: Get the true on-screen position of the boat, accounting for the UI sidebar and map edges
