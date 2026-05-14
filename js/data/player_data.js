@@ -144,7 +144,7 @@ export const PlayerEngine = {
         
         let effectivePower = rodPower * (1 + (stats.fishing * 0.2));
         let effectiveHookWindow = rodSens + (stats.fishing * 100);
-        let effectiveStamina = 50 + (stats.stamina * 30);
+        let effectiveStamina = 50 + (stats.stamina * 50);
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
         
