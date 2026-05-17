@@ -35,7 +35,7 @@ export const DissectionEngine = {
      * @param {number} lureCraftingLevel - Player stat (1 to 5).
      * @param {number} seed - RNG seed for determinism.
      */
-    dissect(fish, lureCraftingLevel = 1, seed = Date.now()) {
+    dissect(fish, craftingLevel = 1, seed = Date.now()) {
         const rng = createRng(seed);
         
         // 1. Calculate Knowledge Gain (XP towards unlocking this fish's stats)
@@ -56,7 +56,7 @@ export const DissectionEngine = {
         for (let i = 0; i < numParts; i++) {
             // Calculate base budget and apply LureCrafting multiplier (+10% per level)
             const baseBudget = RARITY_BUDGETS[fish.identity.rarity];
-            const multiplier = 1 + (lureCraftingLevel * 0.1);
+            const multiplier = 1 + (craftingLevel * 0.1);
             let totalBudget = Math.floor(baseBudget * multiplier);
 
             // Determine visual ID

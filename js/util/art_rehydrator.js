@@ -1,7 +1,6 @@
 /**
  * js/util/art_rehydrator.js
  * Automatically rebuilds procedural pixel art from mathematical seeds upon loading a save.
- * Prevents localStorage bloat by eliminating the need to save massive Base64 strings.
  */
 
 import { generateBoatData } from '../data/boat_data_generator.js';
@@ -10,13 +9,15 @@ import { generateFishData } from '../data/fish_data_generator.js';
 import { generateLure, generateLurePart } from '../art/lure_generator.js';
 import { generateChest } from '../art/chest_generator.js';
 import { generateNPCData } from '../data/npc_data_generator.js';
+import { generatePotion } from '../art/potion_generator.js'; // <-- NEW
+import { generateBait } from '../art/bait_generator.js';     // <-- NEW
 import { createRng } from './rng.js';
+import { generateConsumable } from '../art/consumable_generator.js'; // <-- ADD THIS LINE
 
 export const ArtRehydrator = {
     rehydratePlayer(player) {
         if (!player) return;
 
-        // 1. Rehydrate Player Portrait
         if (player.identity && player.identity.portraitSeed) {
             const npc = generateNPCData({ 
                 seed: player.identity.portraitSeed, 
@@ -26,19 +27,16 @@ export const ArtRehydrator = {
             player.identity.portraitData = npc.imageDataUrl;
         }
 
-        // 2. Rehydrate Equipped Gear (Added Safety Check)
         if (player.gear) {
             if (player.gear.boat) this.rehydrateItem(player.gear.boat);
             if (player.gear.rod) this.rehydrateItem(player.gear.rod);
             if (player.gear.lure) this.rehydrateItem(player.gear.lure);
+            if (player.gear.bait) this.rehydrateItem(player.gear.bait); // <-- NEW
         }
 
-        // 3. Rehydrate Inventory
-        if (player.inventory) {
-            player.inventory.forEach(item => this.rehydrateItem(item));
-        }
+        if (player.inventory) player.inventory.forEach(item => this.rehydrateItem(item));
+        if (player.reagents) player.reagents.forEach(item => this.rehydrateItem(item)); // <-- NEW
 
-        // 4. Rehydrate Safehouses (Stash, Hangar, Aquarium)
         if (player.safehouses) {
             for (const key in player.safehouses) {
                 const sh = player.safehouses[key];
@@ -48,7 +46,6 @@ export const ArtRehydrator = {
             }
         }
 
-        // 5. Rehydrate Bestiary
         if (player.bestiary) {
             for (const id in player.bestiary) {
                 const entry = player.bestiary[id];
@@ -59,9 +56,7 @@ export const ArtRehydrator = {
 
     rehydrateItem(item) {
         if (!item) return;
-
-        // Fallback for older saves
-        const safeSeed = item.seed || Date.now();
+        const safeSeed = item.seed || item.chestSeed || Date.now();
 
         try {
             if (item.invType === 'boat' || (item.art && item.art.boatType)) {
@@ -77,15 +72,44 @@ export const ArtRehydrator = {
             } 
             else if (item.invType === 'lure') {
                 const rng = createRng(safeSeed);
-                const l = generateLure({ rng, components: item.components ||[] });
+                const l = generateLure({ rng, components: item.components || [] });
                 item.imageDataUrl = l.imageDataUrl;
             } 
+            // --- NEW: CONSUMABLE REHYDRATION ---
+            else if (item.invType === 'consumable') {
+                const rng = createRng(safeSeed);
+                // Rebuild using the exact ID (e.g., 'cons_repair_kit')
+                const c = generateConsumable({ id: item.id, rng, seed: safeSeed });
+                item.imageDataUrl = c.imageDataUrl;
+            }
+
+            // --- NEW: POTION REHYDRATION ---
+            else if (item.invType === 'potion') {
+                const rng = createRng(safeSeed);
+                let effectType = 'vigor';
+                if (item.components && item.components.length > 0) {
+                    const primaryComp = item.components[0];
+                    if (['glow_bulb', 'phosphor_cap', 'jelly_bell'].includes(primaryComp)) effectType = 'focus'; 
+                    else if (['wraith_silk', 'cave_crawler_leg'].includes(primaryComp)) effectType = 'shadow'; 
+                    else if (['rattler_bells', 'spinner'].includes(primaryComp)) effectType = 'silver_tongue'; 
+                    else if (['myconid_spore', 'mushroom_stalk'].includes(primaryComp)) effectType = 'insight'; 
+                    else if (['bone_dust', 'iron_sinker', 'lead_sinker'].includes(primaryComp)) effectType = 'artisan'; 
+                }
+                const p = generatePotion({ rng, seed: safeSeed, effectType });
+                item.imageDataUrl = p.imageDataUrl;
+            }
+            // --- NEW: BAIT REHYDRATION ---
+            else if (item.invType === 'bait') {
+                const rng = createRng(safeSeed);
+                const b = generateBait({ rng, seed: safeSeed, components: item.components || [] });
+                item.imageDataUrl = b.imageDataUrl;
+            }
             else if (item.invType === 'part') {
                 const rng = createRng(safeSeed);
                 item.imageDataUrl = generateLurePart({ visualId: item.visualId, rng });
             } 
             else if (item.invType === 'chest' || item.invType === 'chest_encounter') {
-                const rng = createRng(item.chestSeed || safeSeed);
+                const rng = createRng(safeSeed);
                 const c = generateChest({ rng, isMimic: false });
                 if (!item.art) item.art = {};
                 item.art.imageDataUrl = c.imageDataUrl;

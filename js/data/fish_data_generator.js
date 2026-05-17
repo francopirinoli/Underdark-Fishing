@@ -33,10 +33,10 @@ const ART_GENERATORS = {
 // Increased tolerance and hook modifiers so higher rarities are hard but not impossible.
 const RARITY_TIERS =[
     { name: 'Common',    weight: 50, stamMult: 1.0, speedMult: 1.0,  weightMult: 1.0, valBase: 10,  xpBase: 5,   tolerance: 0.80, hookMod: 1.0 },
-    { name: 'Uncommon',  weight: 30, stamMult: 1.4, speedMult: 1.1,  weightMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.60, hookMod: 0.8 },
-    { name: 'Rare',      weight: 14, stamMult: 2.2, speedMult: 1.25, weightMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.40, hookMod: 0.6 },
-    { name: 'Legendary', weight: 5,  stamMult: 3.5, speedMult: 1.35, weightMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.25, hookMod: 0.45 },
-    { name: 'Boss',      weight: 1,  stamMult: 5.0, speedMult: 1.5,  weightMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.15, hookMod: 0.30 }
+    { name: 'Uncommon',  weight: 30, stamMult: 1.3, speedMult: 1.1,  weightMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.60, hookMod: 0.8 }, // stamMult 1.4 -> 1.3
+    { name: 'Rare',      weight: 14, stamMult: 2.0, speedMult: 1.2,  weightMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.40, hookMod: 0.6 }, // stamMult 2.2 -> 2.0, speedMult 1.25 -> 1.2
+    { name: 'Legendary', weight: 5,  stamMult: 2.8, speedMult: 1.3,  weightMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.25, hookMod: 0.45 },// stamMult 3.5 -> 2.8, speedMult 1.35 -> 1.3
+    { name: 'Boss',      weight: 1,  stamMult: 4.0, speedMult: 1.4,  weightMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.15, hookMod: 0.30 } // stamMult 5.0 -> 4.0, speedMult 1.5 -> 1.4
 ];
 
 // --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---

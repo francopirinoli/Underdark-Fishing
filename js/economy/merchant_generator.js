@@ -9,6 +9,7 @@ import { createRng } from '../util/rng.js';
 import { generateRodData } from '../data/rod_data_generator.js';
 import { generateBoatData } from '../data/boat_data_generator.js';
 import { generateLurePart } from '../art/lure_generator.js';
+import { generateConsumable } from '../art/consumable_generator.js'; // <-- ADD THIS LINE
 
 // --- INVENTORY DATABASES ---
 
@@ -69,9 +70,15 @@ export const MerchantGenerator = {
             };
         };
 
-        // 1. Guaranteed Consumables (Infinite or high stock)
-        CONSUMABLES.forEach(c => {
-            inventory.push(formatItem(c, 99)); // 99 represents infinite stock
+// 1. Guaranteed Consumables (Infinite or high stock)
+        CONSUMABLES.forEach((c, idx) => {
+            // FIX: Generate pixel art for the consumable
+            const formatted = formatItem(c, 99);
+            // Use seed + idx to ensure slight variations if multiple exist, but stay deterministic
+            formatted.imageDataUrl = generateConsumable({ id: c.id, rng: createRng(seed + idx) }).imageDataUrl;
+            formatted.invType = 'consumable'; // Explicitly state invType for safety
+            
+            inventory.push(formatted);
         });
 
         // 2. Randomized Lure Parts

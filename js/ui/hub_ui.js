@@ -143,8 +143,9 @@ export const HubUI = {
         const dailySeed = townSeed + state.gameDay;
         this.currentShopInv = MerchantGenerator.generateInventory(dailySeed, node.biomeId, player.stats.bartering);
         
-        // Pass the entire world state so quests map perfectly to global nodes
-        this.currentQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, state.world);
+        // --- FIX: Filter out quests already completed today ---
+        const allQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, state.world);
+        this.currentQuests = allQuests.filter(q => !player.completedQuests.includes(q.id));
         
         this.activeTab = 'market';
         this.marketMode = 'buy';
@@ -293,10 +294,11 @@ export const HubUI = {
                 const isDisabled = disableReason || !canAfford || !hasStock;
                 
                 // NEW: Grab the pixel art if it exists
-                let imgSrc = '';
-                if (item.type === 'rod') imgSrc = item.itemData.art.imageDataUrl;
-                else if (item.type === 'boat') imgSrc = item.itemData.art.profileDataUrl;
-                else if (item.type === 'part' || item.visualId) imgSrc = item.imageDataUrl;
+                let imgSrc = item.imageDataUrl || '';
+                
+                // Overrides for complex nested equipment
+                if (item.type === 'rod' && item.itemData) imgSrc = item.itemData.art.imageDataUrl;
+                else if (item.type === 'boat' && item.itemData) imgSrc = item.itemData.art.profileDataUrl;
                 
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:48px; height:48px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
 
@@ -327,12 +329,22 @@ export const HubUI = {
                         player.vitals.gold -= item.price;
                         if (item.stock !== 99) item.stock--;
                         
-                        if (item.id === 'cons_ration') player.vitals.rations = Math.min(20, player.vitals.rations + 1);
-                        else if (item.id === 'cons_fuel_oil') player.vitals.fuel = 100;
-                        else if (item.id === 'cons_repair_kit') player.vitals.hp = Math.min(player.gear.boat.stats.maxHp, player.vitals.hp + 25);
-                        else if (isCargoItem) {
-                            if (item.type === 'rod' || item.type === 'lure') player.inventory.push({ ...item.itemData, invType: item.type });
-                            else player.inventory.push({ ...item, invType: 'part' }); 
+                        // --- UPDATED: Split Inventory Routing ---
+                        if (item.id === 'cons_ration') {
+                            player.vitals.rations = Math.min(20, player.vitals.rations + 1);
+                        } else if (item.id === 'cons_fuel_oil') {
+                            player.vitals.fuel = 100;
+                        } else {
+                            if (['rod', 'lure', 'bait', 'potion', 'consumable'].includes(item.type || item.invType)) {
+                                // Real items and storable consumables go to Cargo
+                                // FIX: Safely check if itemData exists before spreading it!
+                                const itemToPush = item.itemData ? { ...item.itemData } : { ...item };
+                                itemToPush.invType = item.type || item.invType;
+                                player.inventory.push(itemToPush);
+                            } else {
+                                // Raw fish parts go to the Reagents Pouch
+                                player.reagents.push({ ...item, invType: 'part' }); 
+                            }
                         }
 
                         const rng = createRng(Date.now());
@@ -346,8 +358,11 @@ export const HubUI = {
             });
         } 
         else {
-            // SELL MODE
-            const sellableItems = player.inventory.filter(i => i.invType !== 'fish' && i.invType !== 'boat');
+            // SELL MODE: Combine Cargo and Reagents
+            const sellableItems = [
+                ...player.inventory.filter(i => i.invType !== 'fish' && i.invType !== 'boat'),
+                ...player.reagents
+            ];
             
             if (sellableItems.length === 0) {
                 list.innerHTML = `<p style="color:var(--text-muted); font-size:1.2rem; text-align:center;">You have no gear or parts to sell.</p>`;
@@ -359,7 +374,10 @@ export const HubUI = {
                 
                 const baseVal = item.economy ? item.economy.value : (item.basePrice || 10);
                 const sellValue = Math.max(1, Math.round(baseVal * effStats.economy.sellMultiplier));
-                const realIndex = player.inventory.findIndex(i => i === item);
+                
+                // Identify which array the item lives in
+                const isReagent = player.reagents.includes(item);
+                const realIndex = isReagent ? player.reagents.indexOf(item) : player.inventory.indexOf(item);
                 
                 let imgSrc = item.imageDataUrl || (item.art ? item.art.imageDataUrl : '');
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
@@ -383,7 +401,8 @@ export const HubUI = {
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
                     player.vitals.gold += sellValue;
-                    player.inventory.splice(realIndex, 1);
+                    if (isReagent) player.reagents.splice(realIndex, 1);
+                    else player.inventory.splice(realIndex, 1);
                     this.renderActiveTab();
                 };
 
@@ -758,6 +777,10 @@ export const HubUI = {
 
                     const boardIdx = this.currentQuests.findIndex(bq => bq.id === q.id);
                     if (boardIdx > -1) this.currentQuests.splice(boardIdx, 1);
+
+                    // --- FIX: Remember this quest was completed so it doesn't regenerate today ---
+                    if (!player.completedQuests) player.completedQuests = [];
+                    player.completedQuests.push(q.id);
 
                     const dialogMsg = fishValueBonus > 0 
                         ? `Well done! The guild sends their regards, plus ${fishValueBonus}g market value for the fish.` 

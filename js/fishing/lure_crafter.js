@@ -17,7 +17,7 @@ export const LureCrafter = {
      * @param {number} lureCraftingLevel - Player stat (1 to 5).
      * @param {number} seed - RNG seed.
      */
-    craft(parts, lureCraftingLevel = 1, seed = Date.now()) {
+    craft(parts, craftingLevel = 1, seed = Date.now()) {
         if (parts.length < 3 || parts.length > 5) {
             console.error("Lures must be crafted with 3 to 5 parts.");
             return null;
@@ -52,21 +52,22 @@ export const LureCrafter = {
         };
 
         // 3. Calculate Durability (+10% per LureCrafting level)
-        const multiplier = 1 + (lureCraftingLevel * 0.1);
+        const multiplier = 1 + (craftingLevel * 0.1);
         const finalDurability = Math.floor(baseDurability * multiplier);
 
         // --- NEW: Calculate Lure Value ---
         // Base value relies on number of parts used + durability
         const finalValue = Math.floor((parts.length * 15) + (finalDurability * 2));
 
-        // 4. Generate Pixel Art
+// 4. Generate Pixel Art
         const rng = createRng(seed);
         const art = generateLure({ rng: rng, components: visualIds });
 
         return {
             id: `lure_${rng.int(10000, 99999)}`,
-            seed: seed,                  // <-- NEW: Remember the seed
-            components: visualIds,       // <-- NEW: Remember the component layout
+            invType: 'lure',             // <-- ADD THIS LINE
+            seed: seed,                  
+            components: visualIds,       
             name: art.name,
             imageDataUrl: art.imageDataUrl,
             stats: finalStats,

@@ -120,18 +120,68 @@ export const HUD = {
             
             this._cache.lureData = lureCacheKey;
         }
-    },
 
+        // --- NEW: 6. Bait Tracker ---
+        const bait = player.gear.bait;
+        const baitName = bait ? bait.name : "No Bait";
+        const baitImg = bait ? bait.imageDataUrl : 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=';
+        const baitCharges = bait ? `Charges: ${bait.charges}/${bait.maxCharges}` : "Standard Pool";
+
+        const baitCacheKey = `${baitName}_${bait ? bait.charges : 0}`;
+        if (this._cache.baitData !== baitCacheKey) {
+            document.getElementById('hud-bait-name').innerText = baitName;
+            document.getElementById('hud-bait-name').style.color = bait ? 'var(--gold-warn)' : 'var(--text-muted)';
+            document.getElementById('hud-bait-charges').innerText = baitCharges;
+            document.getElementById('hud-bait-img').src = baitImg;
+            this._cache.baitData = baitCacheKey;
+        }
+
+// --- 7. Active Buffs Tracker ---
+        let buffCacheKey = player.activeBuffs ? player.activeBuffs.map(b => `${b.statName}_${Math.floor(b.durationMins)}`).join('|') : '';
+        
+        if (this._cache.buffData !== buffCacheKey) {
+            const panel = document.getElementById('hud-buffs-panel');
+            const list = document.getElementById('hud-buffs-list');
+            
+            if (!player.activeBuffs || player.activeBuffs.length === 0) {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'flex';
+                let html = '';
+                player.activeBuffs.forEach(buff => {
+                    const hrs = Math.floor(buff.durationMins / 60);
+                    const mins = Math.floor(buff.durationMins % 60).toString().padStart(2, '0');
+                    
+                    // Progress Bar Math
+                    const maxDur = buff.maxDurationMins || Math.max(buff.durationMins, 1);
+                    const pct = Math.max(0, Math.min(100, (buff.durationMins / maxDur) * 100));
+                    
+                    html += `
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size: 0.85rem; margin-bottom: 2px;">
+                            <span style="color:var(--cyan-glow); font-weight:bold;">+${buff.amount} ${buff.statName}</span>
+                            <span style="color:var(--text-main); font-size: 0.8rem;">${hrs}h ${mins}m</span>
+                        </div>
+                        <div style="width: 100%; height: 4px; background: #020617; border: 1px solid #1E293B; border-radius: 2px; overflow: hidden; margin-bottom: 4px;">
+                            <div style="height: 100%; width: ${pct}%; background: #A855F7;"></div>
+                        </div>
+                    `;
+                });
+                list.innerHTML = html;
+            }
+            this._cache.buffData = buffCacheKey;
+        }
+    },
+    
     cacheMinimap(localMap) {
         this.minimapCacheCanvas = document.createElement('canvas');
-        this.minimapCacheCanvas.width = 200; // Updated
-        this.minimapCacheCanvas.height = 200; // Updated
+        this.minimapCacheCanvas.width = 160;  // <-- Shrunk from 200
+        this.minimapCacheCanvas.height = 160; // <-- Shrunk from 200
         const ctx = this.minimapCacheCanvas.getContext('2d');
         
         ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, 200, 200); // Updated
+        ctx.fillRect(0, 0, 160, 160);
 
-        const ratio = 200 / LOCAL_MAP_SIZE; // Updated
+        const ratio = 160 / LOCAL_MAP_SIZE; 
         ctx.fillStyle = '#1e293b'; 
 
         for (let y = 0; y < LOCAL_MAP_SIZE; y += 4) { 
@@ -152,10 +202,10 @@ export const HUD = {
             ctx.drawImage(this.minimapCacheCanvas, 0, 0);
         } else {
             ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, 200, 200); // Updated
+            ctx.fillRect(0, 0, 160, 160);
         }
 
-        const ratio = 200 / LOCAL_MAP_SIZE; // Updated
+        const ratio = 160 / LOCAL_MAP_SIZE;
         ctx.fillStyle = '#22D3EE';
         ctx.beginPath();
         ctx.arc(playerX * ratio, playerY * ratio, 2, 0, Math.PI * 2);

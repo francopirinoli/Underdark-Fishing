@@ -23,76 +23,87 @@
             <canvas id="game-canvas"></canvas>
         </div>
 
-        <!-- ========================================== -->
+<!-- ========================================== -->
         <!-- Z-10 | THE SIDEBAR HUD                     -->
         <!-- ========================================== -->
-
-        <div id="z10-hud">
+        <div id="z10-hud" style="padding: 0.5rem; gap: 0.5rem;">
             <!-- Navigation & Time -->
-            <div class="hud-panel" style="text-align: center; padding: 0.8rem;">
-                <div class="digital-clock" id="hud-clock">
+            <div class="hud-panel" style="text-align: center; padding: 0.4rem;">
+                <div class="digital-clock" id="hud-clock" style="margin-bottom: 0.4rem;">
                     <!-- Injected via JS -->
                 </div>
-                <div id="minimap-container" style="margin: 0.5rem auto 0 auto; width: 200px; height: 200px;">
-                    <canvas id="minimap-canvas" width="200" height="200"></canvas>
+                <!-- Shrunk minimap from 200px to 160px -->
+                <div id="minimap-container" style="margin: 0 auto; width: 160px; height: 160px;">
+                    <canvas id="minimap-canvas" width="160" height="160"></canvas>
                 </div>
             </div>
 
-
             <!-- Vitals -->
-            <div class="hud-panel" style="padding: 1rem 0.8rem;">
-                <div class="vital-row">
-                    <span class="vital-label" style="font-size:0.9rem; width:50px;">HULL</span>
-                    <div class="vital-bar-track" style="height:14px;">
+            <div class="hud-panel" style="padding: 0.6rem 0.5rem;">
+                <div class="vital-row" style="margin-bottom: 0.3rem;">
+                    <span class="vital-label" style="font-size:0.85rem; width:45px;">HULL</span>
+                    <div class="vital-bar-track" style="height:12px;">
                         <div class="vital-bar-fill fill-hp" id="hud-hp-bar" style="width: 100%;"></div>
-                        <div class="vital-text" id="hud-hp-text">50/50</div>
+                        <div class="vital-text" id="hud-hp-text" style="font-size:0.75rem;">50/50</div>
                     </div>
                 </div>
-                <div class="vital-row">
-                    <span class="vital-label" style="font-size:0.9rem; width:50px;">FUEL</span>
-                    <div class="vital-bar-track" style="height:14px;">
+                <div class="vital-row" style="margin-bottom: 0.3rem;">
+                    <span class="vital-label" style="font-size:0.85rem; width:45px;">FUEL</span>
+                    <div class="vital-bar-track" style="height:12px;">
                         <div class="vital-bar-fill fill-fuel" id="hud-fuel-bar" style="width: 100%;"></div>
-                        <div class="vital-text" id="hud-fuel-text">100%</div>
+                        <div class="vital-text" id="hud-fuel-text" style="font-size:0.75rem;">100%</div>
                     </div>
                 </div>
-                <div class="vital-row">
-                    <span class="vital-label" style="font-size:0.9rem; width:50px;">FOOD</span>
-                    <div class="vital-bar-track" style="height:14px;">
+                <div class="vital-row" style="margin-bottom: 0.3rem;">
+                    <span class="vital-label" style="font-size:0.85rem; width:45px;">FOOD</span>
+                    <div class="vital-bar-track" style="height:12px;">
                         <div class="vital-bar-fill fill-ration" id="hud-ration-bar" style="width: 50%;"></div>
-                        <div class="vital-text" id="hud-ration-text">10/20</div>
+                        <div class="vital-text" id="hud-ration-text" style="font-size:0.75rem;">10/20</div>
                     </div>
                 </div>
                 <div class="vital-row" style="margin-bottom: 0;">
-                    <span class="vital-label" style="font-size:0.9rem; width:50px;">NOISE</span>
-                    <div class="vital-bar-track" style="height:14px;">
+                    <span class="vital-label" style="font-size:0.85rem; width:45px;">NOISE</span>
+                    <div class="vital-bar-track" style="height:12px;">
                         <div class="vital-bar-fill" id="hud-noise-bar" style="width: 0%; background: var(--green-safe); transition: width 0.1s linear, background-color 0.2s;"></div>
-                        <div class="vital-text" id="hud-noise-text">0%</div>
+                        <div class="vital-text" id="hud-noise-text" style="font-size:0.75rem;">0%</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Loadout Quick View -->
-            <div class="hud-panel" style="padding: 0.8rem; display: flex; flex-direction: column; gap: 0.8rem;">
-                <!-- Rod -->
-                <div style="display: flex; align-items: center; gap: 0.8rem;">
-                    <img id="hud-rod-img" src="" style="width: 32px; height: 32px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
+<!-- Loadout Quick View -->
+            <div class="hud-panel" style="padding: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <img id="hud-rod-img" src="" style="width: 24px; height: 24px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
                     <div style="display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
-                        <div style="font-size: 1rem; color: var(--cyan-glow); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-rod-name">Pine Caster</div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">Equipped Rod</div>
+                        <div style="font-size: 0.9rem; color: var(--cyan-glow); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-rod-name">Pine Caster</div>
                     </div>
                 </div>
-                <!-- Lure -->
-                <div style="display: flex; align-items: center; gap: 0.8rem;">
-                    <img id="hud-lure-img" src="" style="width: 32px; height: 32px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <img id="hud-lure-img" src="" style="width: 24px; height: 24px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
                     <div style="display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
-                        <div style="font-size: 1rem; color: var(--gold-warn); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-lure-name">Bare Hook</div>
-                        <div style="font-size: 0.8rem; color: var(--text-main);" id="hud-lure-durability">Durability: ∞</div>
+                        <div style="font-size: 0.9rem; color: var(--gold-warn); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-lure-name">Bare Hook</div>
+                        <!-- RESTORED: Durability Tracker -->
+                        <div style="font-size: 0.75rem; color: var(--text-main);" id="hud-lure-durability">Durability: ∞</div>
                     </div>
                 </div>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <img id="hud-bait-img" src="" style="width: 24px; height: 24px; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; flex-shrink: 0;" />
+                    <div style="display: flex; flex-direction: column; justify-content: center; overflow: hidden;">
+                        <div style="font-size: 0.9rem; color: var(--gold-warn); font-weight: bold; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;" id="hud-bait-name">No Bait</div>
+                        <!-- RESTORED: Bait Charges Tracker -->
+                        <div style="font-size: 0.75rem; color: var(--text-main);" id="hud-bait-charges">Standard Pool</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Buffs Panel -->
+            <div class="hud-panel" id="hud-buffs-panel" style="padding: 0.5rem; display: none; flex-direction: column; gap: 0.4rem;">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: -0.2rem;">Active Alchemy</div>
+                <div id="hud-buffs-list" style="display: flex; flex-direction: column; gap: 0.2rem;"></div>
             </div>
 
             <!-- Action Log -->
-            <div class="action-log" id="hud-log">
+            <div class="action-log" id="hud-log" style="padding: 0.4rem;">
                 <!-- Logs injected here via JS -->
             </div>
         </div>
@@ -255,13 +266,14 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
+<!-- ========================================== -->
         <!-- Z-100 | THE GRIMOIRE (Pause Menu)          -->
         <!-- ========================================== -->
         <div id="z100-grimoire">
             <div class="grimoire-header">
                 <div class="grim-tab active" data-tab="map">Map</div>
-                <div class="grim-tab" data-tab="inventory">Inventory & Crafting</div>
+                <div class="grim-tab" data-tab="cargo">Cargo Hold</div>
+                <div class="grim-tab" data-tab="tackle">Tackle Box</div>
                 <div class="grim-tab" data-tab="loadout">Loadout</div>
                 <div class="grim-tab" data-tab="character">Character</div>
                 <div class="grim-tab" data-tab="bestiary">Bestiary</div>
@@ -334,15 +346,57 @@
                     </div>
                 </div>
 
-                <!-- 3. INVENTORY & CRAFTING TAB -->
-                <div id="grim-page-inventory" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                <!-- 3. CARGO HOLD TAB -->
+                <div id="grim-page-cargo" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                    <!-- Left: Grid -->
+                    <div style="flex: 1; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
+                        <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Cargo Hold</h2>
+                                <span style="color: var(--text-muted); font-size: 1.2rem;">Capacity: <span id="grim-cargo-count" style="color: var(--text-main);">0</span> / <span id="grim-cargo-max">10</span></span>
+                            </div>
+                            <select id="grim-cargo-sort" style="background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.5rem; border-radius: 4px; font-family: inherit; font-size: 1.1rem; cursor: pointer;">
+                                <option value="none">Sort: Default</option>
+                                <option value="type">Sort: By Type</option>
+                                <option value="name">Sort: A-Z</option>
+                                <option value="value">Sort: Value</option>
+                            </select>
+                        </div>
+                        <div id="grim-cargo-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;"></div>
+                    </div>
+
+                    <!-- Right: Details -->
+                    <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column;">
+                        <div id="grim-cargo-details" style="display: none; flex-direction: column; height: 100%;">
+                            <div style="text-align: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; margin-bottom: 1rem;">
+                                <img id="grim-cargo-img" src="" style="width: 128px; height: 128px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000;" />
+                                <h2 id="grim-cargo-name" style="color: var(--gold-warn); margin: 0.5rem 0 0 0; font-size: 2rem;">Item Name</h2>
+                                <div id="grim-cargo-sub" style="color: var(--text-muted); font-size: 1.2rem;">Rarity Type</div>
+                            </div>
+                            
+                            <div id="grim-cargo-stats" style="flex: 1; font-size: 1.4rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                            
+                            <div style="margin-top: auto; display: flex; gap: 1.5rem; justify-content: center;">
+                                <button id="btn-cargo-action" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none;">Action</button>
+                                <button id="btn-cargo-equip" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none; border-color: var(--green-safe); color: var(--green-safe);">Equip</button>
+                            </div>
+                        </div>
+                        
+                        <div id="grim-cargo-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem; text-align: center;">
+                            Select an item in your cargo.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. TACKLE BOX TAB -->
+                <div id="grim-page-tackle" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
                     <!-- Left: Bench & Grid -->
                     <div style="flex: 2; display: flex; flex-direction: column; gap: 1rem; overflow: hidden;">
                         
                         <div style="background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1rem;">
                             <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem;">
-                                <h3 style="margin: 0; color: var(--cyan-glow); font-size: 1.8rem;">Crafting Bench</h3>
-                                <span style="color: var(--text-muted); font-size: 1.2rem;">Select 3 to 5 Parts</span>
+                                <h3 style="margin: 0; color: var(--cyan-glow); font-size: 1.8rem;">Alchemy & Crafting Bench</h3>
+                                <span style="color: var(--text-muted); font-size: 1.2rem;">Select 3 to 5 Reagents</span>
                             </div>
                             <div id="grim-craft-slots" style="display: flex; gap: 1rem;"></div>
                         </div>
@@ -350,47 +404,44 @@
                         <div style="flex: 1; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
                             <div style="padding: 1rem; border-bottom: 2px solid var(--panel-border); background: var(--panel-base); display: flex; justify-content: space-between; align-items: center;">
                                 <div>
-                                    <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Cargo Hold & Parts</h2>
-                                    <span style="color: var(--text-muted); font-size: 1.2rem;">Capacity: <span id="grim-inv-count" style="color: var(--text-main);">0</span> / <span id="grim-inv-max">10</span></span>
+                                    <h2 style="margin: 0; color: var(--cyan-glow); font-size: 2rem;">Reagents Pouch</h2>
+                                    <span style="color: var(--text-muted); font-size: 1.2rem;">Total Parts: <span id="grim-tackle-count" style="color: var(--text-main);">0</span></span>
                                 </div>
-                                <!-- NEW: Sorting Dropdown -->
-                                <select id="grim-inv-sort" style="background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.5rem; border-radius: 4px; font-family: inherit; font-size: 1.1rem; cursor: pointer;">
-                                    <option value="none">Sort: Default</option>
-                                    <option value="type">Sort: By Type</option>
-                                    <option value="name">Sort: A-Z</option>
-                                    <option value="value">Sort: Value</option>
-                                </select>
                             </div>
-                            <div id="grim-inv-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;"></div>
+                            <div id="grim-tackle-grid" style="flex: 1; padding: 1rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 0.5rem; align-content: flex-start;"></div>
                         </div>
                     </div>
 
                     <!-- Right: Details / Preview -->
                     <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column;">
-                        <div id="grim-inv-details" style="display: none; flex-direction: column; height: 100%;">
+                        <div id="grim-tackle-details" style="display: none; flex-direction: column; height: 100%;">
                             <div style="text-align: center; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem; margin-bottom: 1rem;">
-                                <img id="grim-item-img" src="" style="width: 128px; height: 128px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000;" />
-                                <h2 id="grim-item-name" style="color: var(--gold-warn); margin: 0.5rem 0 0 0; font-size: 2rem;">Item Name</h2>
-                                <div id="grim-item-sub" style="color: var(--text-muted); font-size: 1.2rem;">Rarity Type</div>
+                                <img id="grim-tackle-img" src="" style="width: 128px; height: 128px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000;" />
+                                <h2 id="grim-tackle-name" style="color: var(--gold-warn); margin: 0.5rem 0 0 0; font-size: 2rem;">Item Name</h2>
+                                <div id="grim-tackle-sub" style="color: var(--text-muted); font-size: 1.2rem;">Rarity Type</div>
                             </div>
                             
-                            <div id="grim-item-stats" style="flex: 1; font-size: 1.4rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;"></div>
+                            <div id="grim-tackle-stats" style="flex: 1; font-size: 1.4rem; color: var(--text-main); display: flex; flex-direction: column; gap: 0.5rem;"></div>
                             
-                            <div style="margin-top: auto; display: flex; gap: 1.5rem; justify-content: center;">
-                                <button id="btn-inv-action" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none;">Dissect</button>
-                                <button id="btn-inv-equip" class="menu-btn" style="width: auto; flex: none; font-size: 1.3rem; padding: 0.5rem 2rem; margin: 0; display: none; border-color: var(--green-safe); color: var(--green-safe);">Equip</button>
+                            <div id="grim-tackle-actions" style="margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <button id="btn-tackle-action" class="menu-btn" style="width: 100%; font-size: 1.3rem; padding: 0.5rem; margin: 0; display: none;">Add to Bench</button>
+                                <div id="btn-group-craft" style="display:none; gap: 0.5rem; width: 100%;">
+                                    <button id="btn-craft-lure" class="menu-btn" style="flex:1; font-size: 1.1rem; padding: 0.5rem; margin: 0; border-color: var(--cyan-glow); color: var(--cyan-glow);">🪝 Lure</button>
+                                    <button id="btn-craft-potion" class="menu-btn" style="flex:1; font-size: 1.1rem; padding: 0.5rem; margin: 0; border-color: #A855F7; color: #A855F7;">🧪 Potion</button>
+                                    <button id="btn-craft-bait" class="menu-btn" style="flex:1; font-size: 1.1rem; padding: 0.5rem; margin: 0; border-color: var(--gold-warn); color: var(--gold-warn);">🪱 Bait</button>
+                                </div>
                             </div>
                         </div>
                         
-                        <div id="grim-inv-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem; text-align: center;">
-                            Select an item in your cargo,<br>or add parts to the Bench.
+                        <div id="grim-tackle-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem; text-align: center;">
+                            Select a part in your pouch,<br>or add parts to the Bench.
                         </div>
                     </div>
                 </div>
 
-                <!-- 4. LOADOUT TAB -->
+                <!-- 5. LOADOUT TAB -->
                 <div id="grim-page-loadout" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; padding-right: 0.5rem;">
                         <div class="loadout-slot" id="loadout-boat">
                             <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Boat Chassis</h3>
                             <div class="slot-content"></div>
@@ -403,6 +454,11 @@
                             <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Active Lure</h3>
                             <div class="slot-content"></div>
                         </div>
+                        <!-- NEW: Bait Slot -->
+                        <div class="loadout-slot" id="loadout-bait">
+                            <h3 style="margin:0 0 0.5rem 0; color: var(--text-muted); font-size: 1.5rem;">Target Bait</h3>
+                            <div class="slot-content"></div>
+                        </div>
                     </div>
                     <div style="flex: 1.5; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 1.5rem; display: flex; flex-direction: column; overflow-y: auto;">
                         <h2 style="margin: 0 0 1rem 0; color: var(--cyan-glow); font-size: 2.2rem;">Physics & Effective Stats</h2>
@@ -410,7 +466,7 @@
                     </div>
                 </div>
 
-                <!-- 5. BESTIARY TAB (NEW) -->
+                <!-- 6. BESTIARY TAB (NEW) -->
                 <div id="grim-page-bestiary" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
                     <!-- Left: Grid of Discovered Fish -->
                     <div style="flex: 2; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;">
@@ -468,7 +524,7 @@
                     </div>
                 </div>
 
-                <!-- 6. QUESTS TAB (NEW) -->
+                <!-- 7. QUESTS TAB (NEW) -->
                 <div id="grim-page-quests" class="grim-page" style="display: none; flex-direction: column; height: 100%;">
                     <h1 style="color: var(--cyan-glow); margin-top: 0;">Active Quests</h1>
                     <div id="grim-quests-list" style="display: flex; flex-direction: column; gap: 1rem; overflow-y: auto; padding-right: 1rem;">

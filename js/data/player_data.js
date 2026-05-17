@@ -1,13 +1,13 @@
 /**
  * js/data/player_data.js
  * The Player Factory and Progression Engine.
- * V6 - Added Safehouses array, Dynamic Upgrade Stat Calculations, and Hazard Immunities.
+ * V7 - Added Reagents bag, Active Buffs, Bait slot, and renamed 'crafting' stat.
  */
 
 import { generateBoatData } from './boat_data_generator.js';
 import { generateRodData } from './rod_data_generator.js';
 import { generateLure } from '../art/lure_generator.js'; 
-import { createRng } from '../util/rng.js'; // <-- NEW: Add this import
+import { createRng } from '../util/rng.js';
 
 const MAX_LEVEL = 10;
 const MAX_STAT_VALUE = 5; 
@@ -16,7 +16,7 @@ export const STAT_DESCRIPTIONS = {
     fishing: "Increases Reeling Power, Reaction Window, and Cast Distance.",
     stamina: "Increases Max Stamina and Stamina Regeneration while resting.",
     driving: "Improves Boat Speed, Boat Stealth, and Collision Evasion chance.",
-    lureCrafting: "Increases Point Budget when dissecting parts and Lure Durability.",
+    crafting: "Increases Point Budget when dissecting parts, Lure Durability, and Alchemy potency.", // <-- RENAMED
     bartering: "Improves prices at settlements. Buy items for cheaper, and Sell items for more profit.",
     intelligence: "Increases general XP, Bestiary XP, and improves Lantern Fuel efficiency."
 };
@@ -40,15 +40,14 @@ export const PlayerEngine = {
         while (starterRod.identity.rarity !== 'Common');
         starterRod.invType = 'rod';   
 
-        // Generate a baseline lure with art so it appears during the fishing minigame
         const starterLureSeed = Date.now();
         const starterComponents = ['iron_sinker', 'fish_gut'];
         const starterLureArt = generateLure({ rng: createRng(starterLureSeed), components: starterComponents });
         
         const starterLure = {
             id: 'lure_starter',
-            seed: starterLureSeed,             // <-- NEW
-            components: starterComponents,     // <-- NEW
+            seed: starterLureSeed,
+            components: starterComponents,
             name: 'Basic Jig',
             invType: 'lure',  
             basePrice: 15,    
@@ -64,7 +63,7 @@ export const PlayerEngine = {
                 race: options.race || "Human",
                 gender: options.gender || "Female",
                 portraitData: options.portraitData || null,
-                portraitSeed: options.portraitSeed || Date.now() // <-- NEW
+                portraitSeed: options.portraitSeed || Date.now()
             },
             vitals: {
                 level: 1,
@@ -72,25 +71,29 @@ export const PlayerEngine = {
                 gold: 100,
                 rations: 10,
                 fuel: 100,
-                hp: starterBoat.stats.maxHp // Synced to the generated chassis
+                hp: starterBoat.stats.maxHp
             },
             stats: {
                 fishing: 1,
                 stamina: 1,
                 driving: 1,
-                lureCrafting: 1,
+                crafting: 1, // <-- RENAMED
                 bartering: 1,
                 intelligence: 1
             },
             availablePoints: 3,
-            activeQuests:[],
+            activeQuests: [],
+            completedQuests: [],
+            activeBuffs: [], // <-- NEW: Tracks potion effects
             bestiary: {},
-            inventory:[],
-            safehouses: {}, // NEW: Dictionary keyed by map coords "x,y" containing stash, hangar, and aquarium
+            inventory: [], // Cargo Hold
+            reagents: [],  // <-- NEW: Tackle box for fish parts
+            safehouses: {},
             gear: {
                 boat: starterBoat,
                 rod: starterRod,
-                lure: starterLure
+                lure: starterLure,
+                bait: null // <-- NEW: Active target bait
             }
         };
     },
@@ -123,7 +126,7 @@ export const PlayerEngine = {
     },
 
     equipItem(player, type, itemData) {
-        if (type === 'boat' || type === 'rod' || type === 'lure') {
+        if (['boat', 'rod', 'lure', 'bait'].includes(type)) { // <-- ADDED BAIT
             player.gear[type] = itemData;
             return true;
         }
@@ -131,7 +134,16 @@ export const PlayerEngine = {
     },
 
     getEffectiveStats(player) {
-        const stats = player.stats;
+        // --- NEW: Apply Active Potion Buffs ---
+        const buffedStats = { ...player.stats };
+        if (player.activeBuffs) {
+            player.activeBuffs.forEach(buff => {
+                if (buffedStats[buff.stat] !== undefined) {
+                    buffedStats[buff.stat] += buff.amount;
+                }
+            });
+        }
+
         const rod = player.gear.rod;
         const boat = player.gear.boat;
         const lure = player.gear.lure;
@@ -142,15 +154,12 @@ export const PlayerEngine = {
         const rodFlex = rod ? rod.stats.flexibility : 0.5;
         const rodSens = rod ? rod.stats.sensitivity : 0;
         
-        let effectivePower = rodPower * (1 + (stats.fishing * 0.2));
-        let effectiveHookWindow = rodSens + (stats.fishing * 100);
-        let effectiveStamina = 50 + (stats.stamina * 50);
+        let effectivePower = rodPower * (1 + (buffedStats.fishing * 0.2));
+        let effectiveHookWindow = rodSens + (buffedStats.fishing * 100);
+        let effectiveStamina = 75 + (buffedStats.stamina * 50);
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
-        
-        let effectiveSweetSpotTolerance = Math.max(2, Math.min(20, 5 + (rodSens / 100))); 
-        
-        // NEW: Base scroll speed is 1.0x. High sens (e.g., 300) = 1.6x scroll speed. Low sens (-100) = 0.8x.
+        let effectiveSweetSpotTolerance = Math.max(3, Math.min(25, 8 + (rodSens / 100))); 
         let effectiveReelScrollSpeed = Math.max(0.5, 1.0 + (rodSens / 500));
 
         if (rod && rod.traits) {
@@ -168,64 +177,37 @@ export const PlayerEngine = {
         let effectiveCargo = boat ? boat.stats.cargoSpace : 10; 
         let collisionDamageMult = 1.0;
         
-        // Hazard Immunities tracker
         const immunities = { volcanic: false, crystal: false, abyssal: false, fungal: false, frozen: false };
 
         if (boat && boat.upgrades) {
             const upg = boat.upgrades;
-
-            // Plating Slot
             if (upg.plating) {
-                if (upg.plating.id === 'upg_iron_plating') {
-                    effectiveMaxHp += 50;
-                    immunities.volcanic = true;
-                } else if (upg.plating.id === 'upg_acoustic_dampening') {
-                    effectiveStealth *= 1.30;
-                    immunities.crystal = true;
-                }
+                if (upg.plating.id === 'upg_iron_plating') { effectiveMaxHp += 50; immunities.volcanic = true; } 
+                else if (upg.plating.id === 'upg_acoustic_dampening') { effectiveStealth *= 1.30; immunities.crystal = true; }
             }
-
-            // Engine Slot
             if (upg.engine) {
-                if (upg.engine.id === 'upg_overclocked_motor') {
-                    effectiveSpeed *= 1.20;
-                    immunities.abyssal = true;
-                } else if (upg.engine.id === 'upg_alchemical_filter') {
-                    effectiveAccel *= 1.15;
-                    immunities.fungal = true;
-                }
+                if (upg.engine.id === 'upg_overclocked_motor') { effectiveSpeed *= 1.20; immunities.abyssal = true; } 
+                else if (upg.engine.id === 'upg_alchemical_filter') { effectiveAccel *= 1.15; immunities.fungal = true; }
             }
-
-            // Prow Slot
             if (upg.prow) {
-                if (upg.prow.id === 'upg_icebreaker_prow') {
-                    collisionDamageMult = 0.5;
-                    immunities.frozen = true;
-                }
+                if (upg.prow.id === 'upg_icebreaker_prow') { collisionDamageMult = 0.5; immunities.frozen = true; }
             }
-
-            // Storage Slot
-            if (upg.storage && upg.storage.id === 'upg_cargo_net') {
-                effectiveCargo += 10;
-            }
+            if (upg.storage && upg.storage.id === 'upg_cargo_net') effectiveCargo += 10;
         }
 
-        // Apply Player "Driving" Stat Modifiers
-        effectiveSpeed *= (1 + (stats.driving * 0.1));
-        effectiveAccel *= (1 + (stats.driving * 0.1));
-        effectiveStealth *= (1 + (stats.driving * 0.1));
-        let hazardDodgeChance = stats.driving * 0.04;
+        effectiveSpeed *= (1 + (buffedStats.driving * 0.1));
+        effectiveAccel *= (1 + (buffedStats.driving * 0.1));
+        effectiveStealth *= (1 + (buffedStats.driving * 0.1));
+        let hazardDodgeChance = buffedStats.driving * 0.04;
 
         // --- 3. ECONOMY & CRAFTING STATS ---
-        let storeDiscount = stats.bartering * 0.08; 
-        
-        // FIX: Sell prices are a markdown. Base is 0.4x, scales up to 0.8x at Lv 5 Bartering.
-        let sellMultiplier = 0.4 + (stats.bartering * 0.08); 
-        let fuelEfficiencyMult = 1 - (stats.intelligence * 0.10); 
-        let dissectionBudgetMult = 1 + (stats.lureCrafting * 0.2);
-        let lureDurabilityMult = 1 + (stats.lureCrafting * 0.2);
-        let knowledgeXpMult = 1 + (stats.intelligence * 0.2);
-        let generalXpMult = 1 + (stats.intelligence * 0.1);
+        let storeDiscount = buffedStats.bartering * 0.08; 
+        let sellMultiplier = 0.4 + (buffedStats.bartering * 0.08); 
+        let fuelEfficiencyMult = 1 - (buffedStats.intelligence * 0.10); 
+        let dissectionBudgetMult = 1 + (buffedStats.crafting * 0.2); // <-- UPDATED
+        let lureDurabilityMult = 1 + (buffedStats.crafting * 0.2);   // <-- UPDATED
+        let knowledgeXpMult = 1 + (buffedStats.intelligence * 0.2);
+        let generalXpMult = 1 + (buffedStats.intelligence * 0.1);
 
         // --- 4. LURE PROPERTIES ---
         let activeLureStats = { color: 0, sound: 0, light: 0, weight: 0 };
@@ -259,10 +241,7 @@ export const PlayerEngine = {
             },
             economy: {
                 discountMultiplier: Number((1 - storeDiscount).toFixed(2)), 
-                
-                // FIX: Change 'sellBonus' to 'sellMultiplier' here
                 sellMultiplier: Number(sellMultiplier.toFixed(2)), 
-                
                 knowledgeXpMult: Number(knowledgeXpMult.toFixed(2)),
                 generalXpMult: Number(generalXpMult.toFixed(2)),
                 dissectionBudgetMult: Number(dissectionBudgetMult.toFixed(2)),

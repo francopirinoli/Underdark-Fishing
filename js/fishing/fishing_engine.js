@@ -65,7 +65,7 @@ export const FishingEngine = {
 
         this.maxPlayerStamina = this.playerStats.minigame.stamina;
         this.playerStamina = this.maxPlayerStamina;
-        this.playerStaminaRegen = 10 + (rawPlayerStaminaStat * 8); 
+        this.playerStaminaRegen = 20 + (rawPlayerStaminaStat * 10); 
         this.playerStaminaDelayTimer = 0;
 
         this.maxTension = this.playerStats.minigame.maxTension;
@@ -363,9 +363,10 @@ export const FishingEngine = {
         tensionDelta = clamp(tensionDelta, -maxTensionDelta, maxTensionDelta);
         this.tension = clamp(this.tension + tensionDelta * dt, 0, this.maxTension + 5);
 
-        // --- 4. PLAYER STAMINA ---
+// --- 4. PLAYER STAMINA ---
         if (isReeling) {
-            const drain = 30 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
+            // FORGIVENESS: Cut player stamina drain in half (30 down to 15).
+            const drain = 15 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
             this.playerStamina -= drain * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;
@@ -375,35 +376,42 @@ export const FishingEngine = {
         // --- 5. FISH STAMINA ---
         if (isReeling && behavior.catchable) {
             const efficiency = (powerDiff > tol) ? 0.6 : (this.inSweetSpot ? 1.5 : 1.0);
-            this.fishStamina -= (10 * rodPower * (dragNorm + 0.2) * efficiency) * dt;
+            // BOOST: Reeling now does nearly double the stamina damage to the fish (10 up to 18).
+            this.fishStamina -= (18 * rodPower * (dragNorm + 0.2) * efficiency) * dt;
         }
         
         if (behavior.selfDrain > 0) {
-            // Drag-Linked Exhaustion: If drag is 0, fish burns almost no stamina to run
             const dragResistance = Math.max(0.2, dragNorm * 2.0); 
-            this.fishStamina -= behavior.selfDrain * dragResistance * dt; 
+            // BOOST: The fish burns 50% more stamina when running or thrashing.
+            this.fishStamina -= (behavior.selfDrain * 1.5) * dragResistance * dt; 
         } else {
-            // Active Recovery: Bosses recover much faster
-            const regenBoost = (this.maxFishStamina * 0.05);
+            // FORGIVENESS: Crippled the fish's active recovery (was 5%, now 1.5%). 
+            // It will no longer undo all your hard work in a few seconds of resting.
+            const regenBoost = (this.maxFishStamina * 0.015);
             this.fishStamina += (Math.abs(behavior.selfDrain) + regenBoost) * dt;
         }
         this.fishStamina = clamp(this.fishStamina, 0, this.maxFishStamina);
 
-        // --- 6. CATCH PROGRESS (Tug of War) ---
+// --- 6. CATCH PROGRESS (Tug of War) ---
         if (isReeling && behavior.catchable) {
             if (powerDiff < -tol) {
                 const underpull = (Math.abs(powerDiff) - tol) / 50;
-                this.catchProgress -= (10 * (fishSpeed / 50) * underpull) * dt;
+                // FORGIVENESS: Reduced underpull penalty from 10 to 4. 
+                // The fish won't rip the line away as aggressively if your drag is too low.
+                this.catchProgress -= (4 * (fishSpeed / 50) * underpull) * dt;
             } else {
                 const exhaustMult = (this.fishStamina <= 0) ? 3.0 : (1.5 - (this.fishStamina / this.maxFishStamina)); 
-                const sweetSpotMult = this.inSweetSpot ? 1.8 : 0.5; 
-                this.catchProgress += (8 * rodPower * exhaustMult * (dragNorm + 0.2) * sweetSpotMult) * dt;
+                const sweetSpotMult = this.inSweetSpot ? 2.0 : 0.5; 
+                // BOOST: Increased base catch progress rate from 8 to 10.
+                // Makes the bar climb slightly faster when you are doing things right.
+                this.catchProgress += (10 * rodPower * exhaustMult * (dragNorm + 0.2) * sweetSpotMult) * dt;
             }
         } 
         
         if (this.fishStamina > 0 && behavior.pullMult > 0) {
-            // Fish takes line inversely proportional to drag
-            const lineLossRate = rawFishPull * (1.0 - dragNorm) * 0.3; 
+            // FORGIVENESS: Slashed the line loss rate in half (from 0.3 to 0.15).
+            // When you let go to rest your stamina, the progress bar will now drop much, much slower.
+            const lineLossRate = rawFishPull * (1.0 - dragNorm) * 0.15; 
             if (!isReeling) {
                 this.catchProgress -= lineLossRate * dt;
                 

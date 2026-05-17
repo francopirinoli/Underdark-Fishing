@@ -10,6 +10,7 @@ import { renderGlobalMap } from '../exploration/map_renderer.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { DissectionEngine } from '../data/fish_dissection.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
+import { AlchemyCrafter } from '../fishing/alchemy_crafter.js'; // <-- ADD THIS LINE
 import { showStatTooltip, moveStatTooltip, hideStatTooltip, buildStatSlider, getRarityColor, getItemColor } from '../util/utils.js';
 import { createRng } from '../util/rng.js'; 
 import { generateChest } from '../art/chest_generator.js'; 
@@ -23,7 +24,14 @@ export const GrimoireUI = {
     gameState: null, 
     callbacks: null, 
 
-    craftingBench:[], 
+    craftingBench: [], 
+    craftingMode: 'lure', // <-- NEW: Tracks which preview mode is active
+
+    setCraftMode(mode) {
+        this.craftingMode = mode;
+        SFX.playUISelect();
+        this.showBenchPreview();
+    },
 
     init(callbacks) {
         this.callbacks = callbacks;
@@ -106,7 +114,8 @@ export const GrimoireUI = {
         if (!this.gameState) return;
         if (this.activeTab === 'map') this.renderMap();
         else if (this.activeTab === 'character') this.renderCharacter();
-        else if (this.activeTab === 'inventory') this.renderInventory();
+        else if (this.activeTab === 'cargo') this.renderCargo();     // <-- NEW
+        else if (this.activeTab === 'tackle') this.renderTackle();   // <-- NEW
         else if (this.activeTab === 'loadout') this.renderLoadout();
         else if (this.activeTab === 'bestiary') this.renderBestiary();
         else if (this.activeTab === 'quests') this.renderQuests();
@@ -238,7 +247,7 @@ export const GrimoireUI = {
         
         const displayNames = {
             fishing: "Fishing", stamina: "Stamina", driving: "Driving", 
-            lureCrafting: "Lure Crafting", bartering: "Bartering", intelligence: "Intelligence"
+            crafting: "Crafting", bartering: "Bartering", intelligence: "Intelligence" // <-- UPDATED
         };
 
         for (const [key, val] of Object.entries(player.stats)) {
@@ -289,38 +298,21 @@ export const GrimoireUI = {
         return `<span style="color:${color}; font-size: 0.85em; margin-left: 0.5rem;">(${sign}${formattedDiff})</span>`;
     },
 
-    renderInventory() {
+// --- CARGO HOLD ---
+    renderCargo() {
         const player = this.gameState.player;
         const effStats = PlayerEngine.getEffectiveStats(player);
         const maxCargo = effStats.exploration.cargoSpace;
         
-        const benchGrid = document.getElementById('grim-craft-slots');
-        benchGrid.innerHTML = '';
+        document.getElementById('grim-cargo-count').innerText = player.inventory.length;
+        document.getElementById('grim-cargo-max').innerText = maxCargo;
         
-        for (let i = 0; i < 5; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'craft-slot';
-            
-            if (i < this.craftingBench.length) {
-                const part = this.craftingBench[i];
-                slot.innerHTML = `<img src="${part.imageDataUrl || '../assets/placeholder.png'}" onerror="this.style.display='none';"/>`;
-                slot.style.borderColor = 'var(--cyan-glow)';
-                
-                slot.onclick = () => {
-                    SFX.playUIHover();
-                    this.craftingBench.splice(i, 1);
-                    player.inventory.push(part);
-                    this.renderInventory();
-                };
-            }
-            benchGrid.appendChild(slot);
-        }
-
-        document.getElementById('grim-inv-count').innerText = player.inventory.length;
-        document.getElementById('grim-inv-max').innerText = maxCargo;
-        
-        const grid = document.getElementById('grim-inv-grid');
+        const grid = document.getElementById('grim-cargo-grid');
         grid.innerHTML = '';
+        
+        // ---> FIX: Hide the details panel whenever the cargo is refreshed <---
+        document.getElementById('grim-cargo-details').style.display = 'none';
+        document.getElementById('grim-cargo-empty').style.display = 'flex';
         
         for (let i = 0; i < maxCargo; i++) {
             const slot = document.createElement('div');
@@ -328,47 +320,36 @@ export const GrimoireUI = {
             
             if (i < player.inventory.length) {
                 const item = player.inventory[i];
-                let imgSrc = "";
-                
-                if (item.invType === 'fish') imgSrc = item.art.imageDataUrl;
-                else if (item.invType === 'part' || item.invType === 'lure' || item.invType === 'chest') imgSrc = item.imageDataUrl || '';
-                else if (item.invType === 'rod') imgSrc = item.art.imageDataUrl;
-                else if (item.invType === 'boat') imgSrc = item.art.profileDataUrl;
+                let imgSrc = item.imageDataUrl || (item.art ? (item.art.profileDataUrl || item.art.imageDataUrl) : '');
 
                 if (imgSrc) {
                     slot.innerHTML = `<img src="${imgSrc}" />`;
                 } else {
-                    slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${item.name.substring(0,6)}</span>`;
+                    // FIX: Safely fallback if name is undefined
+                    const safeName = item.name || (item.identity ? item.identity.name : 'Unknown');
+                    slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${safeName.substring(0,6)}</span>`;
                 }
                 
-                slot.onclick = () => this.showInventoryDetails(item, i, slot);
+                slot.onclick = () => this.showCargoDetails(item, i, slot);
             }
             grid.appendChild(slot);
         }
-        
-        this.showBenchPreview();
-         // --- NEW: INVENTORY SORTING LOGIC ---
-        const sortSelect = document.getElementById('grim-inv-sort');
+
+        // Sorting Logic
+        const sortSelect = document.getElementById('grim-cargo-sort');
         if (!sortSelect.onchange) {
             sortSelect.onchange = () => {
                 const mode = sortSelect.value;
                 SFX.playUISelect();
 
                 if (mode === 'type') {
-                    // Custom sort order for types
-                    const typeOrder = { 'boat': 1, 'rod': 2, 'lure': 3, 'part': 4, 'chest': 5, 'fish': 6 };
+                    const typeOrder = { 'boat': 1, 'rod': 2, 'lure': 3, 'bait': 4, 'potion': 5, 'consumable': 6, 'chest': 7, 'fish': 8 };
                     player.inventory.sort((a, b) => (typeOrder[a.invType] || 99) - (typeOrder[b.invType] || 99));
                 } 
                 else if (mode === 'name') {
-                    // Sort Alphabetically
-                    player.inventory.sort((a, b) => {
-                        const nameA = a.name || (a.identity ? a.identity.name : '');
-                        const nameB = b.name || (b.identity ? b.identity.name : '');
-                        return nameA.localeCompare(nameB);
-                    });
+                    player.inventory.sort((a, b) => (a.name || a.identity?.name || '').localeCompare(b.name || b.identity?.name || ''));
                 } 
                 else if (mode === 'value') {
-                    // Sort by highest gold value
                     player.inventory.sort((a, b) => {
                         const valA = a.economy ? a.economy.baseValue : (a.basePrice || 0);
                         const valB = b.economy ? b.economy.baseValue : (b.basePrice || 0);
@@ -376,42 +357,58 @@ export const GrimoireUI = {
                     });
                 }
                 
-                // Re-render and save the new organized state
-                this.renderInventory();
+                this.renderCargo();
                 if (this.callbacks.onSave) this.callbacks.onSave();
             };
         }
     },
 
-    showInventoryDetails(item, invIndex, slotEl) {
-        document.querySelectorAll('.inv-slot').forEach(el => el.classList.remove('selected'));
+    showCargoDetails(item, invIndex, slotEl) {
+        // --- NEW: Safety fallback to fix lures crafted before the patch! ---
+        if (!item.invType && item.maxDurability !== undefined) item.invType = 'lure';
+
+        document.querySelectorAll('#grim-cargo-grid .inv-slot').forEach(el => el.classList.remove('selected'));
         slotEl.classList.add('selected');
         
-        document.getElementById('grim-inv-empty').style.display = 'none';
-        document.getElementById('grim-inv-details').style.display = 'flex';
+        document.getElementById('grim-cargo-empty').style.display = 'none';
+        document.getElementById('grim-cargo-details').style.display = 'flex';
         
-        const btnAction = document.getElementById('btn-inv-action');
-        const btnEquip = document.getElementById('btn-inv-equip');
+        const btnAction = document.getElementById('btn-cargo-action');
+        const btnEquip = document.getElementById('btn-cargo-equip');
         
-        // Reset button visibility and colors
         btnAction.style.display = 'none';
         btnEquip.style.display = 'none';
-        btnEquip.style.borderColor = 'var(--green-safe)';
-        btnEquip.style.color = 'var(--green-safe)';
         
         const player = this.gameState.player;
+        const itemName = item.name || (item.identity ? item.identity.name : 'Item');
+        
+        document.getElementById('grim-cargo-img').src = item.imageDataUrl || (item.art ? (item.art.profileDataUrl || item.art.imageDataUrl) : '');
+        document.getElementById('grim-cargo-name').innerText = itemName;
+        document.getElementById('grim-cargo-name').style.color = getItemColor(item);
+        
+        // --- RESTORED: Dynamic Subtitles ---
+        let subtitle = item.invType.toUpperCase();
+        if (item.invType === 'fish') subtitle = `${item.identity.rarity} ${item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1)}`;
+        else if (item.invType === 'lure') subtitle = `Custom Lure (${item.componentsUsed || '?'} Parts)`;
+        else if (item.invType === 'rod') subtitle = `${item.identity.rarity} Fishing Rod`;
+        else if (item.invType === 'boat') subtitle = `${item.identity.rarity} ${item.art.boatType.toUpperCase()}`;
+        else if (item.invType === 'chest' || item.invType === 'chest_encounter') subtitle = `Unknown Contents`;
+        else if (item.invType === 'potion') subtitle = `Alchemical Draught`;
+        else if (item.invType === 'bait') subtitle = `Targeted Bait`;
+        else if (item.invType === 'consumable') subtitle = `Survival Supply`;
+        else if (item.invType === 'upgrade') subtitle = `Boat Upgrade [${item.slot.toUpperCase()}]`;
+        
+        document.getElementById('grim-cargo-sub').innerText = subtitle;
+        
+        const statsEl = document.getElementById('grim-cargo-stats');
+        statsEl.innerHTML = '';
 
         // 1. FISH
         if (item.invType === 'fish') {
-            document.getElementById('grim-item-img').src = item.art.imageDataUrl;
-            document.getElementById('grim-item-name').innerText = item.identity.name;
-            // FIX: Color by rarity!
-            document.getElementById('grim-item-name').style.color = getItemColor(item);
-            document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} ${item.identity.family}`;
-            
-            document.getElementById('grim-item-stats').innerHTML = `
+            statsEl.innerHTML = `
                 <div style="display:flex; justify-content:space-between;"><span>Size:</span> <span>${item.physical.sizeTier}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Weight:</span> <span>${item.actualWeight} kg</span></div>
+                <div style="display:flex; justify-content:space-between;"><span>Habitat:</span> <span style="text-transform:capitalize;">${item.environment.depthPref}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Value:</span> <span style="color:var(--gold-warn);">${item.economy.baseValue}g</span></div>
             `;
             
@@ -419,34 +416,21 @@ export const GrimoireUI = {
             btnAction.innerText = '🔪 Dissect';
             btnAction.style.borderColor = 'var(--red-danger)';
             btnAction.style.color = 'var(--red-danger)';
-            
             btnAction.onclick = () => {
                 SFX.playLineSnap(); 
-                const result = DissectionEngine.dissect(item, player.stats.lureCrafting, Date.now());
-                
+                const result = DissectionEngine.dissect(item, player.stats.crafting, Date.now());
                 player.inventory.splice(invIndex, 1);
                 
-                if (!player.bestiary[item.id]) {
-                    player.bestiary[item.id] = { xp: 0, caught: 0, speciesData: item };
-                }
+                if (!player.bestiary[item.id]) player.bestiary[item.id] = { xp: 0, caught: 0, speciesData: item };
                 const effStats = PlayerEngine.getEffectiveStats(player);
-                const finalXpGain = Math.round(result.knowledgeGain * effStats.economy.knowledgeXpMult);
-                player.bestiary[item.id].xp += finalXpGain;
+                player.bestiary[item.id].xp += Math.round(result.knowledgeGain * effStats.economy.knowledgeXpMult);
                 
-                const currentXp = player.bestiary[item.id].xp;
-                let knowledgeLevel = 1;
-                if (currentXp >= 250) knowledgeLevel = 3;
-                else if (currentXp >= 100) knowledgeLevel = 2;
-                
-                result.parts.forEach(p => {
-                    p.invType = 'part';
-                    player.inventory.push(p);
-                });
+                result.parts.forEach(p => { p.invType = 'part'; player.reagents.push(p); });
                 
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderInventory();
+                this.renderCargo();
             };
-            // --- COOK BUTTON LOGIC ---
+
             const rationsGained = { 'Tiny': 1, 'Small': 2, 'Medium': 4, 'Large': 8, 'Massive': 16 }[item.physical.sizeTier] || 1;
             const isFull = player.vitals.rations >= 20;
 
@@ -459,95 +443,84 @@ export const GrimoireUI = {
             btnEquip.onclick = () => {
                 if (isFull) return;
                 SFX.playUISelect(); 
-                
                 player.vitals.rations = Math.min(20, player.vitals.rations + rationsGained);
                 player.inventory.splice(invIndex, 1);
-                
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderInventory(); 
-                this.renderCharacter(); 
+                this.renderCargo(); 
             };
-
         } 
-        // 2. PARTS
-        else if (item.invType === 'part') {
-            document.getElementById('grim-item-img').src = item.imageDataUrl || '';
-            document.getElementById('grim-item-img').style.display = item.imageDataUrl ? 'block' : 'none';
-            document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = getItemColor(item);
-            document.getElementById('grim-item-sub').innerText = `${item.rarity} Component`;
+        // 2. POTIONS
+        else if (item.invType === 'potion') {
+            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Grants <b style="color:var(--cyan-glow);">+${item.buff.amount} ${item.buff.statName}</b><br>for ${Math.floor(item.buff.durationMins / 60)}h ${item.buff.durationMins % 60}m.</div>`;
+            btnAction.style.display = 'block';
             
-            const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
-            
-            document.getElementById('grim-item-stats').innerHTML = `
-                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
-                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
-                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
-                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
-            `;
-            
-            if (this.craftingBench.length < 5) {
-                btnAction.style.display = 'block';
-                btnAction.innerText = '⬆ Add to Bench';
-                btnAction.style.borderColor = 'var(--cyan-glow)';
-                btnAction.style.color = 'var(--cyan-glow)';
-                
+            if (player.activeBuffs && player.activeBuffs.length >= 3) {
+                btnAction.innerText = 'Max Buffs Reached';
+                btnAction.style.borderColor = 'var(--panel-border)';
+                btnAction.style.color = 'var(--text-muted)';
+                btnAction.onclick = () => { SFX.playError(); };
+            } else {
+                btnAction.innerText = '🧪 Drink Potion';
+                btnAction.style.borderColor = '#A855F7';
+                btnAction.style.color = '#A855F7';
                 btnAction.onclick = () => {
-                    SFX.playUIHover();
-                    const part = player.inventory.splice(invIndex, 1)[0];
-                    this.craftingBench.push(part);
-                    this.renderInventory();
+                    SFX.playUISelect();
+                    if (!item.buff.maxDurationMins) item.buff.maxDurationMins = item.buff.durationMins;
+                    player.activeBuffs.push(item.buff);
+                    player.inventory.splice(invIndex, 1);
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this.renderCargo();
                 };
             }
         }
-        // 3. LURES
+        // 3. BAITS
+        else if (item.invType === 'bait') {
+            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Attracts: <b style="color:var(--gold-warn);">${item.targetFamily}</b><br>Charges: ${item.charges}/${item.maxCharges}<br>Rarity Boost: <span style="color:var(--green-safe);">+${item.rarityBoostPct}%</span></div>`;
+            btnEquip.style.display = 'block';
+            btnEquip.innerText = 'Equip Bait';
+            btnEquip.style.borderColor = 'var(--green-safe)';
+            btnEquip.style.color = 'var(--green-safe)';
+            btnEquip.onclick = () => {
+                SFX.playUISelect();
+                const oldBait = player.gear.bait;
+                player.gear.bait = player.inventory.splice(invIndex, 1)[0];
+                if (oldBait) player.inventory.push(oldBait);
+                if (this.callbacks.onSave) this.callbacks.onSave();
+                this.renderCargo();
+            };
+        }
+        // --- RESTORED: 4. LURES ---
         else if (item.invType === 'lure') {
             const eqLure = player.gear.lure || { stats: {color:0, sound:0, light:0, weight:0}, durability: 0, maxDurability: 0 };
             
-            document.getElementById('grim-item-img').src = item.imageDataUrl;
-            document.getElementById('grim-item-img').style.display = 'block';
-            document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = getItemColor(item);
-            document.getElementById('grim-item-sub').innerText = `Custom Lure (${item.componentsUsed} Parts)`;
-            
-            const deltaC = this.formatDelta(item.stats.color, eqLure.stats.color);
-            const deltaS = this.formatDelta(item.stats.sound, eqLure.stats.sound);
-            const deltaL = this.formatDelta(item.stats.light, eqLure.stats.light);
-            const deltaW = this.formatDelta(item.stats.weight, eqLure.stats.weight);
-
-            document.getElementById('grim-item-stats').innerHTML = `
+            statsEl.innerHTML = `
                 <div style="display:flex; justify-content:space-between; margin-bottom:1.5rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 1rem;">
                     <span>Durability:</span> <span>${item.durability}/${item.maxDurability} ${this.formatDelta(item.maxDurability, eqLure.maxDurability)}</span>
                 </div>
-                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm', deltaC)}
-                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud', deltaS)}
-                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow', deltaL)}
-                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink', deltaW)}
+                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm', this.formatDelta(item.stats.color, eqLure.stats.color))}
+                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud', this.formatDelta(item.stats.sound, eqLure.stats.sound))}
+                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow', this.formatDelta(item.stats.light, eqLure.stats.light))}
+                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink', this.formatDelta(item.stats.weight, eqLure.stats.weight))}
             `;
             
             btnEquip.style.display = 'block';
             btnEquip.innerText = 'Equip Lure';
+            btnEquip.style.borderColor = 'var(--green-safe)';
+            btnEquip.style.color = 'var(--green-safe)';
             btnEquip.onclick = () => {
                 SFX.playUISelect();
                 const oldLure = player.gear.lure;
                 player.gear.lure = player.inventory.splice(invIndex, 1)[0];
-                if (oldLure && oldLure.invType === 'lure') player.inventory.push(oldLure);
+                if (oldLure && oldLure.maxDurability > 0) player.inventory.push(oldLure);
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderInventory();
+                this.renderCargo();
             };
         }
-        // 4. RODS
+        // --- RESTORED: 5. RODS ---
         else if (item.invType === 'rod') {
-            // FIX: Add a fallback object so we can calculate deltas against "nothing" if unequipped
             const eqRod = player.gear.rod || { stats: { power: 0, maxTension: 0, flexibility: 0, sensitivity: 0 } };
             
-            document.getElementById('grim-item-img').src = item.art.imageDataUrl;
-            document.getElementById('grim-item-img').style.display = 'block';
-            document.getElementById('grim-item-name').innerText = item.identity.name;
-            document.getElementById('grim-item-name').style.color = getItemColor(item);
-            document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} Rod`;
-            
-            document.getElementById('grim-item-stats').innerHTML = `
+            statsEl.innerHTML = `
                 <div style="display:flex; justify-content:space-between;"><span>Power:</span> <span>${item.stats.power}x ${this.formatDelta(item.stats.power, eqRod.stats.power)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Max Tension:</span> <span>${item.stats.maxTension} ${this.formatDelta(item.stats.maxTension, eqRod.stats.maxTension)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Flexibility:</span> <span>${item.stats.flexibility}x ${this.formatDelta(item.stats.flexibility, eqRod.stats.flexibility)}</span></div>
@@ -556,28 +529,21 @@ export const GrimoireUI = {
             
             btnEquip.style.display = 'block';
             btnEquip.innerText = 'Equip Rod';
+            btnEquip.style.borderColor = 'var(--green-safe)';
+            btnEquip.style.color = 'var(--green-safe)';
             btnEquip.onclick = () => {
                 SFX.playUISelect();
                 const oldRod = player.gear.rod;
                 player.gear.rod = player.inventory.splice(invIndex, 1)[0];
-                // Only push the old rod back to inventory if one was actually equipped!
                 if (oldRod) player.inventory.push(oldRod);
-                
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderInventory();
+                this.renderCargo();
             };
         }
-        // 5. BOATS
+        // --- RESTORED: 6. BOATS ---
         else if (item.invType === 'boat') {
             const eqBoat = player.gear.boat;
-            
-            document.getElementById('grim-item-img').src = item.art.profileDataUrl;
-            document.getElementById('grim-item-img').style.display = 'block';
-            document.getElementById('grim-item-name').innerText = item.identity.name;
-            document.getElementById('grim-item-name').style.color = getItemColor(item);
-            document.getElementById('grim-item-sub').innerText = `${item.identity.rarity} ${item.art.boatType.toUpperCase()}`;
-            
-            document.getElementById('grim-item-stats').innerHTML = `
+            statsEl.innerHTML = `
                 <div style="display:flex; justify-content:space-between;"><span>Hull HP:</span> <span>${item.stats.maxHp} ${this.formatDelta(item.stats.maxHp, eqBoat.stats.maxHp)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Speed:</span> <span>${item.stats.speed} ${this.formatDelta(item.stats.speed, eqBoat.stats.speed)}</span></div>
                 <div style="display:flex; justify-content:space-between;"><span>Stealth:</span> <span>${item.stats.stealth}x ${this.formatDelta(item.stats.stealth, eqBoat.stats.stealth)}</span></div>
@@ -586,20 +552,10 @@ export const GrimoireUI = {
                     Boats cannot be carried in your backpack.<br>Access your Safehouse Dry Dock to manage hulls.
                 </div>
             `;
-            
-            // Completely hide action buttons
-            btnEquip.style.display = 'none';
-            btnAction.style.display = 'none';
         }
-        // 6. UPGRADES (Fallback if one ends up in the cargo)
+        // --- RESTORED: 7. UPGRADES ---
         else if (item.invType === 'upgrade') {
-            document.getElementById('grim-item-img').src = ''; // Upgrades don't have art yet
-            document.getElementById('grim-item-img').style.display = 'none';
-            document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = 'var(--cyan-glow)';
-            document.getElementById('grim-item-sub').innerText = `Boat Upgrade [${item.slot.toUpperCase()}]`;
-            
-            document.getElementById('grim-item-stats').innerHTML = `
+            statsEl.innerHTML = `
                 <div style="color:var(--text-main); font-size:1.2rem; text-align:center; padding: 1rem 0;">
                     ${item.desc}
                 </div>
@@ -607,89 +563,69 @@ export const GrimoireUI = {
                     Upgrades must be installed using the crane at a Safehouse Dry Dock.
                 </div>
             `;
-            
-            btnEquip.style.display = 'none';
-            btnAction.style.display = 'none';
         }
-
-        // 7. CHESTS (Treasure & Mimics)
-        else if (item.invType === 'chest') {
-            document.getElementById('grim-item-img').src = item.imageDataUrl;
-            document.getElementById('grim-item-img').style.display = 'block';
-            document.getElementById('grim-item-name').innerText = item.name;
-            document.getElementById('grim-item-name').style.color = 'var(--gold-warn)';
-            document.getElementById('grim-item-sub').innerText = `Unknown Contents`;
-            
-            document.getElementById('grim-item-stats').innerHTML = `
-                <div style="color:var(--text-muted); font-size:1.2rem; text-align:center; padding: 2rem 0;">
-                    A heavy, waterlogged chest pulled from the depths.<br><br>What could be inside?
-                </div>
-            `;
-            
+        // 8. CONSUMABLES
+        else if (item.invType === 'consumable') {
+            statsEl.innerHTML = `<div style="text-align:center; padding:1rem 0;">${item.desc}</div>`;
+            btnAction.style.display = 'block';
+            btnAction.innerText = 'Use Item';
+            btnAction.style.borderColor = 'var(--cyan-glow)';
+            btnAction.style.color = 'var(--cyan-glow)';
+            btnAction.onclick = () => {
+                SFX.playUISelect();
+                if (item.id === 'cons_repair_kit') player.vitals.hp = Math.min(player.gear.boat.stats.maxHp, player.vitals.hp + 25);
+                else if (item.id === 'cons_ration') player.vitals.rations = Math.min(20, player.vitals.rations + 1);
+                else if (item.id === 'cons_fuel_oil') player.vitals.fuel = 100;
+                
+                player.inventory.splice(invIndex, 1);
+                if (this.callbacks.onSave) this.callbacks.onSave();
+                this.renderCargo();
+            };
+        }
+        // 9. CHESTS
+        else if (item.invType === 'chest' || item.invType === 'chest_encounter') {
+            statsEl.innerHTML = `<div style="text-align:center; padding: 2rem 0;">A heavy, waterlogged chest.</div>`;
             btnAction.style.display = 'block';
             btnAction.innerText = '🔓 Open Chest';
             btnAction.style.borderColor = 'var(--gold-warn)';
             btnAction.style.color = 'var(--gold-warn)';
-            
             btnAction.onclick = () => {
-                // FIX: Use the deterministic seed saved to the chest when it was caught!
-                // This permanently locks the outcome of the chest, preventing save-scumming.
-                const chestSeed = item.chestSeed || Date.now();
-                const rng = createRng(chestSeed);
+                const rng = createRng(item.chestSeed || Date.now());
                 const isMimic = rng.chance(0.3); 
-                
-                // Remove the chest from inventory immediately
                 player.inventory.splice(invIndex, 1);
                 btnAction.style.display = 'none';
 
                 if (isMimic) {
-                    SFX.playLineSnap(); // Crunch!
-                    const mimicArt = generateChest({ rng: createRng(chestSeed), isMimic: true });
-                    
-                    document.getElementById('grim-item-img').src = mimicArt.imageDataUrl;
-                    document.getElementById('grim-item-name').innerText = 'Mimic!';
-                    document.getElementById('grim-item-name').style.color = 'var(--red-danger)';
-                    document.getElementById('grim-item-stats').innerHTML = `<div style="color:var(--red-danger); font-size:1.4rem; text-align:center; padding: 2rem 0;">It bit you!<br><br>Hull took 20 damage!</div>`;
-                    
+                    SFX.playLineSnap(); 
+                    document.getElementById('grim-cargo-img').src = generateChest({ rng: createRng(item.chestSeed), isMimic: true }).imageDataUrl;
+                    document.getElementById('grim-cargo-name').innerText = 'Mimic!';
+                    document.getElementById('grim-cargo-name').style.color = 'var(--red-danger)';
+                    statsEl.innerHTML = `<div style="color:var(--red-danger); font-size:1.4rem; text-align:center; padding: 2rem 0;">It bit you!<br>Hull took 20 damage!</div>`;
                     player.vitals.hp -= 20;
-                    
                     if (this.callbacks.onSave) this.callbacks.onSave();
-                    this._refreshInventoryGridOnly();
-                    
-                    // If the mimic killed the player, wait 1.5s for them to read the text, then trigger death
+                    this._refreshCargoGridOnly();
                     if (player.vitals.hp <= 0 && this.callbacks.onDeath) {
-                        setTimeout(() => {
-                            this.close();
-                            this.callbacks.onDeath();
-                        }, 1500); 
+                        setTimeout(() => { this.close(); this.callbacks.onDeath(); }, 1500); 
                     }
                 } else {
                     SFX.playGold();
-                    
                     const goldFound = rng.int(150, 400);
                     player.vitals.gold += goldFound;
-                    
                     let lootHtml = `<div style="color:var(--green-safe); font-size:1.4rem; text-align:center; margin-bottom:1rem;">Found ${goldFound}g!</div>`;
                     
-                    // Generate 2-3 Rare Parts
                     const rareParts =['phosphor_cap', 'wraith_silk', 'myconid_spore', 'jelly_bell'];
                     const numParts = rng.int(2, 3);
                     for(let i=0; i<numParts; i++) {
                         const pId = rng.pick(rareParts);
                         const pName = pId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                        player.inventory.push({
-                            id: `part_${rng.int(10000,99999)}`,
-                            invType: 'part',
-                            name: pName,
-                            visualId: pId,
-                            rarity: 'Rare',
+                        player.reagents.push({
+                            id: `part_${rng.int(10000,99999)}`, invType: 'part', name: pName, visualId: pId, rarity: 'Rare',
                             stats: { color: rng.int(-20,20), sound: rng.int(-20,20), light: rng.int(-20,20), weight: rng.int(-20,20) },
                             imageDataUrl: generateLurePart({ visualId: pId, rng })
                         });
-                        lootHtml += `<div style="color:var(--cyan-glow); font-size:1.2rem; text-align:center; margin-bottom:0.2rem;">+1x ${pName}</div>`;
+                        lootHtml += `<div style="color:var(--cyan-glow); font-size:1.2rem; text-align:center; margin-bottom:0.2rem;">+1x ${pName} (To Reagents)</div>`;
                     }
                     
-                    // 15% Chance to find a Fishing Rod
                     if (rng.chance(0.15)) {
                         const rod = generateRodData({ seed: Date.now() });
                         rod.invType = 'rod';
@@ -697,115 +633,262 @@ export const GrimoireUI = {
                         lootHtml += `<div style="color:var(--gold-warn); font-size:1.2rem; text-align:center; margin-top:0.8rem;">+ ${rod.identity.name}!</div>`;
                     }
                     
-                    document.getElementById('grim-item-stats').innerHTML = lootHtml;
-                    document.getElementById('grim-item-name').innerText = 'Treasure!';
-                    
+                    statsEl.innerHTML = lootHtml;
+                    document.getElementById('grim-cargo-name').innerText = 'Treasure!';
                     if (this.callbacks.onSave) this.callbacks.onSave();
-                    this._refreshInventoryGridOnly();
+                    this._refreshCargoGridOnly();
                 }
             };
         }
-        
         SFX.playUISelect();
     },
 
-    showBenchPreview() {
-        document.querySelectorAll('.inv-slot').forEach(el => el.classList.remove('selected'));
-        
-        if (this.craftingBench.length === 0) {
-            document.getElementById('grim-inv-details').style.display = 'none';
-            document.getElementById('grim-inv-empty').style.display = 'flex';
-            document.getElementById('grim-inv-empty').innerHTML = "Select an item in your cargo,<br>or add parts to the Bench.";
-            return;
-        }
-
-        document.getElementById('grim-inv-empty').style.display = 'none';
-        document.getElementById('grim-inv-details').style.display = 'flex';
-        
-        document.getElementById('grim-item-img').style.display = 'none'; 
-        document.getElementById('grim-item-name').innerText = "Crafting Preview";
-        document.getElementById('grim-item-name').style.color = 'var(--text-main)';
-        document.getElementById('grim-item-sub').innerText = `${this.craftingBench.length} / 5 Parts Selected`;
-
-        let tc = 0, ts = 0, tl = 0, tw = 0;
-        this.craftingBench.forEach(p => {
-            tc += p.stats.color; ts += p.stats.sound;
-            tl += p.stats.light; tw += p.stats.weight;
-        });
-        
-        const fmt = v => v > 0 ? `<span class="dash-pos">+${v}</span>` : (v < 0 ? `<span class="dash-neg">${v}</span>` : `0`);
-
-        document.getElementById('grim-item-stats').innerHTML = `
-            ${buildStatSlider('Net Color', tc, 'Cold', 'Warm')}
-            ${buildStatSlider('Net Sound', ts, 'Silent', 'Loud')}
-            ${buildStatSlider('Net Light', tl, 'Dark', 'Glow')}
-            ${buildStatSlider('Net Weight', tw, 'Float', 'Sink')}
-        `;
-
-        const btnAction = document.getElementById('btn-inv-action');
-        document.getElementById('btn-inv-equip').style.display = 'none';
-        
-        if (this.craftingBench.length >= 3) {
-            btnAction.style.display = 'block';
-            btnAction.innerText = '🔨 Craft Lure';
-            btnAction.style.borderColor = 'var(--gold-warn)';
-            btnAction.style.color = 'var(--gold-warn)';
-            
-            btnAction.onclick = () => {
-                const player = this.gameState.player;
-                const finalLure = LureCrafter.craft(this.craftingBench, player.stats.lureCrafting, Date.now());
-                if (finalLure) {
-                    SFX.playCatchSuccess(); 
-                    finalLure.invType = 'lure';
-                    player.inventory.push(finalLure);
-                    this.craftingBench =[]; 
-                    if (this.callbacks.onSave) this.callbacks.onSave();
-                    this.renderInventory();
-                    
-                    const newIndex = player.inventory.length - 1;
-                    const slots = document.querySelectorAll('.inv-slot');
-                    this.showInventoryDetails(player.inventory[newIndex], newIndex, slots[slots.length-1]);
-                }
-            };
-        } else {
-            btnAction.style.display = 'none';
-        }
-    },
-
-    _refreshInventoryGridOnly() {
+    _refreshCargoGridOnly() {
         const player = this.gameState.player;
-        const effStats = PlayerEngine.getEffectiveStats(player);
-        const maxCargo = effStats.exploration.cargoSpace;
+        const maxCargo = PlayerEngine.getEffectiveStats(player).exploration.cargoSpace;
+        document.getElementById('grim-cargo-count').innerText = player.inventory.length;
+        document.getElementById('grim-cargo-max').innerText = maxCargo;
         
-        document.getElementById('grim-inv-count').innerText = player.inventory.length;
-        document.getElementById('grim-inv-max').innerText = maxCargo;
-        
-        const grid = document.getElementById('grim-inv-grid');
+        const grid = document.getElementById('grim-cargo-grid');
         grid.innerHTML = '';
         
         for (let i = 0; i < maxCargo; i++) {
             const slot = document.createElement('div');
             slot.className = 'inv-slot';
-            
             if (i < player.inventory.length) {
                 const item = player.inventory[i];
-                let imgSrc = "";
+                let imgSrc = item.imageDataUrl || (item.art ? (item.art.profileDataUrl || item.art.imageDataUrl) : '');
                 
-                if (item.invType === 'fish') imgSrc = item.art.imageDataUrl;
-                else if (item.invType === 'part' || item.invType === 'lure' || item.invType === 'chest') imgSrc = item.imageDataUrl || ''; 
-                else if (item.invType === 'rod') imgSrc = item.art.imageDataUrl;
-                else if (item.invType === 'boat') imgSrc = item.art.profileDataUrl;
-
                 if (imgSrc) {
                     slot.innerHTML = `<img src="${imgSrc}" />`;
                 } else {
-                    slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${item.name.substring(0,6)}</span>`;
+                    // FIX: Safely fallback if name is undefined
+                    const safeName = item.name || (item.identity ? item.identity.name : 'Unknown');
+                    slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${safeName.substring(0,6)}</span>`;
                 }
                 
-                slot.onclick = () => this.showInventoryDetails(item, i, slot);
+                slot.onclick = () => this.showCargoDetails(item, i, slot);
             }
             grid.appendChild(slot);
         }
+    },
+
+    // --- TACKLE BOX & CRAFTING ---
+    renderTackle() {
+        const player = this.gameState.player;
+        const benchGrid = document.getElementById('grim-craft-slots');
+        benchGrid.innerHTML = '';
+        
+        // Render Crafting Bench
+        for (let i = 0; i < 5; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'craft-slot';
+            if (i < this.craftingBench.length) {
+                const part = this.craftingBench[i];
+                slot.innerHTML = `<img src="${part.imageDataUrl}" />`;
+                slot.style.borderColor = 'var(--cyan-glow)';
+                slot.onclick = () => {
+                    SFX.playUIHover();
+                    player.reagents.push(this.craftingBench.splice(i, 1)[0]);
+                    this.renderTackle();
+                };
+            }
+            benchGrid.appendChild(slot);
+        }
+
+        document.getElementById('grim-tackle-count').innerText = player.reagents.length;
+        
+        const grid = document.getElementById('grim-tackle-grid');
+        grid.innerHTML = '';
+        
+        player.reagents.forEach((item, i) => {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.innerHTML = `<img src="${item.imageDataUrl}" />`;
+            slot.onclick = () => this.showTackleDetails(item, i, slot);
+            grid.appendChild(slot);
+        });
+        
+        this.showBenchPreview();
+    },
+
+    showTackleDetails(item, invIndex, slotEl) {
+        document.querySelectorAll('#grim-tackle-grid .inv-slot').forEach(el => el.classList.remove('selected'));
+        slotEl.classList.add('selected');
+        
+        document.getElementById('grim-tackle-empty').style.display = 'none';
+        document.getElementById('grim-tackle-details').style.display = 'flex';
+        document.getElementById('btn-group-craft').style.display = 'none';
+        
+        const btnAction = document.getElementById('btn-tackle-action');
+        
+        document.getElementById('grim-tackle-img').src = item.imageDataUrl;
+        document.getElementById('grim-tackle-img').style.display = 'block';
+        document.getElementById('grim-tackle-name').innerText = item.name;
+        document.getElementById('grim-tackle-name').style.color = getItemColor(item);
+        document.getElementById('grim-tackle-sub').innerText = `${item.rarity} Reagent`;
+        
+        document.getElementById('grim-tackle-stats').innerHTML = `
+            ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
+            ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
+            ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
+            ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
+        `;
+        
+        if (this.craftingBench.length < 5) {
+            btnAction.style.display = 'block';
+            btnAction.innerText = '⬆ Add to Bench';
+            btnAction.style.borderColor = 'var(--cyan-glow)';
+            btnAction.style.color = 'var(--cyan-glow)';
+            
+            btnAction.onclick = () => {
+                SFX.playUIHover();
+                this.craftingBench.push(this.gameState.player.reagents.splice(invIndex, 1)[0]);
+                this.renderTackle();
+            };
+        } else {
+            btnAction.style.display = 'none';
+        }
+        SFX.playUISelect();
+    },
+
+    showBenchPreview() {
+        document.querySelectorAll('#grim-tackle-grid .inv-slot').forEach(el => el.classList.remove('selected'));
+        
+        if (this.craftingBench.length === 0) {
+            document.getElementById('grim-tackle-details').style.display = 'none';
+            document.getElementById('grim-tackle-empty').style.display = 'flex';
+            return;
+        }
+
+        if (!this.craftingMode) this.craftingMode = 'lure';
+
+        document.getElementById('grim-tackle-empty').style.display = 'none';
+        document.getElementById('grim-tackle-details').style.display = 'flex';
+        
+        document.getElementById('grim-tackle-img').style.display = 'none'; 
+        document.getElementById('grim-tackle-name').innerText = "Alchemy & Crafting";
+        document.getElementById('grim-tackle-name').style.color = 'var(--text-main)';
+        document.getElementById('grim-tackle-sub').innerText = `${this.craftingBench.length} / 5 Parts Selected`;
+
+        // 1. Build the Category Selection Tabs (Flex-wrap prevents horizontal scrolling)
+        let modeTabs = `
+            <div style="display:flex; gap:0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                <button id="btn-preview-lure" class="menu-btn" style="flex:1; padding:0.4rem; font-size:1rem; margin:0; border-color:${this.craftingMode==='lure'?'var(--cyan-glow)':'var(--panel-border)'}; color:${this.craftingMode==='lure'?'var(--cyan-glow)':'var(--text-muted)'}">🪝 Lure</button>
+                <button id="btn-preview-potion" class="menu-btn" style="flex:1; padding:0.4rem; font-size:1rem; margin:0; border-color:${this.craftingMode==='potion'?'#A855F7':'var(--panel-border)'}; color:${this.craftingMode==='potion'?'#A855F7':'var(--text-muted)'}">🧪 Potion</button>
+                <button id="btn-preview-bait" class="menu-btn" style="flex:1; padding:0.4rem; font-size:1rem; margin:0; border-color:${this.craftingMode==='bait'?'var(--gold-warn)':'var(--panel-border)'}; color:${this.craftingMode==='bait'?'var(--gold-warn)':'var(--text-muted)'}">🪱 Bait</button>
+            </div>
+        `;
+
+        let previewHtml = '';
+        let craftFunc = null;
+        const player = this.gameState.player;
+        const lvl = player.stats.crafting;
+        
+        // Hide the old hardcoded HTML buttons to clean up the UI
+        const btnGroup = document.getElementById('btn-group-craft');
+        if (btnGroup) btnGroup.style.display = 'none'; 
+        
+        const btnAction = document.getElementById('btn-tackle-action');
+
+        // 2. Generate the dynamic preview based on the mode selected
+        if (this.craftingBench.length < 3) {
+            previewHtml = `<div style="text-align:center; color:var(--text-muted); font-size:1.2rem; padding: 2rem 0;">Need at least 3 parts to see preview.</div>`;
+            btnAction.style.display = 'none';
+        } else {
+            // -- LURE PREVIEW --
+            if (this.craftingMode === 'lure') {
+                let tc = 0, ts = 0, tl = 0, tw = 0;
+                let baseDurability = 0;
+                const RARITY_DURABILITY = { 'Common': 2, 'Uncommon': 3, 'Rare': 5, 'Legendary': 8, 'Boss': 12 };
+                
+                this.craftingBench.forEach(p => { 
+                    tc += p.stats.color; ts += p.stats.sound; tl += p.stats.light; tw += p.stats.weight; 
+                    baseDurability += (RARITY_DURABILITY[p.rarity] || 2);
+                });
+                
+                const dur = Math.floor(baseDurability * (1 + lvl * 0.1));
+
+                previewHtml = `
+                    <div style="font-size: 1.1rem; color: var(--text-main); margin-bottom: 1rem; text-align: center;">
+                        Expected Durability: <span style="color:var(--cyan-glow); font-weight:bold;">${dur} Casts</span>
+                    </div>
+                    ${buildStatSlider('Net Color', tc, 'Cold', 'Warm')}
+                    ${buildStatSlider('Net Sound', ts, 'Silent', 'Loud')}
+                    ${buildStatSlider('Net Light', tl, 'Dark', 'Glow')}
+                    ${buildStatSlider('Net Weight', tw, 'Float', 'Sink')}
+                `;
+                
+                craftFunc = () => LureCrafter.craft(this.craftingBench, lvl, Date.now());
+                btnAction.innerText = '🔨 Craft Lure';
+                btnAction.style.borderColor = 'var(--cyan-glow)';
+                btnAction.style.color = 'var(--cyan-glow)';
+            } 
+            // -- POTION PREVIEW --
+            else if (this.craftingMode === 'potion') {
+                const dummy = AlchemyCrafter.craftPotion(this.craftingBench, lvl, 0);
+                if (dummy) {
+                    previewHtml = `
+                        <div style="text-align: center; margin-bottom: 1rem;">
+                            <div style="color: var(--text-muted); font-size: 1rem; text-transform: uppercase;">Expected Result</div>
+                            <div style="color: #A855F7; font-size: 1.6rem; font-weight: bold; margin: 0.5rem 0;">${dummy.name}</div>
+                        </div>
+                        <div class="dashboard-group">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:1.1rem;"><span>Buffs Stat:</span> <span style="color:var(--cyan-glow); font-weight:bold;">${dummy.buff.statName}</span></div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:1.1rem;"><span>Potency:</span> <span style="color:var(--green-safe); font-weight:bold;">+${dummy.buff.amount}</span></div>
+                            <div style="display:flex; justify-content:space-between; font-size:1.1rem;"><span>Duration:</span> <span style="color:var(--text-main); font-weight:bold;">${Math.floor(dummy.buff.durationMins / 60)}h ${dummy.buff.durationMins % 60}m</span></div>
+                        </div>
+                    `;
+                }
+                craftFunc = () => AlchemyCrafter.craftPotion(this.craftingBench, lvl, Date.now());
+                btnAction.innerText = '🧪 Brew Potion';
+                btnAction.style.borderColor = '#A855F7';
+                btnAction.style.color = '#A855F7';
+            } 
+            // -- BAIT PREVIEW --
+            else if (this.craftingMode === 'bait') {
+                const dummy = AlchemyCrafter.craftBait(this.craftingBench, lvl, 0);
+                if (dummy) {
+                    previewHtml = `
+                        <div style="text-align: center; margin-bottom: 1rem;">
+                            <div style="color: var(--text-muted); font-size: 1rem; text-transform: uppercase;">Expected Result</div>
+                            <div style="color: var(--gold-warn); font-size: 1.6rem; font-weight: bold; margin: 0.5rem 0;">${dummy.name}</div>
+                        </div>
+                        <div class="dashboard-group">
+                            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:1.1rem;"><span>Attracts:</span> <span style="color:var(--gold-warn); font-weight:bold;">${dummy.targetFamily}</span></div>
+                            <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem; font-size:1.1rem;"><span>Charges:</span> <span style="color:var(--text-main); font-weight:bold;">${dummy.charges} Casts</span></div>
+                            <div style="display:flex; justify-content:space-between; font-size:1.1rem;"><span>Rarity Boost:</span> <span style="color:var(--green-safe); font-weight:bold;">+${dummy.rarityBoostPct}%</span></div>
+                        </div>
+                    `;
+                }
+                craftFunc = () => AlchemyCrafter.craftBait(this.craftingBench, lvl, Date.now());
+                btnAction.innerText = '🪱 Mash Bait';
+                btnAction.style.borderColor = 'var(--gold-warn)';
+                btnAction.style.color = 'var(--gold-warn)';
+            }
+
+            // Bind the actual commit action to the button
+            btnAction.style.display = 'block';
+            btnAction.onclick = () => {
+                if (!craftFunc) return;
+                const result = craftFunc();
+                if (result) {
+                    SFX.playCatchSuccess(); 
+                    this.gameState.player.inventory.push(result); // Sent to Cargo Hold!
+                    this.craftingBench = []; 
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this.renderTackle();
+                }
+            };
+        }
+
+        // Inject the HTML into the panel
+        document.getElementById('grim-tackle-stats').innerHTML = modeTabs + previewHtml;
+
+        // Attach listeners to the dynamically generated mode tabs
+        document.getElementById('btn-preview-lure').onclick = () => this.setCraftMode('lure');
+        document.getElementById('btn-preview-potion').onclick = () => this.setCraftMode('potion');
+        document.getElementById('btn-preview-bait').onclick = () => this.setCraftMode('bait');
     },
 
     // --- LOADOUT ---
@@ -902,6 +985,38 @@ export const GrimoireUI = {
             }
             return `<span style="color:var(--text-main); font-weight:bold;">${v}</span>`;
         };
+
+        // --- NEW: Render Bait Slot ---
+        const bait = player.gear.bait;
+        if (bait) {
+            document.querySelector('#loadout-bait .slot-content').innerHTML = `
+                <img src="${bait.imageDataUrl}" />
+                <div class="loadout-details" style="flex: 1;">
+                    <b style="font-size: 1.3rem; color:var(--gold-warn);">${bait.name}</b>
+                    <span style="color:var(--text-main); font-size: 0.9rem; display:block;">Attracts: ${bait.targetFamily}</span>
+                    <span style="color:var(--text-muted); font-size: 0.9rem; display:block;">Charges: ${bait.charges}/${bait.maxCharges} | Rarity Boost: +${bait.rarityBoostPct}%</span>
+                </div>
+                <button class="menu-btn btn-unequip-bait" style="padding: 0.4rem 0.8rem; font-size: 1rem; width: auto; margin:0;" ${!canUnequip ? 'disabled' : ''}>Unequip</button>
+            `;
+            const btnBait = document.querySelector('.btn-unequip-bait');
+            if (btnBait && !btnBait.disabled) {
+                btnBait.onclick = () => {
+                    SFX.playUISelect();
+                    player.inventory.push(player.gear.bait);
+                    player.gear.bait = null;
+                    if (this.callbacks.onSave) this.callbacks.onSave();
+                    this.renderLoadout();
+                };
+            }
+        } else {
+            document.querySelector('#loadout-bait .slot-content').innerHTML = `
+                <div style="width:50px;height:50px;background:#000;border:1px solid var(--panel-border);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.9rem;">Empty</div>
+                <div class="loadout-details" style="flex: 1;">
+                    <b style="color:var(--text-muted);">No Bait Equipped</b>
+                    <span style="display:block; font-size:0.9rem; color:var(--text-muted);">Standard spawn pool active.</span>
+                </div>
+            `;
+        }
         
         document.getElementById('grim-dashboard-content').innerHTML = `
             <div class="dashboard-group">

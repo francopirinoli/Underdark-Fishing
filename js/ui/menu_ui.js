@@ -11,7 +11,7 @@ import { showStatTooltip, moveStatTooltip, hideStatTooltip } from '../util/utils
 import { STAT_DESCRIPTIONS } from '../data/player_data.js'; // Added
 
 export const MenuUI = {
-    ccStats: { fishing: 1, stamina: 1, driving: 1, lureCrafting: 1, bartering: 1, intelligence: 1 },
+    ccStats: { fishing: 1, stamina: 1, driving: 1, crafting: 1, bartering: 1, intelligence: 1 }, // <-- UPDATED
     ccPoints: 3,
     ccIdentity: null,
     callbacks: null,
@@ -149,7 +149,7 @@ export const MenuUI = {
         
         const displayNames = {
             fishing: "Fishing", stamina: "Stamina", driving: "Driving", 
-            lureCrafting: "Lure Crafting", bartering: "Bartering", intelligence: "Intelligence"
+            crafting: "Crafting", bartering: "Bartering", intelligence: "Intelligence" // <-- UPDATED
         };
 
         for (const [key, val] of Object.entries(this.ccStats)) {

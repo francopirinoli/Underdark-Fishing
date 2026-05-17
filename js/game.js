@@ -189,8 +189,13 @@ function loadExistingDescent(slot) {
     if (!data) return;
 
     player = data.player;
-    player.inventory = player.inventory ||[]; 
-    player.activeQuests = player.activeQuests ||[];
+    
+    // --- FIX: Safely initialize new arrays for older save files ---
+    player.inventory = player.inventory || []; 
+    player.reagents = player.reagents || [];       
+    player.activeBuffs = player.activeBuffs || []; 
+    player.activeQuests = player.activeQuests || [];
+    player.completedQuests = player.completedQuests || []; // <-- NEW: Catch old saves
     player.bestiary = player.bestiary || {};
 
     discoveredNodes = data.discoveredNodes || [`${data.globalX},${data.globalY}`];
@@ -208,9 +213,7 @@ function loadExistingDescent(slot) {
         }
     }
 
-    // Load the saved Treasure Chests
     EventManager.loadSaveData(data.eventData);
-
     enterWorld();
 }
 
@@ -598,13 +601,26 @@ function gameLoop(timestamp) {
             player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
         }
 
-        // --- TIME & DAY ROLLOVER (Events) ---
+// --- TIME & DAY ROLLOVER (Events) ---
         gameTimeMinutes += dt; 
         if (gameTimeMinutes >= 24 * 60) { 
             gameTimeMinutes -= 24 * 60; 
             gameDay++; 
             EventManager.onNewDay(gameDay, world); 
+            player.completedQuests = []; // <-- NEW: Clear the completed list for the new day
             HUD.logAction("A new day begins. The Darklake shifts...", "safe");
+        }
+
+// --- TICK DOWN ACTIVE BUFFS ---
+        if (player.activeBuffs && player.activeBuffs.length > 0) {
+            for (let i = player.activeBuffs.length - 1; i >= 0; i--) {
+                // FIX: Removed the "/ 60". dt already perfectly represents 1 in-game minute!
+                player.activeBuffs[i].durationMins -= dt; 
+                if (player.activeBuffs[i].durationMins <= 0) {
+                    HUD.logAction(`${player.activeBuffs[i].statName} potion effect has worn off.`, "warn");
+                    player.activeBuffs.splice(i, 1);
+                }
+            }
         }
 
         if (mouse.isCharging) {
@@ -754,9 +770,13 @@ function gameLoop(timestamp) {
                     }
 
                     player.activeQuests.forEach(q => {
-                        // FIX: Removed manual Hunt/Trophy counters. Handled dynamically in UI.
                         if (q.type === 'bounty' && !q.isComplete) {
-                            if (caughtFish.identity.rarity === 'Boss' && globalX === q.targetNode.x && globalY === q.targetNode.y) {
+                            // UPDATED: Check for specific species, rarity requirement, and location
+                            if (caughtFish.id === q.targetSpeciesId && 
+                                caughtFish.identity.rarity === q.targetRarity && 
+                                globalX === q.targetNode.x && 
+                                globalY === q.targetNode.y) {
+                                
                                 q.isComplete = true;
                                 HUD.logAction(`Bounty Complete: ${q.title}!`, "safe");
                             }
@@ -848,15 +868,79 @@ function handleAttemptCast() {
             else if (tId === TILE.FLORA) maxDepth = castRng.int(20, 35);
             else maxDepth = castRng.int(12, 22);
 
-            // 2. Generate Local Fish Pool as INSTANCES
-            let castPool = Array.from({length: 10}, (_, i) => {
-                let pool = currentLocalFishPool; 
-                if (tId === TILE.DEEP_WATER) {
-                    const ds = pool.filter(f => f.identity.family === 'deepsea');
-                    if (ds.length > 0) pool = ds;
+// 2. Generate Local Fish Pool as INSTANCES
+            let pool = currentLocalFishPool; 
+            
+            // --- NEW: APPLY BAIT MODIFIERS ---
+            let baitBoost = 0;
+            if (player.gear.bait) {
+                const b = player.gear.bait;
+                
+                // FIX: Fallback to itemData if targetFamilyIds is missing at the root (for older crafted bait)
+                const targetIds = b.targetFamilyIds || (b.itemData ? b.itemData.targetFamilyIds : []);
+                
+                // Filter the pool to ONLY include the target families if any exist in this node
+                const targetedFish = pool.filter(f => targetIds.includes(f.identity.family));
+                
+                if (targetedFish.length > 0) {
+                    pool = targetedFish;
+                    baitBoost = b.rarityBoostPct;
                 }
+                
+                // Deduct a charge
+                b.charges--;
+                if (b.charges <= 0) {
+                    HUD.logAction(`Your ${b.name} was fully consumed!`, "warn");
+                    player.gear.bait = null;
+                }
+            }
+
+            if (tId === TILE.DEEP_WATER) {
+                const ds = pool.filter(f => f.identity.family === 'deepsea');
+                if (ds.length > 0) pool = ds;
+            }
+
+            let castPool = Array.from({length: 10}, (_, i) => {
                 const template = castRng.pick(pool);
-                return generateFishInstance(template, createRng(Date.now() + i));
+                
+                // If bait triggers, we use a rigged RNG that guarantees a high rarity roll (80-100)
+                let instanceRng = createRng(Date.now() + i);
+                if (baitBoost > 0 && Math.random() < (baitBoost / 100)) {
+                    const originalInt = instanceRng.int;
+                    instanceRng.int = (min, max) => {
+                        if (max === 100) return originalInt(80, 100); // Rig the rarity roll!
+                        return originalInt(min, max);
+                    };
+                }
+                
+                return generateFishInstance(template, instanceRng);
+            });
+
+            // --- NEW: INJECT BOUNTY TARGETS ---
+            player.activeQuests.forEach(q => {
+                if (q.type === 'bounty' && !q.isComplete && q.targetNode.x === globalX && q.targetNode.y === globalY) {
+                    const template = currentLocalFishPool.find(f => f.id === q.targetSpeciesId);
+                    if (template) {
+                        // Rig the RNG to guarantee the exact rarity the quest demands
+                        const riggedRng = createRng(Date.now() + 999);
+                        const originalInt = riggedRng.int;
+                        riggedRng.int = (min, max) => {
+                            if (max === 100) {
+                                if (q.targetRarity === 'Rare') return 81;
+                                if (q.targetRarity === 'Legendary') return 95;
+                                if (q.targetRarity === 'Boss') return 100;
+                            }
+                            return originalInt(min, max);
+                        };
+                        
+                        const bountyFish = generateFishInstance(template, riggedRng);
+                        
+                        // Ensure the bounty boss doesn't get scared away by boat noise
+                        bountyFish.combat.aggression = Math.max(0.6, bountyFish.combat.aggression);
+                        
+                        castPool.push(bountyFish);
+                    }
+                }
             });
 
             // 3. APPLY STEALTH & NOISE FILTER
