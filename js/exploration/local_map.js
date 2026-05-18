@@ -129,21 +129,22 @@ export function generateLocalMap(globalNode, globalSeed) {
             const wx = x + (warpX * edgeFade);
             const wy = y + (warpY * edgeFade);
 
-            // Distance to Central Lake
+// Distance to Central Lake
             let minDist = Math.max(0, Math.hypot(wx - cx, wy - cy) - centralRadius);
+            let distToPath = Infinity;
             
             // Distance to Path Network
             for (const path of paths) {
                 for (let i = 0; i < path.length - 1; i++) {
                     const d = distToSegment(wx, wy, path[i].x, path[i].y, path[i+1].x, path[i+1].y);
-                    if (d < minDist) minDist = d;
+                    if (d < distToPath) distToPath = d;
                 }
             }
+            if (distToPath < minDist) minDist = distToPath;
 
             // Erosion Noise (Subtracts from the distance, creating wide areas and narrow choke points)
             let erosion;
             if (lakeType === 'fractured_chasms') {
-                // Ridged noise creates sharp, jagged cuts
                 erosion = Math.abs(elevNoise.fbm(x * 0.015, y * 0.015, 4) - 0.5) * 2.0 * erosionAmp; 
             } else {
                 erosion = elevNoise.fbm(x * 0.012, y * 0.012, 4) * erosionAmp;
@@ -164,35 +165,37 @@ export function generateLocalMap(globalNode, globalSeed) {
             if (globalNode.exits.e) exitMask = Math.min(exitMask, Math.hypot(x - LOCAL_MAP_SIZE, y - cy));
             
             if (exitMask < 26) {
-                // Smoothly force the elevation into Deep Water at the exact exit point
                 elevation = Math.min(elevation, exitMask - 26); 
             }
 
             // --- 3. THRESHOLDING (Tile Assignment) ---
             const dVal = detailNoise.fbm(x * 0.05, y * 0.05, 3); // High frequency detail
 
-            // Deep water forms the core of the lake/rivers
-            if (elevation < -12) {
+            // BUG 2 FIX: Enforce an absolute safe channel around the exit paths
+            // Our boat has a collision radius of 6, so a safe channel of 16 guarantees passability
+            const isSafeChannel = distToPath < 16; 
+            const isDeepChannel = distToPath < 6;
+
+            if (elevation < -12 || isDeepChannel) {
                 grid[y][x] = TILE.DEEP_WATER;
             } 
-            // Shallow water lines the shores
-            else if (elevation < 16) {
+            else if (elevation < 16 || isSafeChannel) {
                 grid[y][x] = TILE.WATER;
                 
                 // Flora (Moss) likes to grow in SHALLOW water near the shores
                 if (dVal > 0.65 && dVal <= 0.85) {
                     grid[y][x] = TILE.FLORA;
                 }
-                // Small jagged rocks piercing the shallow water
-                else if (dVal > 0.88) {
+                // Small jagged rocks piercing the shallow water (blocked in the safe channel)
+                else if (dVal > 0.88 && !isSafeChannel) {
                     grid[y][x] = TILE.ROCK;
                 }
             } 
             // Land borders the water
             else {
                 grid[y][x] = TILE.LAND;
-                // Add jagged rocks slightly inland
-                if (dVal > 0.6 || elevation > 35) {
+                // Add jagged rocks slightly inland (blocked in the safe channel)
+                if ((dVal > 0.6 || elevation > 35) && !isSafeChannel) {
                     grid[y][x] = TILE.ROCK;
                 }
             }

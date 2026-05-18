@@ -191,7 +191,11 @@ export const FishingRenderer = {
         
         this.lureImg = new Image();
         this.lureImg.src = config.lureDataUrl;
+        
+        // BUG 3 FIX: Explicitly clear the cached silhouettes so the old fish doesn't ghost!
         this.fishImgNormal = null; 
+        this.fishImgBite = null;
+        this.fishImgTired = null;
         
         this.elements.modal.style.display = 'flex';
         this.elements.title.innerText = "Sinking Lure...";

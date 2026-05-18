@@ -336,13 +336,15 @@ export const FishingEngine = {
         const rawFishPull = (this.fishStamina > 0) ? (fishSpeed * behavior.pullMult * thrashSpike) : 0;
         const tensionPullForce = rawFishPull * Math.pow(dragNorm, 1.5);
 
-        // --- 3. TENSION & EXHAUSTION ---
+// --- 3. TENSION & EXHAUSTION ---
         let tensionDelta = 0;
 
         if (isReeling) {
             this.playerStaminaDelayTimer = 0.5; 
             const reelFriction = 30 * rodPower * dragNorm;
-            let rawTensionIncrease = tensionPullForce * 1.5 + reelFriction;
+            
+            // BALANCE: Increased base tension generation by 25%. You must respect your max tension!
+            let rawTensionIncrease = (tensionPullForce * 1.875) + (reelFriction * 1.25);
 
             if (powerDiff > tol) {
                 const overpull = (powerDiff - tol) / 50; 
@@ -363,10 +365,10 @@ export const FishingEngine = {
         tensionDelta = clamp(tensionDelta, -maxTensionDelta, maxTensionDelta);
         this.tension = clamp(this.tension + tensionDelta * dt, 0, this.maxTension + 5);
 
-// --- 4. PLAYER STAMINA ---
+        // --- 4. PLAYER STAMINA ---
         if (isReeling) {
-            // FORGIVENESS: Cut player stamina drain in half (30 down to 15).
-            const drain = 15 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
+            // BALANCE: Increased player stamina drain from 15 to 22. You can't just hold click forever now.
+            const drain = 22 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
             this.playerStamina -= drain * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;
@@ -376,18 +378,16 @@ export const FishingEngine = {
         // --- 5. FISH STAMINA ---
         if (isReeling && behavior.catchable) {
             const efficiency = (powerDiff > tol) ? 0.6 : (this.inSweetSpot ? 1.5 : 1.0);
-            // BOOST: Reeling now does nearly double the stamina damage to the fish (10 up to 18).
             this.fishStamina -= (18 * rodPower * (dragNorm + 0.2) * efficiency) * dt;
         }
         
         if (behavior.selfDrain > 0) {
             const dragResistance = Math.max(0.2, dragNorm * 2.0); 
-            // BOOST: The fish burns 50% more stamina when running or thrashing.
             this.fishStamina -= (behavior.selfDrain * 1.5) * dragResistance * dt; 
         } else {
-            // FORGIVENESS: Crippled the fish's active recovery (was 5%, now 1.5%). 
-            // It will no longer undo all your hard work in a few seconds of resting.
-            const regenBoost = (this.maxFishStamina * 0.015);
+            // BALANCE: Doubled fish stamina recovery from 1.5% to 3%. 
+            // If you rest too long, the fish will catch its breath and fight back.
+            const regenBoost = (this.maxFishStamina * 0.03);
             this.fishStamina += (Math.abs(behavior.selfDrain) + regenBoost) * dt;
         }
         this.fishStamina = clamp(this.fishStamina, 0, this.maxFishStamina);

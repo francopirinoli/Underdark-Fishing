@@ -108,61 +108,59 @@ const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
  */
 export function generateFishData(options = {}) {
     const seed = options.seed || Date.now();
-    const rng = createRng(seed);
+    
+    // --- BUG 1 FIX: Isolate RNGs so rehydration never desyncs the sequence ---
+    const metaRng = createRng(seed + 1); // Used for Family & Biome
+    const artRng = createRng(seed + 2);  // Used strictly for pixel art
+    const statRng = createRng(seed + 3); // Used for combat & economy stats
 
     let availableFamilies = Object.keys(ART_GENERATORS);
     if (options.biomeId && options.biomeId !== 'abyssal') {
         availableFamilies = availableFamilies.filter(f => f !== 'deepsea');
     }
-    const family = options.family || rng.pick(availableFamilies);
+    const family = options.family || metaRng.pick(availableFamilies);
     const arch = ARCHETYPES[family];
 
-    const artResult = ART_GENERATORS[family]({ rng });
+    const artResult = ART_GENERATORS[family]({ rng: artRng });
 
     let biomes =[];
     if (family === 'deepsea') {
         biomes.push('abyssal');
     } else if (options.biomeId) {
         biomes.push(options.biomeId);
-        if (rng.chance(0.3)) {
-            const sec = rng.pick(Object.keys(BIOME_TEMPS));
+        if (metaRng.chance(0.3)) {
+            const sec = metaRng.pick(Object.keys(BIOME_TEMPS));
             if (sec !== options.biomeId) biomes.push(sec);
         }
     } else {
-        biomes.push(rng.pick(Object.keys(BIOME_TEMPS)));
+        biomes.push(metaRng.pick(Object.keys(BIOME_TEMPS)));
     }
 
     const primaryBiome = biomes[0];
-    const tempPref = rng.int(BIOME_TEMPS[primaryBiome].min, BIOME_TEMPS[primaryBiome].max);
-    const depthPref = rng.pick(arch.depths);
-    const activeHours = rng.pick(['Diurnal', 'Nocturnal', 'Crepuscular', 'Always Active']);
+    const tempPref = statRng.int(BIOME_TEMPS[primaryBiome].min, BIOME_TEMPS[primaryBiome].max);
+    const depthPref = statRng.pick(arch.depths);
+    const activeHours = statRng.pick(['Diurnal', 'Nocturnal', 'Crepuscular', 'Always Active']);
 
-    const prefColor = clamp(Math.round(arch.prefBias.color + rng.float(-30, 30)), -100, 100);
-    const prefSound = clamp(Math.round(arch.prefBias.sound + rng.float(-30, 30)), -100, 100);
-    const prefLight = clamp(Math.round(arch.prefBias.light + rng.float(-30, 30)), -100, 100);
-    const prefWeight = clamp(Math.round(arch.prefBias.weight + rng.float(-30, 30)), -100, 100);
+    const prefColor = clamp(Math.round(arch.prefBias.color + statRng.float(-30, 30)), -100, 100);
+    const prefSound = clamp(Math.round(arch.prefBias.sound + statRng.float(-30, 30)), -100, 100);
+    const prefLight = clamp(Math.round(arch.prefBias.light + statRng.float(-30, 30)), -100, 100);
+    const prefWeight = clamp(Math.round(arch.prefBias.weight + statRng.float(-30, 30)), -100, 100);
 
-    const sizeTier = rng.pick(arch.sizes);
+    const sizeTier = statRng.pick(arch.sizes);
     const weightBrackets = {
         'Tiny': { min: 0.1, max: 2.5 }, 'Small': { min: 2.0, max: 8.0 },
         'Medium': { min: 7.0, max: 25.0 }, 'Large': { min: 20.0, max: 150.0 }, 'Massive': { min: 120.0, max: 800.0 }
     };
     
-    // Set base biological weights
     let minW = weightBrackets[sizeTier].min;
     let maxW = weightBrackets[sizeTier].max;
 
-    // Base Combat stats (Unscaled)
-    const stamina = Math.round(arch.baseStamina * rng.float(1, 1.5));
-    const speed = Math.round(arch.baseSpeed * rng.float(0.85, 1.15));
-    let aggression = Number(clamp(arch.baseAggro * rng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
-    
-    // V4: Increased from 850 to 950. Gives you a more fair reaction window before rarity scales it down.
+    const stamina = Math.round(arch.baseStamina * statRng.float(1, 1.5));
+    const speed = Math.round(arch.baseSpeed * statRng.float(0.85, 1.15));
+    let aggression = Number(clamp(arch.baseAggro * statRng.float(0.9, 1.2), 0.05, 1.0).toFixed(2));
     const hookWindowMs = 950; 
-    
-    const optimalReel = rng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); 
+    const optimalReel = statRng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); 
 
-    // Base Economy
     const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
     const baseValue = Math.round(10 * sizeEconMod[sizeTier]); 
     const baseXp = Math.round(10 * sizeEconMod[sizeTier]);
