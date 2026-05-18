@@ -276,8 +276,12 @@ export const ExplorationRenderer = {
                 
                 this.ctx.save();
                 this.ctx.translate(screenCX, screenCY);
-                // Rotate the entire cached canvas instead of redrawing the arms
-                this.ctx.rotate(time * 3.5); 
+                
+                // FIX: Use modulo to keep the value small and prevent 32-bit float 
+                // precision loss when passing the transform matrix to the GPU!
+                const safeRotation = (time * 3.5) % (Math.PI * 2);
+                this.ctx.rotate(safeRotation); 
+                
                 this.ctx.drawImage(this.whirlpoolCanvas, -RADIUS, -RADIUS);
                 this.ctx.restore();
 

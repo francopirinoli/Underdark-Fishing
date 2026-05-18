@@ -56,7 +56,9 @@ export const AlchemyCrafter = {
         // Pass the effectType to the generator so it knows what color to make it
         const art = generatePotion({ rng, seed, effectType });
 
-        const basePrice = Math.floor((parts.length * 15) + (totalRarity * 15) * (1 + craftingLevel * 0.1));
+        let totalPartValue = 0;
+        parts.forEach(p => totalPartValue += (p.basePrice || 5));
+        const basePrice = Math.floor(totalPartValue * 1.5 * (1 + craftingLevel * 0.1));
 
         return {
             id: `potion_${rng.int(10000, 99999)}`,
@@ -97,7 +99,9 @@ export const AlchemyCrafter = {
         // Pass components to bait generator so it picks the right container and target family
         const art = generateBait({ rng, seed, components: visualIds });
 
-        const basePrice = Math.floor((parts.length * 15) + (totalRarity * 12) * (1 + craftingLevel * 0.1));
+        let totalPartValue = 0;
+        parts.forEach(p => totalPartValue += (p.basePrice || 5));
+        const basePrice = Math.floor(totalPartValue * 1.5 * (1 + craftingLevel * 0.1));
 
         return {
             id: `bait_${rng.int(10000, 99999)}`,

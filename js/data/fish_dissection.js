@@ -83,10 +83,11 @@ export const DissectionEngine = {
                 partStats[key] = allocation * polarity;
             }
 
-            // --- NEW: Calculate Part Value ---
-            const PART_PRICES = { 'Common': 10, 'Uncommon': 25, 'Rare': 60, 'Legendary': 150, 'Boss': 300 };
-
-            const partSeed = Math.floor(rng.next() * 1000000); // <-- NEW: Create isolated seed
+            // --- ECONOMY FIX: Lowered Part Values ---
+            // Selling raw parts is cheap. They should be crafted!
+            const PART_PRICES = { 'Common': 5, 'Uncommon': 12, 'Rare': 35, 'Legendary': 100, 'Boss': 250 };
+            
+            const partSeed = Math.floor(rng.next() * 1000000);
 
             parts.push({
                 id: `part_${rng.int(10000, 99999)}`,

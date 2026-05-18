@@ -56,8 +56,12 @@ export const LureCrafter = {
         const finalDurability = Math.floor(baseDurability * multiplier);
 
         // --- NEW: Calculate Lure Value ---
-        // Base value relies on number of parts used + durability
-        const finalValue = Math.floor((parts.length * 15) + (finalDurability * 2));
+        // --- ECONOMY FIX: Value-Added Crafting ---
+        let totalPartValue = 0;
+        parts.forEach(p => totalPartValue += (p.basePrice || 5));
+        
+        // FIX: Changed lureCraftingLevel to craftingLevel
+        const finalValue = Math.floor(totalPartValue * 1.5 * (1 + craftingLevel * 0.1));
 
 // 4. Generate Pixel Art
         const rng = createRng(seed);

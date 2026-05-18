@@ -200,10 +200,11 @@ export const PlayerEngine = {
         effectiveStealth *= (1 + (buffedStats.driving * 0.1));
         let hazardDodgeChance = buffedStats.driving * 0.04;
 
-        // --- 3. ECONOMY & CRAFTING STATS ---
+// --- 3. ECONOMY & CRAFTING STATS ---
         let storeDiscount = buffedStats.bartering * 0.08; 
-        let sellMultiplier = 0.4 + (buffedStats.bartering * 0.08); 
-        let fuelEfficiencyMult = 1 - (buffedStats.intelligence * 0.10); 
+        // ECONOMY FIX: Sell multiplier now scales from 0.6x (Base) to 1.0x (Max Level)
+        let sellMultiplier = 0.5 + (buffedStats.bartering * 0.1); 
+        let fuelEfficiencyMult = 1 - (buffedStats.intelligence * 0.10);
         let dissectionBudgetMult = 1 + (buffedStats.crafting * 0.2); // <-- UPDATED
         let lureDurabilityMult = 1 + (buffedStats.crafting * 0.2);   // <-- UPDATED
         let knowledgeXpMult = 1 + (buffedStats.intelligence * 0.2);

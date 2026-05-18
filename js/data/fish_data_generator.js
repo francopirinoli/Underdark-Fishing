@@ -43,51 +43,43 @@ const RARITY_TIERS =[
 const ARCHETYPES = {
     'fish': {
         sizes:['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
-        baseStamina: 55, baseSpeed: 50, baseAggro: 0.35, 
-        optimalReelRange: [40, 60],
-        prefBias: { color: 0, sound: 0, light: 0, weight: 0 } 
+        baseStamina: 55, baseSpeed: 50, baseAggro: 0.35, optimalReelRange: [40, 60],
+        baseValueMod: 1.0, prefBias: { color: 0, sound: 0, light: 0, weight: 0 } 
     },
     'shark': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Surface', 'Mid-water'],
-        baseStamina: 50, baseSpeed: 100, baseAggro: 0.85, 
-        optimalReelRange: [75, 95], 
-        prefBias: { color: 70, sound: 80, light: 10, weight: 20 } 
+        baseStamina: 50, baseSpeed: 100, baseAggro: 0.85, optimalReelRange: [75, 95], 
+        baseValueMod: 1.4, prefBias: { color: 70, sound: 80, light: 10, weight: 20 } 
     },
     'eel': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Bottom-feeder'],
-        baseStamina: 120, baseSpeed: 40, baseAggro: 0.25, 
-        optimalReelRange:[25, 45], 
-        prefBias: { color: -40, sound: -80, light: -50, weight: 60 } 
+        baseStamina: 120, baseSpeed: 40, baseAggro: 0.25, optimalReelRange:[25, 45], 
+        baseValueMod: 0.9, prefBias: { color: -40, sound: -80, light: -50, weight: 60 } 
     },
     'ray': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Bottom-feeder'],
-        baseStamina: 85, baseSpeed: 50, baseAggro: 0.35, 
-        optimalReelRange:[30, 50],
-        prefBias: { color: 0, sound: -40, light: 0, weight: 80 } 
+        baseStamina: 85, baseSpeed: 50, baseAggro: 0.35, optimalReelRange:[30, 50],
+        baseValueMod: 1.1, prefBias: { color: 0, sound: -40, light: 0, weight: 80 } 
     },
     'crustacean': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Bottom-feeder'],
-        baseStamina: 130, baseSpeed: 30, baseAggro: 0.55, 
-        optimalReelRange:[15, 30], 
-        prefBias: { color: -20, sound: 0, light: -20, weight: 90 } 
+        baseStamina: 130, baseSpeed: 30, baseAggro: 0.55, optimalReelRange:[15, 30], 
+        baseValueMod: 1.4, prefBias: { color: -20, sound: 0, light: -20, weight: 90 } 
     },
     'jellyfish': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Surface', 'Mid-water'],
-        baseStamina: 45, baseSpeed: 35, baseAggro: 0.25, 
-        optimalReelRange:[10, 30], 
-        prefBias: { color: 0, sound: -90, light: 80, weight: -80 } 
+        baseStamina: 45, baseSpeed: 35, baseAggro: 0.25, optimalReelRange:[10, 30], 
+        baseValueMod: 0.6, prefBias: { color: 0, sound: -90, light: 80, weight: -80 } 
     },
     'cephalopod': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Mid-water', 'Bottom-feeder'],
-        baseStamina: 75, baseSpeed: 65, baseAggro: 0.55, 
-        optimalReelRange:[45, 65],
-        prefBias: { color: -60, sound: -50, light: 0, weight: 10 } 
+        baseStamina: 75, baseSpeed: 65, baseAggro: 0.55, optimalReelRange:[45, 65],
+        baseValueMod: 1.2, prefBias: { color: -60, sound: -50, light: 0, weight: 10 } 
     },
     'deepsea': {
         sizes:['Medium', 'Large', 'Massive'], depths: ['Bottom-feeder'],
-        baseStamina: 110, baseSpeed: 75, baseAggro: 0.75, 
-        optimalReelRange:[50, 85], 
-        prefBias: { color: -80, sound: 50, light: -90, weight: 70 } 
+        baseStamina: 110, baseSpeed: 75, baseAggro: 0.75, optimalReelRange:[50, 85], 
+        baseValueMod: 1.6, prefBias: { color: -80, sound: 50, light: -90, weight: 70 } 
     }
 };
 
@@ -161,24 +153,28 @@ export function generateFishData(options = {}) {
     const hookWindowMs = 950; 
     const optimalReel = statRng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); 
 
-    const sizeEconMod = { 'Tiny': 0.5, 'Small': 0.8, 'Medium': 1.0, 'Large': 1.5, 'Massive': 2.5 };
-    const baseValue = Math.round(10 * sizeEconMod[sizeTier]); 
-    const baseXp = Math.round(10 * sizeEconMod[sizeTier]);
+    // --- ECONOMY FIX: Value per Kg ---
+    // Multiply Family Value x Random Desirability x Base Kg Rate
+    const speciesDesirability = statRng.float(0.7, 1.4); 
+    // FIX: Reduced the base multiplier from 2.5 to 1.5 to lower overall fish prices by 40%
+    const pricePerKg = Number((1.5 * arch.baseValueMod * speciesDesirability).toFixed(2));
+    
+    // XP still scales loosely on size tier
+    const sizeXpMod = { 'Tiny': 0.8, 'Small': 1.0, 'Medium': 1.5, 'Large': 2.5, 'Massive': 4.0 };
+    const baseXp = Math.round(10 * sizeXpMod[sizeTier]);
 
     return {
         id: `sp_${family}_${seed}`, 
         seed: seed,
-        identity: {
-            name: artResult.name,
-            family: family
-        },
+        identity: { name: artResult.name, family: family },
         art: { imageDataUrl: artResult.imageDataUrl, palette: artResult.data.palette, metadata: artResult.data },
         environment: { biomes, depthPref, tempPref, activeHours },
         lurePrefs: { color: prefColor, sound: prefSound, light: prefLight, weight: prefWeight, tolerance: 0.8 }, 
         physical: { sizeTier, weightRange: { min: minW, max: maxW } },
         combat: { stamina, speed, aggression, hookWindowMs, optimalReel },
-        economy: { baseValue: Math.max(1, baseValue), baseXp: Math.max(5, baseXp) }
+        economy: { pricePerKg: Math.max(0.5, pricePerKg), baseValue: 0, baseXp: Math.max(5, baseXp) }
     };
+
 }
 
 /**
@@ -210,13 +206,16 @@ export function generateFishInstance(speciesData, rng) {
     
     instance.lurePrefs.tolerance = rarityObj.tolerance;
 
-    instance.economy.baseValue = Math.round(instance.economy.baseValue * (rarityObj.valBase / 10));
     instance.economy.baseXp = Math.round((instance.economy.baseXp / 10) * rarityObj.xpBase);
     
     // Roll the specific weight for this catch (boosted by rarity's weight multiplier)
     const minW = instance.physical.weightRange.min * rarityObj.weightMult;
     const maxW = instance.physical.weightRange.max * rarityObj.weightMult;
     instance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
+    
+    // --- ECONOMY FIX: Dynamic price calculation based on exact weight! ---
+    const rarityValMod = rarityObj.valBase / 10; // Common=1.0, Uncommon=3.5, etc.
+    instance.economy.baseValue = Math.max(1, Math.round(instance.actualWeight * speciesData.economy.pricePerKg * rarityValMod));
     
     instance.instanceId = `inst_${rng.int(1000000, 9999999)}`;
     instance.invType = 'fish';
