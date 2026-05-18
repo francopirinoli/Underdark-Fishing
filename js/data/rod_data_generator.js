@@ -10,10 +10,10 @@ import { generateRod } from '../art/rod_generator.js';
 
 // --- RARITY SCALING ---
 const RARITY_TIERS =[
-    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 40,   maxTraits: 0 },
-    { name: 'Uncommon',  weight: 30, statMult: 1.3, valBase: 180,  maxTraits: 0 },
-    { name: 'Rare',      weight: 15, statMult: 1.8, valBase: 750,  maxTraits: 1 },
-    { name: 'Legendary', weight: 5,  statMult: 2.8, valBase: 2800, maxTraits: 2 }
+    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 50,   maxTraits: 0 },
+    { name: 'Uncommon',  weight: 30, statMult: 1.3, valBase: 250,  maxTraits: 0 },
+    { name: 'Rare',      weight: 15, statMult: 1.8, valBase: 1200, maxTraits: 1 },
+    { name: 'Legendary', weight: 5,  statMult: 2.8, valBase: 4000, maxTraits: 2 }
 ];
 
 // --- MATERIAL BASE STATS ---

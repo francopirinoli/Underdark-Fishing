@@ -11,10 +11,10 @@ import { generateBoat } from '../art/boat_generator.js';
 // --- RARITY SCALING ---
 // Higher rarity represents better base craftsmanship and materials
 const RARITY_TIERS =[
-    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 500  },
-    { name: 'Uncommon',  weight: 30, statMult: 1.2, valBase: 1200 },
-    { name: 'Rare',      weight: 15, statMult: 1.5, valBase: 3500 },
-    { name: 'Legendary', weight: 5,  statMult: 2.0, valBase: 8000 }
+    { name: 'Common',    weight: 50, statMult: 1.0, valBase: 300  },
+    { name: 'Uncommon',  weight: 30, statMult: 1.2, valBase: 900  },
+    { name: 'Rare',      weight: 15, statMult: 1.5, valBase: 2800 },
+    { name: 'Legendary', weight: 5,  statMult: 2.0, valBase: 8500 }
 ];
 
 // --- HULL ARCHETYPES (Base Stats) ---

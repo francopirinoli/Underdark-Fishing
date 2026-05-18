@@ -54,7 +54,9 @@ export const MerchantGenerator = {
     getMerchantStock(seed, biomeId, playerBarterLevel = 1) {
         const rng = createRng(seed);
         const inventory = [];
-        const buyMult = Math.max(1.1, 1.6 - (playerBarterLevel * 0.1));
+        
+        // ECONOMY FIX: Level 1 = 1.4x markup. Level 5 = 1.0x (No markup!)
+        const buyMult = Math.max(1.0, 1.5 - (playerBarterLevel * 0.1));
 
         // A. Consumables
         CONSUMABLES.forEach((c, idx) => {
@@ -110,18 +112,19 @@ export const MerchantGenerator = {
         return inventory;
     },
 
-    // --- 2. THE FISHMONGER (ORGANIC PARTS) ---
+// --- 2. THE FISHMONGER (ORGANIC PARTS) ---
     getFishmongerStock(seed, biomeId, playerBarterLevel = 1) {
         const rng = createRng(seed);
         const inventory = [];
-        const buyMult = Math.max(1.1, 1.6 - (playerBarterLevel * 0.1));
+        
+        // ECONOMY FIX: Level 1 = 1.4x markup. Level 5 = 1.0x (No markup!)
+        const buyMult = Math.max(1.0, 1.5 - (playerBarterLevel * 0.1));
 
         const numParts = rng.int(4, 8) + Math.floor(playerBarterLevel / 2);
         for (let i = 0; i < numParts; i++) {
             
-            // Barter Luck: Skews the RNG table heavily towards better rarities
-            let rareChance = 10 + (playerBarterLevel * 6); // Up to 40% at Lv 5
-            let uncChance = 30 + (playerBarterLevel * 4);  // Up to 50% at Lv 5
+            let rareChance = 10 + (playerBarterLevel * 6); 
+            let uncChance = 30 + (playerBarterLevel * 4);  
             
             const roll = rng.int(1, 100);
             let targetRarity = 'Common';
@@ -152,7 +155,8 @@ export const MerchantGenerator = {
     getBoatwrightStock(seed, biomeId, playerBarterLevel = 1) {
         const rng = createRng(seed);
         const inventory = [];
-        const buyMult = Math.max(1.1, 1.6 - (playerBarterLevel * 0.1));
+        
+        const buyMult = Math.max(1.0, 1.5 - (playerBarterLevel * 0.1));
 
         // A. Boats
         const numBoats = rng.chance(0.5 + playerBarterLevel * 0.1) ? rng.int(1, 2) : 0;
@@ -161,7 +165,6 @@ export const MerchantGenerator = {
         while(spawnedBoats < numBoats && attempts < 20) {
             attempts++;
             const boat = generateBoatData({ seed: rng.next() * 100000 });
-            // Barter Luck: Restrict Legendary boats to high barter only
             if (boat.identity.rarity === 'Legendary' && (playerBarterLevel < 5 || !rng.chance(0.1))) continue;
             
             inventory.push({

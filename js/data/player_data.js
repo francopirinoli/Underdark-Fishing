@@ -156,7 +156,11 @@ export const PlayerEngine = {
         
         let effectivePower = rodPower * (1 + (buffedStats.fishing * 0.2));
         let effectiveHookWindow = rodSens + (buffedStats.fishing * 100);
-        let effectiveStamina = 75 + (buffedStats.stamina * 50);
+        
+        // BALANCE FIX: Lowered base stamina from 75 to 50, and stat multiplier from 50 to 30.
+        // A level 1 player now has 80 Stamina instead of 125.
+        let effectiveStamina = 50 + (buffedStats.stamina * 30); 
+        
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
         let effectiveSweetSpotTolerance = Math.max(3, Math.min(25, 8 + (rodSens / 100))); 

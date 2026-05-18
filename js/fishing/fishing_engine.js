@@ -65,7 +65,10 @@ export const FishingEngine = {
 
         this.maxPlayerStamina = this.playerStats.minigame.stamina;
         this.playerStamina = this.maxPlayerStamina;
-        this.playerStaminaRegen = 20 + (rawPlayerStaminaStat * 10); 
+        
+        // BALANCE FIX: Lowered base regen from 20 to 15, and stat scaling from 10 to 5.
+        this.playerStaminaRegen = 15 + (rawPlayerStaminaStat * 5); 
+        
         this.playerStaminaDelayTimer = 0;
 
         this.maxTension = this.playerStats.minigame.maxTension;
@@ -367,8 +370,8 @@ export const FishingEngine = {
 
         // --- 4. PLAYER STAMINA ---
         if (isReeling) {
-            // BALANCE: Increased player stamina drain from 15 to 22. You can't just hold click forever now.
-            const drain = 22 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
+            // BALANCE FIX: Increased drain from 22 to 35. Reeling tires you out very quickly now!
+            const drain = 35 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
             this.playerStamina -= drain * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;

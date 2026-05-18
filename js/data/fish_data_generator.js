@@ -153,11 +153,11 @@ export function generateFishData(options = {}) {
     const hookWindowMs = 950; 
     const optimalReel = statRng.int(arch.optimalReelRange[0], arch.optimalReelRange[1]); 
 
-    // --- ECONOMY FIX: Value per Kg ---
-    // Multiply Family Value x Random Desirability x Base Kg Rate
+    // --- ECONOMY FIX: Dynamic Size-Based Price Per Kg ---
+    // Tiny fish are delicacies (high value/kg), massive fish are bulk meat (low value/kg)
+    const sizePricePerKg = { 'Tiny': 15.0, 'Small': 5.0, 'Medium': 2.0, 'Large': 0.6, 'Massive': 0.15 };
     const speciesDesirability = statRng.float(0.7, 1.4); 
-    // FIX: Reduced the base multiplier from 2.5 to 1.5 to lower overall fish prices by 40%
-    const pricePerKg = Number((1.5 * arch.baseValueMod * speciesDesirability).toFixed(2));
+    const pricePerKg = Number((sizePricePerKg[sizeTier] * arch.baseValueMod * speciesDesirability).toFixed(2));
     
     // XP still scales loosely on size tier
     const sizeXpMod = { 'Tiny': 0.8, 'Small': 1.0, 'Medium': 1.5, 'Large': 2.5, 'Massive': 4.0 };
@@ -213,9 +213,12 @@ export function generateFishInstance(speciesData, rng) {
     const maxW = instance.physical.weightRange.max * rarityObj.weightMult;
     instance.actualWeight = Number(rng.float(minW, maxW).toFixed(2));
     
-    // --- ECONOMY FIX: Dynamic price calculation based on exact weight! ---
-    const rarityValMod = rarityObj.valBase / 10; // Common=1.0, Uncommon=3.5, etc.
-    instance.economy.baseValue = Math.max(1, Math.round(instance.actualWeight * speciesData.economy.pricePerKg * rarityValMod));
+    // --- ECONOMY FIX: Controlled Rarity Multipliers ---
+    // Because higher rarity fish are physically heavier, multiplying by weight already acts as a huge value boost. 
+    // We use a much smaller, controlled rarity multiplier here to prevent exponential inflation!
+    const rarityValMult = { 'Common': 1.0, 'Uncommon': 2.0, 'Rare': 4.5, 'Legendary': 10.0, 'Boss': 20.0 }[rarityObj.name];
+    
+    instance.economy.baseValue = Math.max(1, Math.round(instance.actualWeight * speciesData.economy.pricePerKg * rarityValMult));
     
     instance.instanceId = `inst_${rng.int(1000000, 9999999)}`;
     instance.invType = 'fish';
