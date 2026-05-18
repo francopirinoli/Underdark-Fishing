@@ -329,7 +329,7 @@ function loadLocalNode(entryDir) {
         return spots;
     };
 
-    // A. Wandering Fisherman
+// A. Wandering Fisherman
     if (EventManager.Fisherman.hasFisherman(globalX, globalY)) {
         const fRng = createRng(world.seed + globalX * 7 + globalY * 11 + gameDay);
         const spots = findSafeSpots(fRng, 1, 100, 30);
@@ -342,7 +342,8 @@ function loadLocalNode(entryDir) {
             currentLocalNPCBoats.push({
                 x: spots[0].x, y: spots[0].y, npc: npc, img: boatImg, bobOffset: fRng.int(0, 1000),
                 isTournament: false,
-                inventory: MerchantGenerator.generateInventory(fRng.next() * 10000, currentBiome.id, player.stats.bartering).slice(0, fRng.int(2, 4))
+                // --- FIX: Use the dedicated Wandering Stock generator ---
+                inventory: MerchantGenerator.getWanderingStock(fRng.next() * 10000, currentBiome.id, player.stats.bartering).slice(0, fRng.int(2, 4))
             });
         }
     }

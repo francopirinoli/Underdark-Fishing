@@ -117,8 +117,9 @@ export const EncounterUI = {
                 row.className = 'shop-item-row';
                 
                 let disableReason = null;
-                const isCargoItem = (item.type === 'part' || item.visualId || item.type === 'rod' || item.type === 'lure');
+                const isCargoItem = ['rod', 'lure', 'bait', 'potion', 'consumable'].includes(item.type || item.invType);
                 if (isCargoItem && currentInvCount >= maxCargo) disableReason = "Cargo Full";
+                if (item.id === 'cons_ration' && player.vitals.rations >= 20) disableReason = "Rations Full";
                 
                 const canAfford = player.vitals.gold >= item.price;
                 const hasStock = item.stock > 0;
@@ -160,12 +161,23 @@ export const EncounterUI = {
                         player.vitals.gold -= item.price;
                         item.stock--;
                         
-                        if (item.id === 'cons_ration') player.vitals.rations += 1;
-                        else if (item.id === 'cons_fuel_oil') player.vitals.fuel = 100;
-                        else if (item.id === 'cons_repair_kit') player.vitals.hp = Math.min(player.gear.boat.stats.maxHp, player.vitals.hp + 25);
-                        else if (isCargoItem) {
-                            if (item.type === 'rod' || item.type === 'lure') player.inventory.push({ ...item.itemData, invType: item.type });
-                            else player.inventory.push({ ...item, invType: 'part' }); 
+                        // --- UPDATED: Split Inventory Routing ---
+                        if (item.id === 'cons_ration') {
+                            player.vitals.rations = Math.min(20, player.vitals.rations + 1);
+                        } else if (item.id === 'cons_fuel_oil') {
+                            player.vitals.fuel = 100;
+                        } else if (item.id === 'cons_repair_kit') {
+                            const itemToPush = { ...item, invType: 'consumable' };
+                            player.inventory.push(itemToPush);
+                        } else {
+                            if (['rod', 'lure', 'bait', 'potion'].includes(item.type || item.invType)) {
+                                const itemToPush = item.itemData ? { ...item.itemData } : { ...item };
+                                itemToPush.invType = item.type || item.invType;
+                                player.inventory.push(itemToPush);
+                            } else {
+                                // Raw fish parts go to the Reagents Pouch
+                                player.reagents.push({ ...item, invType: 'part' }); 
+                            }
                         }
 
                         this.hideShopTooltip();
@@ -175,8 +187,11 @@ export const EncounterUI = {
                 list.appendChild(row);
             });
         } else {
-            // SELL MODE (Wanderers buy Parts and Fish)
-            const sellableItems = player.inventory.filter(i => i.invType === 'part' || i.invType === 'fish');
+            // SELL MODE: Wanderer buys Parts and Fish
+            const sellableItems = [
+                ...player.inventory.filter(i => i.invType === 'fish'),
+                ...player.reagents
+            ];
             
             if (sellableItems.length === 0) {
                 list.innerHTML = `<p style="color:var(--text-muted); font-size:1.2rem; text-align:center;">You have no parts or fish to sell.</p>`;
@@ -186,9 +201,11 @@ export const EncounterUI = {
                 const row = document.createElement('div');
                 row.className = 'shop-item-row';
                 
-                const baseVal = item.invType === 'fish' ? item.economy.baseValue : (item.basePrice || 10);
+                const baseVal = item.economy ? (item.economy.baseValue || item.economy.value) : (item.basePrice || 10);
                 const sellValue = Math.max(1, Math.round(baseVal * effStats.economy.sellMultiplier));
-                const realIndex = player.inventory.findIndex(i => i === item);
+                
+                const isReagent = player.reagents.includes(item);
+                const realIndex = isReagent ? player.reagents.indexOf(item) : player.inventory.indexOf(item);
                 
                 let imgSrc = item.invType === 'fish' ? item.art.imageDataUrl : item.imageDataUrl;
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
@@ -200,7 +217,7 @@ export const EncounterUI = {
                     <div style="display:flex; gap: 1rem; align-items:center;">
                         ${imgHtml}
                         <div class="shop-item-info">
-                            <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.invType}]</span>
+                            <b style="color: ${nameColor};">${itemName}</b> <span style="font-size:0.85rem; color:var(--text-muted); text-transform:uppercase;">[${item.invType === 'fish' ? item.physical.sizeTier : 'PART'}]</span>
                             ${item.invType === 'fish' ? `<p>${item.actualWeight}kg</p>` : ''}
                         </div>
                     </div>
@@ -213,7 +230,8 @@ export const EncounterUI = {
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
                     player.vitals.gold += sellValue;
-                    player.inventory.splice(realIndex, 1);
+                    if (isReagent) player.reagents.splice(realIndex, 1);
+                    else player.inventory.splice(realIndex, 1);
                     this.renderMarket();
                 };
                 list.appendChild(row);
@@ -221,13 +239,15 @@ export const EncounterUI = {
         }
     },
 
-    // --- TOOLTIPS ---
+// --- TOOLTIP HELPERS ---
     formatDelta(newVal, oldVal, invertGoodBad = false) {
         if (newVal === undefined || oldVal === undefined) return '';
         const diff = newVal - oldVal;
         if (diff === 0) return `<span style="color:var(--text-muted); font-size: 0.85em; margin-left: 0.5rem;">(+0)</span>`;
+        
         let color = 'var(--green-safe)';
         if ((diff > 0 && invertGoodBad) || (diff < 0 && !invertGoodBad)) color = 'var(--red-danger)';
+        
         const sign = diff > 0 ? '+' : '';
         const formattedDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
         return `<span style="color:${color}; font-size: 0.85em; margin-left: 0.5rem;">(${sign}${formattedDiff})</span>`;
@@ -236,44 +256,95 @@ export const EncounterUI = {
     showShopTooltip(item, e) {
         const tt = document.getElementById('shop-tooltip');
         if (!tt) return;
+        
         const player = this.gameState.player;
         
-        let itemName = item.name || (item.identity ? item.identity.name : 'Unknown Item');
-        let nameColor = getItemColor(item.itemData || item);
-        let html = `<b style="color: ${nameColor};">${itemName}</b>`;
+        // --- FIX: Prevent Potion/Bait art metadata from overriding the actual item ---
+        const isShopWrapper = item.itemData && (item.type === 'rod' || item.type === 'boat');
+        const target = isShopWrapper ? item.itemData : item; 
         
-        if (item.type === 'rod') {
-            const eq = player.gear.rod.stats;
-            const ns = item.itemData.stats;
+        const invType = item.type || target.invType || 'unknown';
+        
+        let itemName = item.name || target.identity?.name || 'Unknown Item';
+        let nameColor = getItemColor(target);
+        let html = `<b style="color: ${nameColor}; font-size: 1.2rem;">${itemName}</b>`;
+        
+        // Dynamic Subtitles
+        let subtitle = invType.toUpperCase();
+        if (invType === 'fish') subtitle = `${target.identity.rarity} ${target.identity.family.charAt(0).toUpperCase() + target.identity.family.slice(1)}`;
+        else if (invType === 'rod') subtitle = `${target.identity.rarity} Fishing Rod`;
+        else if (invType === 'boat') subtitle = `${target.identity.rarity} Boat Hull`;
+        else if (invType === 'upgrade') subtitle = `Boat Upgrade`;
+        else if (invType === 'potion') subtitle = `Alchemical Draught`;
+        else if (invType === 'bait') subtitle = `Targeted Bait`;
+        else if (invType === 'lure') subtitle = `Custom Lure`;
+        else if (invType === 'part') subtitle = `${target.rarity} Reagent`;
+
+        html += `<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.3rem;">${subtitle}</div>`;
+
+        if (invType === 'rod') {
+            const eq = player.gear.rod ? player.gear.rod.stats : { power: 0, maxTension: 0, flexibility: 0, sensitivity: 0 };
+            const ns = target.stats;
             html += `<div class="tt-row"><span>Power:</span> <span>${ns.power}x ${this.formatDelta(ns.power, eq.power)}</span></div>
                      <div class="tt-row"><span>Tension:</span> <span>${ns.maxTension} ${this.formatDelta(ns.maxTension, eq.maxTension)}</span></div>
                      <div class="tt-row"><span>Flex:</span> <span>${ns.flexibility}x ${this.formatDelta(ns.flexibility, eq.flexibility)}</span></div>
                      <div class="tt-row"><span>Sensitivity:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
-        } else if (item.type === 'part' || item.visualId || item.invType === 'lure') {
-            html += `<div class="loadout-details" style="margin-top: 0.5rem;">`;
-            if (item.invType === 'lure') {
-                html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem; font-size:1.1rem;">
-                            <span>Durability:</span> <span>${item.durability}/${item.maxDurability}</span>
+            
+            if (target.traits && target.traits.length > 0) {
+                html += `<div style="margin-top:0.5rem; border-top:1px dashed var(--panel-border); padding-top:0.3rem;">`;
+                target.traits.forEach(t => {
+                    html += `<div style="color:#A855F7; font-size:0.9rem; font-weight:bold;">✨ ${t.name}</div>
+                             <div style="color:var(--text-muted); font-size:0.8rem; line-height:1.2; margin-bottom:0.3rem;">${t.desc}</div>`;
+                });
+                html += `</div>`;
+            }
+        } else if (invType === 'boat') {
+            const eq = player.gear.boat ? player.gear.boat.stats : { maxHp: 0, speed: 0, stealth: 0, cargoSpace: 0 };
+            const ns = target.stats;
+            html += `<div class="tt-row"><span>Hull HP:</span> <span>${ns.maxHp} ${this.formatDelta(ns.maxHp, eq.maxHp)}</span></div>
+                     <div class="tt-row"><span>Speed:</span> <span>${ns.speed} ${this.formatDelta(ns.speed, eq.speed)}</span></div>
+                     <div class="tt-row"><span>Stealth:</span> <span>${ns.stealth}x ${this.formatDelta(ns.stealth, eq.stealth)}</span></div>
+                     <div class="tt-row"><span>Cargo:</span> <span>${ns.cargoSpace} ${this.formatDelta(ns.cargoSpace, eq.cargoSpace)}</span></div>`;
+        } else if (invType === 'part' || invType === 'lure') {
+            html += `<div class="loadout-details" style="margin-top: 0.2rem;">`;
+            if (invType === 'lure') {
+                const eqDur = player.gear.lure ? player.gear.lure.maxDurability : 0;
+                html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem;">
+                            <span>Durability:</span> <span>${target.durability}/${target.maxDurability} ${this.formatDelta(target.maxDurability, eqDur)}</span>
                          </div>`;
             }
             html += `
-                ${buildStatSlider('Color', item.stats.color, 'Cold', 'Warm')}
-                ${buildStatSlider('Sound', item.stats.sound, 'Silent', 'Loud')}
-                ${buildStatSlider('Light', item.stats.light, 'Dark', 'Glow')}
-                ${buildStatSlider('Weight', item.stats.weight, 'Float', 'Sink')}
+                ${buildStatSlider('Color', target.stats.color, 'Cold', 'Warm')}
+                ${buildStatSlider('Sound', target.stats.sound, 'Silent', 'Loud')}
+                ${buildStatSlider('Light', target.stats.light, 'Dark', 'Glow')}
+                ${buildStatSlider('Weight', target.stats.weight, 'Float', 'Sink')}
             </div>`;
-        } else if (item.invType === 'fish') {
-            const familyName = item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1);
-            html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem;">
-                        <span style="color:var(--text-muted);">${item.identity.rarity} ${familyName}</span>
-                     </div>
-                     <div class="tt-row"><span>Size:</span> <span>${item.physical.sizeTier}</span></div>
-                     <div class="tt-row"><span>Weight:</span> <span>${item.actualWeight}kg</span></div>
-                     <div class="tt-row"><span>Habitat:</span> <span style="text-transform:capitalize;">${item.environment.depthPref}</span></div>`;
+        } else if (invType === 'fish') {
+            html += `<div class="tt-row"><span>Size:</span> <span style="color:var(--text-main);">${target.physical.sizeTier}</span></div>
+                     <div class="tt-row"><span>Weight:</span> <span style="color:var(--text-main);">${target.actualWeight}kg</span></div>
+                     <div class="tt-row"><span>Habitat:</span> <span style="text-transform:capitalize; color:var(--text-main);">${target.environment.depthPref}</span></div>
+                     <div class="tt-row" style="margin-top:0.3rem;"><span>Value:</span> <span style="color:var(--gold-warn);">${target.economy.baseValue}g</span></div>`;
+        } else if (invType === 'potion') {
+            const buff = target.buff;
+            const hrs = Math.floor(buff.durationMins / 60);
+            const mins = buff.durationMins % 60;
+            html += `<div class="tt-row" style="margin-top:0.2rem;"><span>Effect:</span> <span style="color:var(--cyan-glow); font-weight:bold;">+${buff.amount} ${buff.statName}</span></div>
+                     <div class="tt-row"><span>Duration:</span> <span style="color:var(--text-main);">${hrs}h ${mins}m</span></div>`;
+        } else if (invType === 'bait') {
+            html += `<div class="tt-row" style="margin-top:0.2rem;"><span>Attracts:</span> <span style="color:var(--gold-warn); font-weight:bold;">${target.targetFamily}</span></div>
+                     <div class="tt-row"><span>Charges:</span> <span style="color:var(--text-main);">${target.charges} Casts</span></div>
+                     <div class="tt-row"><span>Rarity Boost:</span> <span style="color:var(--green-safe);">+${target.rarityBoostPct}%</span></div>`;
+        } else if (invType === 'upgrade') {
+            html += `<div class="tt-row" style="margin-top:0.2rem; margin-bottom:0.5rem;"><span>Slot:</span> <span style="color:var(--cyan-glow); text-transform:uppercase;">${target.slot}</span></div>
+                     <p style="margin:0; color:var(--text-main); font-size:0.95rem; line-height:1.4;">${target.desc || item.desc}</p>`;
+        } else if (invType === 'consumable') {
+            html += `<p style="margin:0; color:var(--text-main); font-size:0.95rem; line-height:1.4;">${target.desc || item.desc}</p>`;
+        } else if (invType === 'chest' || invType === 'chest_encounter') {
+            html += `<p style="margin:0; color:var(--text-main); font-size:0.95rem;">A heavy, waterlogged chest.</p>`;
         } else {
-            html += `<p style="margin:0; color:var(--text-main);">${item.desc || ''}</p>`;
+            html += `<p style="margin:0; color:var(--text-main);">${target.desc || item.desc || ''}</p>`;
         }
-        
+
         tt.innerHTML = html;
         tt.style.display = 'block';
         this.moveShopTooltip(e);
