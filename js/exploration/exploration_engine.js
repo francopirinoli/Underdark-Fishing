@@ -58,13 +58,11 @@ export const ExplorationEngine = {
         if (!this.boatStats || !this.localMap) return;
 
         const imm = this.boatStats.immunities || {};
-
-        // --- HAZARD: FROZEN (Pack Ice) ---
         let envSpeedMult = 1.0;
         let envTurnMult = 1.0;
         if (this.biomeId === 'frozen' && !imm.frozen) {
-            envSpeedMult = 0.5; // Halves speed and acceleration
-            envTurnMult = 0.5;  // Extremely sluggish turning
+            envSpeedMult = 0.5; 
+            envTurnMult = 0.5;  
         }
 
         // --- 1. ROTATION ---
@@ -72,18 +70,30 @@ export const ExplorationEngine = {
         if (input.left)  this.heading -= turnRate;
         if (input.right) this.heading += turnRate;
 
-        // --- 2. ACCELERATION & THRUST ---
+        // --- 2. MOMENTUM PHYSICS (Acceleration & Friction) ---
+        // A standard reference mass is 50. 
+        // Skiff (Mass 20) = 2.5x acceleration, 2.5x friction (Stops instantly).
+        // Dreadnought (Mass 150) = 0.33x acceleration, 0.33x friction (Glides like a train).
+        const massFactor = 50 / Math.max(10, this.boatStats.mass);
+        const frictionRate = 1.5 * massFactor;
+
         let thrust = 0;
-        if (input.forward) thrust = this.boatStats.acceleration * envSpeedMult;
-        if (input.backward) thrust = -this.boatStats.acceleration * envSpeedMult * 0.5;
+        if (input.forward) thrust = this.boatStats.acceleration * envSpeedMult * massFactor;
+        if (input.backward) thrust = -this.boatStats.acceleration * envSpeedMult * massFactor * 0.5;
 
         this.velocity += thrust * dt;
-        this.velocity -= this.velocity * this.waterFriction * dt;
-
+        
+        // Apply friction
+        let drag = this.velocity * frictionRate * dt;
+        
+        // Softly cap the top speed
         const maxSpeed = this.boatStats.speed * envSpeedMult;
-        this.velocity = clamp(this.velocity, -maxSpeed * 0.4, maxSpeed);
+        if (this.velocity > maxSpeed) drag += (this.velocity - maxSpeed) * 5 * dt;
+        if (this.velocity < -maxSpeed * 0.4) drag += (this.velocity + maxSpeed * 0.4) * 5 * dt;
 
-// --- 3. MOVEMENT & HAZARD: ABYSSAL WHIRLPOOL ---
+        this.velocity -= drag;
+
+        // --- 3. MOVEMENT & HAZARD: ABYSSAL WHIRLPOOL ---
         let moveX = Math.cos(this.heading) * this.velocity * dt;
         let moveY = Math.sin(this.heading) * this.velocity * dt;
 
@@ -93,13 +103,10 @@ export const ExplorationEngine = {
             const dist = Math.hypot(cx - this.x, cy - this.y);
             
             if (dist > 3) {
-                // Gravity becomes stronger the closer you get to the center
-                const pullStrength = 8.0 + (80 / Math.max(5, dist)); // Smoothed out curve
+                const pullStrength = 8.0 + (80 / Math.max(5, dist)); 
                 moveX += ((cx - this.x) / dist) * pullStrength * dt;
                 moveY += ((cy - this.y) / dist) * pullStrength * dt;
             } else {
-                // SUCKED INTO THE EVENT HORIZON!
-                // Trigger the dedicated warp callback exactly once
                 if (!this.isWarping && this.onWhirlpoolWarp) {
                     this.isWarping = true;
                     this.onWhirlpoolWarp();
@@ -117,49 +124,114 @@ export const ExplorationEngine = {
         if (this.biomeId === 'volcanic' && !imm.volcanic) {
             this.volcanicTimer -= dt;
             if (this.volcanicTimer <= 0) {
-                this.volcanicTimer = 20.0; // 1 HP damage every 20 seconds
+                this.volcanicTimer = 20.0; 
                 if (this.onDamage) this.onDamage(1, "Boiling Water");
             }
         }
 
-        // --- 5. ZONE TRANSITIONS ---
+        // --- 5. ZONE TRANSITIONS & DOCK ---
         this._checkZoneTransitions();
-
-        // --- 6. DOCK INTERACTION ---
         if (input.action) this._checkDock();
 
-        // --- 7. STEALTH & HAZARD: CRYSTAL SHATTER-STORMS ---
+        // --- 6. STEALTH & HAZARD: CRYSTAL SHATTER-STORMS ---
         let thrustNoise = (input.forward || input.backward) ? 60 : 0;
         let speedNoise = (Math.abs(this.velocity) / this.boatStats.speed) * 40;
         
         let rawNoise = thrustNoise + speedNoise;
         let targetNoise = rawNoise / Math.max(0.1, this.boatStats.stealth);
         
-        // Apply smooth transition
         if (targetNoise > this.currentNoise) this.currentNoise += (targetNoise - this.currentNoise) * 5.0 * dt;
         else this.currentNoise += (targetNoise - this.currentNoise) * 0.3 * dt;
 
-        // Crystal Shatter-Storm randomly spikes noise to terrifying levels and drops sharp debris
         if (this.weather === 'shatter' && !imm.crystal) {
             this.crystalTimer -= dt;
             if (this.crystalTimer <= 0) {
-                this.crystalTimer = getRandomInRange(5.0, 12.0); // Spikes randomly every 5 to 12 seconds
-                this.currentNoise += getRandomInRange(50, 100);  // Massive noise injection
+                this.crystalTimer = getRandomInRange(5.0, 12.0); 
+                this.currentNoise += getRandomInRange(50, 100);  
                 
-                // --- NEW: 40% chance for a crystal shard to physically strike the boat ---
                 if (Math.random() < 0.40) {
-                    // Check if the player's Driving stat helps them dodge it!
-                    if (Math.random() > this.boatStats.hazardDodgeChance) {
-                        const damage = Math.floor(getRandomInRange(5, 15));
-                        if (this.onDamage) this.onDamage(damage, "Falling Crystal");
+                    if (Math.random() > this.boatStats.evasion) {
+                        // Apply Damage Reduction to the crystal shatter!
+                        const rawDmg = Math.floor(getRandomInRange(5, 15));
+                        const finalDmg = Math.max(0, Math.floor(rawDmg * (1 - this.boatStats.damageReduction)));
+                        if (this.onDamage) this.onDamage(finalDmg, "Falling Crystal");
                     } else {
-                        console.log("Dodged falling crystal!"); // Silent dodge, just spares the HP
+                        if (this.onDamage) this.onDamage(0, "Dodge");
                     }
                 }
             }
         }
 
         this.currentNoise = clamp(this.currentNoise, 0, 100);
+    },
+
+    _checkCollisions() {
+        const minX = Math.max(0, Math.floor(this.x - this.collisionRadius));
+        const maxX = Math.min(LOCAL_MAP_SIZE - 1, Math.ceil(this.x + this.collisionRadius));
+        const minY = Math.max(0, Math.floor(this.y - this.collisionRadius));
+        const maxY = Math.min(LOCAL_MAP_SIZE - 1, Math.ceil(this.y + this.collisionRadius));
+
+        let hit = false;
+        let impactVelocity = Math.abs(this.velocity);
+
+        // A. Check against rock/land tiles
+        for (let ty = minY; ty <= maxY; ty++) {
+            for (let tx = minX; tx <= maxX; tx++) {
+                const tileId = this.localMap.grid[ty][tx];
+                
+                if (tileId === TILE.LAND || tileId === TILE.ROCK) {
+                    const distX = this.x - (tx + 0.5);
+                    const distY = this.y - (ty + 0.5);
+                    const distance = Math.hypot(distX, distY);
+                    const minSafeDistance = this.collisionRadius + 0.5;
+
+                    if (distance < minSafeDistance) {
+                        hit = true;
+                        const overlap = minSafeDistance - distance;
+                        this.x += (distX / distance) * overlap;
+                        this.y += (distY / distance) * overlap;
+                    }
+                }
+            }
+        }
+
+        // B. Check against Array of NPC Boats
+        if (this.npcBoats && this.npcBoats.length > 0) {
+            for (const npc of this.npcBoats) {
+                const distX = this.x - npc.x;
+                const distY = this.y - npc.y;
+                const distance = Math.hypot(distX, distY);
+                const minSafeDistance = this.collisionRadius + 6;
+
+                if (distance < minSafeDistance) {
+                    hit = true;
+                    const overlap = minSafeDistance - distance;
+                    this.x += (distX / distance) * overlap;
+                    this.y += (distY / distance) * overlap;
+                }
+            }
+        }
+
+        // Apply bounce and damage
+        if (hit) {
+            // High mass boats barely bounce backwards when they hit something!
+            const bounceFactor = Math.max(0.1, 0.4 * (50 / this.boatStats.mass));
+            this.velocity = -this.velocity * bounceFactor; 
+
+            if (impactVelocity > 15 && this.onDamage) {
+                // 1. Check for Evasion
+                if (Math.random() < this.boatStats.evasion) {
+                    this.onDamage(0, "Dodge");
+                } else {
+                    // 2. Apply Damage Reduction (Armor)
+                    let rawDmg = impactVelocity * 0.4;
+                    rawDmg *= this.boatStats.collisionDamageMult; // Icebreaker Prow
+                    
+                    const finalDmg = Math.floor(rawDmg * (1.0 - this.boatStats.damageReduction));
+                    this.onDamage(finalDmg, "Collision");
+                }
+            }
+        }
     },
 
     _checkCollisions() {

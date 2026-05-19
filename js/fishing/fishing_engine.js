@@ -1,25 +1,27 @@
 /**
  * js/fishing/fishing_engine.js
  * The core physics and AI state machine for the fishing minigame.
- * V7 - Reactive AI: Drag-Linked Exhaustion, Desperation, and Active Recovery.
+ * V9 - Second Wind, Self-Preservation AI, and Fixed Stamina Math.
  */
 
 import { getRandomInRange, clamp } from '../util/utils.js';
 
+// Define how the fish behaves physically in each state
 const BEHAVIORS = {
-    // selfDrain: Negative means resting (regaining stamina), positive means burning energy.
-    HOLD:     { pullMult: 0.2, catchable: true,  stamDrainMult: 1.0, selfDrain: -6,  dragSlip: 0 }, 
-    RUN:      { pullMult: 1.0, catchable: true,  stamDrainMult: 1.2, selfDrain: 6,   dragSlip: -15 }, 
-    THRASH:   { pullMult: 1.8, catchable: false, stamDrainMult: 3.5, selfDrain: 18,  dragSlip: 'shake' }, 
-    BURST:    { pullMult: 3.5, catchable: false, stamDrainMult: 1.0, selfDrain: 12,  dragSlip: -40 }, 
-    INANIMATE:{ pullMult: 0.8, catchable: true,  stamDrainMult: 0.8, selfDrain: 0,   dragSlip: 0 } 
+    // targetSweet: The required Drag setting (Reel Power) to avoid line snaps.
+    HOLD:        { pullMult: 0.1, drainMult: -0.8, targetSweet: [80, 100], invincible: false }, // Resting: Recovers stamina. Crank drag and pull!
+    RUN:         { pullMult: 1.4, drainMult: 1.8,  targetSweet: [15, 35],  invincible: false }, // Fleeing: Burns stamina fast. Drop drag or line snaps!
+    THRASH:      { pullMult: 0.8, drainMult: 1.2,  targetSweet: 'wobble',  invincible: false }, // Panicking: Unpredictable jerks.
+    BURST:       { pullMult: 2.5, drainMult: 2.5,  targetSweet: [10, 20],  invincible: false }, // Violent jerk: Drop drag immediately!
+    INANIMATE:   { pullMult: 0.0, drainMult: 0.0,  targetSweet: [50, 60],  invincible: false }, // For treasure chests
+    SECOND_WIND: { pullMult: 0.4, drainMult: 0.0,  targetSweet: [40, 60],  invincible: true  }  // Special 0 HP state. Massive regen, immune to reel damage.
 };
 
 export const FishingEngine = {
     phase: 'IDLE', 
 
     playerStats: null,
-    fishPool:[],
+    fishPool: [],
     fishData: null, 
     lureStats: null,
 
@@ -28,6 +30,8 @@ export const FishingEngine = {
     targetDepth: 0,
     maxDepth: 20,
     waterCurrent: 0, 
+    
+    // Core Minigame Vitals
     tension: 0,
     maxTension: 100,
     fishStamina: 0,
@@ -38,7 +42,7 @@ export const FishingEngine = {
     playerStaminaDelayTimer: 0, 
     catchProgress: 0, 
     
-    // Dynamic Sweet Spot Mechanics
+    // Dynamic Sweet Spot Mechanics (The Drag Dial)
     reelPower: 50,      
     currentSweetSpot: 50, 
     targetSweetSpot: 50,  
@@ -49,7 +53,7 @@ export const FishingEngine = {
     fightTimer: 0,    
     maxFightTimer: 0,
     
-    ai: { state: 'HOLD', timer: 0, aggression: 0 },
+    ai: { state: 'HOLD', timer: 0, aggression: 0, isResting: false },
 
     startCast(effectivePlayerStats, rawPlayerStaminaStat, fishPool, maxDepth, currentTimeMins = 480) {
         this.playerStats = effectivePlayerStats;
@@ -66,19 +70,21 @@ export const FishingEngine = {
         this.maxPlayerStamina = this.playerStats.minigame.stamina;
         this.playerStamina = this.maxPlayerStamina;
         
-        // BALANCE FIX: Lowered base regen from 20 to 15, and stat scaling from 10 to 5.
+        // Base regeneration
         this.playerStaminaRegen = 15 + (rawPlayerStaminaStat * 5); 
-        
         this.playerStaminaDelayTimer = 0;
 
         this.maxTension = this.playerStats.minigame.maxTension;
         this.tension = 0;
         this.catchProgress = 0;
+        
         this.reelPower = 50;      
         this.currentSweetSpot = 50; 
         this.targetSweetSpot = 50;  
         this.inSweetSpot = false; 
+        
         this.phase = 'SINKING';
+        this.ai.isResting = false;
     },
 
     scrollDepth(delta) {
@@ -91,7 +97,6 @@ export const FishingEngine = {
         const baseIncrement = 1.0; 
         const speedMult = this.playerStats.minigame.reelScrollSpeed || 1.0;
         const normalizedDelta = delta / 100; 
-        
         const scrollAmount = -normalizedDelta * baseIncrement * speedMult;
         this.reelPower = clamp(this.reelPower + scrollAmount, 10, 100);
     },
@@ -109,7 +114,7 @@ export const FishingEngine = {
         const currentZone = this.getDepthZone();
         const lure = this.lureStats;
         const currentHour = this.currentTimeMins / 60; 
-        let validCandidates =[];
+        let validCandidates = [];
 
         for (const fish of this.fishPool) {
             if (fish.environment.depthPref !== currentZone) continue;
@@ -117,23 +122,13 @@ export const FishingEngine = {
             const activeHours = fish.environment.activeHours;
             let isActive = false;
             
-            if (activeHours === 'Always Active') {
-                isActive = true;
-            } else if (activeHours === 'Diurnal') {
-                isActive = (currentHour >= 6 && currentHour < 18); 
-            } else if (activeHours === 'Nocturnal') {
-                isActive = (currentHour >= 18 || currentHour < 6); 
-            } else if (activeHours === 'Crepuscular') {
-                isActive = ((currentHour >= 4 && currentHour <= 8) || (currentHour >= 16 && currentHour <= 20)); 
-            }
+            if (activeHours === 'Always Active') isActive = true;
+            else if (activeHours === 'Diurnal') isActive = (currentHour >= 6 && currentHour < 18); 
+            else if (activeHours === 'Nocturnal') isActive = (currentHour >= 18 || currentHour < 6); 
+            else if (activeHours === 'Crepuscular') isActive = ((currentHour >= 4 && currentHour <= 8) || (currentHour >= 16 && currentHour <= 20)); 
 
             const prefs = fish.lurePrefs;
-            const diffColor = Math.abs(prefs.color - lure.color);
-            const diffSound = Math.abs(prefs.sound - lure.sound);
-            const diffLight = Math.abs(prefs.light - lure.light);
-            const diffWeight = Math.abs(prefs.weight - lure.weight);
-            
-            const totalDiff = diffColor + diffSound + diffLight + diffWeight;
+            const totalDiff = Math.abs(prefs.color - lure.color) + Math.abs(prefs.sound - lure.sound) + Math.abs(prefs.light - lure.light) + Math.abs(prefs.weight - lure.weight);
             const maxAllowedDiff = prefs.tolerance * 800 * (isActive ? 1.0 : 0.5);
 
             if (totalDiff <= maxAllowedDiff) {
@@ -179,12 +174,14 @@ export const FishingEngine = {
             this.fishStamina = this.fishData.combat.stamina;
             this.maxFishStamina = this.fishData.combat.stamina;
             
-            this.maxFightTimer = 20 + ((100 - this.fishData.combat.speed) * 0.2) + (this.fishData.combat.stamina * 0.05);
+            // Battles now last longer, scaled properly to endurance mechanics
+            this.maxFightTimer = 25 + ((100 - this.fishData.combat.speed) * 0.3) + (this.fishData.combat.stamina * 0.1);
             this.fightTimer = this.maxFightTimer;
 
             this.ai.aggression = this.fishData.combat.aggression;
             this.ai.state = 'RUN';
-            this.ai.timer = 1.5; 
+            this.ai.timer = 2.0; 
+            this.ai.isResting = false;
             
             this.tension = this.maxTension * 0.2; 
             return true;
@@ -215,9 +212,7 @@ export const FishingEngine = {
             return;
         }
 
-        if (this.playerStamina <= 0) isReeling = false;
-
-        this._updateFishAI(dt, isReeling); // <-- PASS isReeling TO AI
+        this._updateFishAI(dt, isReeling);
         this._applyPhysics(dt, isReeling);
         this._checkEndConditions();
     },
@@ -228,204 +223,195 @@ export const FishingEngine = {
             return;
         }
 
-        if (this.fishStamina <= 0) {
-            this.ai.state = 'HOLD';
-            this.ai.timer = 1.0;
-            this.targetSweetSpot = this.fishData.combat.optimalReel;
+        // --- NEW 1: SECOND WIND (0% Stamina Preservation) ---
+        if (this.fishStamina <= 0 && this.ai.state !== 'SECOND_WIND') {
+            this.ai.state = 'SECOND_WIND';
+            // Duration scales slightly with fish base stamina (Bosses get longer second winds)
+            this.ai.timer = 1.5 + (this.fishData.combat.stamina / 250);
+            this.targetSweetSpot = getRandomInRange(40, 60);
             return;
         }
 
         this.ai.timer -= dt;
         if (this.ai.timer <= 0) {
-            const roll = Math.random();
-            let aggro = this.fishData.combat.aggression; 
-            const baseOpt = this.fishData.combat.optimalReel;
-            const speed = this.fishData.combat.speed;
+            const aggro = this.fishData.combat.aggression;
+            const tensionPct = this.tension / this.maxTension;
+            const slack = (!isReeling && this.reelPower < 30);
+            const fishStamPct = this.fishStamina / this.maxFishStamina;
 
-            // --- REACTIVE AI MODIFIERS ---
-            
-            // 1. Desperation: If close to being caught, fight much harder
-            if (this.catchProgress > 75) {
-                aggro = Math.min(1.0, aggro + 0.3);
+            // --- NEW 2: SELF PRESERVATION (The 30% -> 50% Rule) ---
+            if (fishStamPct <= 0.3) this.ai.isResting = true;
+            if (fishStamPct >= 0.5) this.ai.isResting = false;
+
+            let nextState = 'HOLD';
+            let duration = getRandomInRange(1.0, 2.5);
+
+            if (this.ai.state === 'SECOND_WIND') {
+                // Coming out of second wind, fish is desperate
+                nextState = Math.random() < 0.5 ? 'THRASH' : 'RUN';
+                duration = getRandomInRange(1.0, 2.0);
             }
-
-            // 2. Self-Preservation: If stamina is low, try to rest unless provoked
-            const staminaPct = this.fishStamina / this.maxFishStamina;
-            if (staminaPct < 0.3) {
-                if (isReeling && Math.random() < 0.6) {
-                    // Panic
-                    this.ai.state = Math.random() < 0.5 ? 'THRASH' : 'BURST';
-                    this.ai.timer = getRandomInRange(0.5, 1.2);
-                    this.targetSweetSpot = Math.max(10, baseOpt - (speed * 0.8 * aggro));
-                    return;
+            else if (this.ai.isResting) {
+                // Desperately trying to rest
+                if (tensionPct > 0.8) {
+                    // Panic if pulled too hard while trying to recover
+                    nextState = 'THRASH'; 
+                    duration = getRandomInRange(0.5, 1.0);
                 } else {
-                    // Rest
-                    this.ai.state = 'HOLD';
-                    this.ai.timer = getRandomInRange(1.5, 2.5);
-                    this.targetSweetSpot = baseOpt;
-                    return;
+                    // Refuses to run, just holds steady to regain energy
+                    nextState = 'HOLD'; 
+                    duration = getRandomInRange(1.5, 3.0);
                 }
+            } 
+            else if (tensionPct > 0.85) {
+                // High tension: Panic!
+                nextState = Math.random() < 0.6 ? 'THRASH' : 'BURST';
+                duration = getRandomInRange(0.5, 1.2);
+            } 
+            else if (slack) {
+                // Slack line: Seize the chance to run
+                nextState = 'RUN';
+                duration = getRandomInRange(2.0, 4.0);
+            } 
+            else {
+                // Standard behavior cycle based on aggression stat
+                const roll = Math.random();
+                if (roll < 0.1 * aggro) nextState = 'BURST';
+                else if (roll < 0.4 * aggro) nextState = 'THRASH';
+                else if (roll < 0.7 + (0.2 * aggro)) nextState = 'RUN';
+                else nextState = 'HOLD';
             }
 
-            // 3. Reacting to Reeling: Higher chance to Bolt if actively reeled
-            if (isReeling) {
-                aggro = Math.min(1.0, aggro + 0.15);
-            }
+            this.ai.state = nextState;
+            this.ai.timer = duration;
+        }
 
-            // 4. Slack Line Punish: If player drops drag to nothing and waits, steal line
-            const isSlack = (!isReeling && this.reelPower < 20);
-
-            // --- STATE SELECTION ---
-            if (roll < 0.05 * aggro) {
-                this.ai.state = 'BURST';
-                this.ai.timer = getRandomInRange(0.4, 0.8);
-                this.targetSweetSpot = Math.max(10, baseOpt - (speed * 0.8 * aggro));
-            } else if (roll < 0.3 * aggro) {
-                this.ai.state = 'THRASH';
-                this.ai.timer = getRandomInRange(1.0, 1.8);
-            } else if (isSlack || roll < 0.5 + (0.2 * aggro)) {
-                this.ai.state = 'RUN';
-                this.ai.timer = getRandomInRange(1.5, 3.0);
-                this.targetSweetSpot = Math.max(10, baseOpt - (speed * 0.4 * aggro));
-            } else {
-                this.ai.state = 'HOLD';
-                this.ai.timer = getRandomInRange(1.0, 2.0);
-                this.targetSweetSpot = baseOpt;
+        // Set the Sweet Spot (Target Drag) based on the current AI state
+        if (this.ai.state === 'THRASH') {
+            if (Math.random() < 10 * dt) this.targetSweetSpot = getRandomInRange(20, 90);
+        } else {
+            const range = BEHAVIORS[this.ai.state].targetSweet;
+            if (range && range !== 'wobble') {
+                this.targetSweetSpot = getRandomInRange(range[0], range[1]);
             }
         }
     },
 
     _applyPhysics(dt, isReeling) {
         const behavior = BEHAVIORS[this.ai.state];
+        const fishSpeed = this.fishData.combat.speed;
+        const fishStamPct = this.fishStamina / this.maxFishStamina;
 
-        // --- 0. FISH FIGHTS THE DRAG DIAL ---
-        if (this.fishStamina > 0 && this.fishData.combat.aggression > 0) {
-            if (behavior.dragSlip === 'shake') {
-                const shake = (Math.random() - 0.5) * 80 * dt;
-                this.reelPower += shake;
-            } else if (behavior.dragSlip !== 0) {
-                const pullPower = behavior.dragSlip * (this.fishData.combat.speed / 50) * (this.fishData.combat.aggression + 0.5) * dt;
-                this.reelPower += pullPower;
-            }
-            this.reelPower = clamp(this.reelPower, 10, 100);
-        }
-
-        // --- 1. DYNAMIC SWEET SPOT MOVEMENT ---
-        if (this.fishStamina > 0 && this.fishData.combat.aggression > 0) {
-            const shiftSpeed = (this.ai.state === 'BURST') ? 12.0 : (2.0 + (this.fishData.combat.speed / 50));
-            this.currentSweetSpot += (this.targetSweetSpot - this.currentSweetSpot) * shiftSpeed * dt;
-            
-            if (this.ai.state === 'THRASH' && Math.random() < 15 * dt) {
-                this.targetSweetSpot = clamp(this.fishData.combat.optimalReel + (Math.random() - 0.5) * 60 * this.fishData.combat.aggression, 10, 100);
-            }
-        } else {
-            this.targetSweetSpot = this.fishData.combat.optimalReel;
-            this.currentSweetSpot += (this.targetSweetSpot - this.currentSweetSpot) * 2.0 * dt;
-        }
+        // --- 1. SWEET SPOT (DRAG) INTERPOLATION ---
+        const shiftSpeed = (this.ai.state === 'BURST') ? 15.0 : 4.0;
+        this.currentSweetSpot += (this.targetSweetSpot - this.currentSweetSpot) * shiftSpeed * dt;
         this.currentSweetSpot = clamp(this.currentSweetSpot, 10, 100);
 
-        // --- 2. CALCULATE PLAYER ACCURACY & NORMALIZED DRAG ---
-        const powerDiff = this.reelPower - this.currentSweetSpot;
         const tol = this.playerStats.minigame.sweetSpotTolerance;
+        const powerDiff = this.reelPower - this.currentSweetSpot;
         this.inSweetSpot = Math.abs(powerDiff) <= tol;
 
-        const dragNorm = clamp((this.reelPower - 10) / 90, 0.0, 1.0);
+        const dragNorm = clamp(this.reelPower / 100, 0.1, 1.0);
 
-        const fishSpeed = this.fishData.combat.speed;
-        const rodPower = this.playerStats.minigame.power;
-        const flex = this.playerStats.minigame.flexibility;
+        // --- 2. PLAYER EXHAUSTION MECHANIC ---
+        const playerExhausted = this.playerStamina <= 0;
+        const effectiveRodPower = playerExhausted ? (this.playerStats.minigame.power * 0.25) : this.playerStats.minigame.power;
+        const tensionPenalty = playerExhausted ? 2.0 : 1.0;
 
-        const thrashSpike = (this.ai.state === 'THRASH') ? getRandomInRange(0.8, 1.5) : 1.0;
-        const rawFishPull = (this.fishStamina > 0) ? (fishSpeed * behavior.pullMult * thrashSpike) : 0;
-        const tensionPullForce = rawFishPull * Math.pow(dragNorm, 1.5);
-
-// --- 3. TENSION & EXHAUSTION ---
+// --- 3. ELASTIC TENSION MATH ---
         let tensionDelta = 0;
+        const baseFishPull = fishSpeed * behavior.pullMult;
 
         if (isReeling) {
-            this.playerStaminaDelayTimer = 0.5; 
-            const reelFriction = 30 * rodPower * dragNorm;
+            this.playerStaminaDelayTimer = 1.0; 
             
-            // BALANCE: Increased base tension generation by 25%. You must respect your max tension!
-            let rawTensionIncrease = (tensionPullForce * 1.875) + (reelFriction * 1.25);
-
-            if (powerDiff > tol) {
-                const overpull = (powerDiff - tol) / 50; 
-                rawTensionIncrease *= (1.0 + overpull * 2.5); 
-            } else if (this.inSweetSpot) {
-                rawTensionIncrease *= 0.5; 
+            // BALANCE FIX: Lowered base tension build rate (was 1.5 and 0.5)
+            let tensionBuild = (baseFishPull * dragNorm * 1.3) + (this.reelPower * 0.35);
+            
+            if (!this.inSweetSpot) {
+                const overpull = Math.max(0, Math.abs(powerDiff) - tol) / 50;
+                // BALANCE FIX: Softened the penalty for missing the sweet spot (was 3.0, now 2.2)
+                tensionBuild *= (1.0 + Math.pow(overpull, 1.5) * 2.2); 
+            } else {
+                tensionBuild *= 0.6; 
             }
-            
-            tensionDelta = rawTensionIncrease;
+
+            tensionDelta = tensionBuild * tensionPenalty;
         } else {
             this.playerStaminaDelayTimer -= dt;
-            const baseDecay = 60 * flex;
-            const decay = (this.playerStamina <= 0) ? (baseDecay * 0.2) : baseDecay;
-            tensionDelta = tensionPullForce - decay;
+            const flex = this.playerStats.minigame.flexibility;
+            
+            // BALANCE FIX: Increased base tension decay (was 40, now 60). 
+            // Tension now drops 50% faster when you let go of the reel!
+            const tensionDecay = 60 * flex * (1.1 - dragNorm);
+            const passivePullTension = baseFishPull * dragNorm * 0.5;
+            
+            tensionDelta = passivePullTension - tensionDecay;
         }
 
-        const maxTensionDelta = this.maxTension * 0.6;
+        const maxTensionDelta = this.maxTension * 0.8;
         tensionDelta = clamp(tensionDelta, -maxTensionDelta, maxTensionDelta);
         this.tension = clamp(this.tension + tensionDelta * dt, 0, this.maxTension + 5);
 
-        // --- 4. PLAYER STAMINA ---
+        // --- 4. STAMINA DRAIN ---
+        
+        // Player (FIXED: Now properly calculates based on line resistance)
         if (isReeling) {
-            // BALANCE FIX: Increased drain from 22 to 35. Reeling tires you out very quickly now!
-            const drain = 35 * behavior.stamDrainMult * Math.pow(dragNorm + 0.2, 1.2); 
-            this.playerStamina -= drain * dt;
+            const resistance = Math.max(1.0, behavior.pullMult); 
+            const drainRate = 25 * resistance * Math.pow(dragNorm + 0.2, 1.2); 
+            this.playerStamina -= drainRate * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;
         }
         this.playerStamina = clamp(this.playerStamina, 0, this.maxPlayerStamina);
 
-        // --- 5. FISH STAMINA ---
-        if (isReeling && behavior.catchable) {
-            const efficiency = (powerDiff > tol) ? 0.6 : (this.inSweetSpot ? 1.5 : 1.0);
-            this.fishStamina -= (18 * rodPower * (dragNorm + 0.2) * efficiency) * dt;
+        // Fish (The "Armor" & "Second Wind" mechanics)
+        let fishDrain = 0;
+        
+        if (behavior.invincible) {
+            // SECOND WIND: Massive 15% Max HP regen per second!
+            fishDrain = -(this.maxFishStamina * 0.15); 
+        } else if (behavior.drainMult > 0) {
+            // Running against drag
+            fishDrain = behavior.drainMult * 12 * dragNorm; 
+        } else {
+            // Normal Rest
+            fishDrain = behavior.drainMult * 5; 
+            const regenBoost = (this.maxFishStamina * 0.03);
+            fishDrain -= regenBoost; // Additional passive regen based on max health
         }
         
-        if (behavior.selfDrain > 0) {
-            const dragResistance = Math.max(0.2, dragNorm * 2.0); 
-            this.fishStamina -= (behavior.selfDrain * 1.5) * dragResistance * dt; 
-        } else {
-            // BALANCE: Doubled fish stamina recovery from 1.5% to 3%. 
-            // If you rest too long, the fish will catch its breath and fight back.
-            const regenBoost = (this.maxFishStamina * 0.03);
-            this.fishStamina += (Math.abs(behavior.selfDrain) + regenBoost) * dt;
+        // Reeling in the sweet spot damages fish stamina (if not invincible)
+        if (isReeling && this.inSweetSpot && !behavior.invincible) {
+            fishDrain += 18 * effectiveRodPower;
         }
+
+        this.fishStamina -= fishDrain * dt;
         this.fishStamina = clamp(this.fishStamina, 0, this.maxFishStamina);
 
-// --- 6. CATCH PROGRESS (Tug of War) ---
-        if (isReeling && behavior.catchable) {
-            if (powerDiff < -tol) {
-                const underpull = (Math.abs(powerDiff) - tol) / 50;
-                // FORGIVENESS: Reduced underpull penalty from 10 to 4. 
-                // The fish won't rip the line away as aggressively if your drag is too low.
-                this.catchProgress -= (4 * (fishSpeed / 50) * underpull) * dt;
-            } else {
-                const exhaustMult = (this.fishStamina <= 0) ? 3.0 : (1.5 - (this.fishStamina / this.maxFishStamina)); 
-                const sweetSpotMult = this.inSweetSpot ? 2.0 : 0.5; 
-                // BOOST: Increased base catch progress rate from 8 to 10.
-                // Makes the bar climb slightly faster when you are doing things right.
-                this.catchProgress += (10 * rodPower * exhaustMult * (dragNorm + 0.2) * sweetSpotMult) * dt;
-            }
-        } 
+
+        // --- 5. CATCH PROGRESS (The True Tug-of-War) ---
+        const escapeSpeed = baseFishPull * (1.1 - dragNorm) * 0.25;
         
-        if (this.fishStamina > 0 && behavior.pullMult > 0) {
-            // FORGIVENESS: Slashed the line loss rate in half (from 0.3 to 0.15).
-            // When you let go to rest your stamina, the progress bar will now drop much, much slower.
-            const lineLossRate = rawFishPull * (1.0 - dragNorm) * 0.15; 
-            if (!isReeling) {
-                this.catchProgress -= lineLossRate * dt;
-                
-                // Escape Penalty: If the fish is running with a slack line, you lose time quickly
-                if (this.catchProgress <= 5) {
-                    this.fightTimer -= dt * 2.0; 
-                }
-            }
+        if (!isReeling) {
+            this.catchProgress -= escapeSpeed * dt;
+            if (this.catchProgress <= 5) this.fightTimer -= dt * 2.0;
+        } else {
+            // Fish Stamina acts as Armor. 
+            // FIX: During Second Wind, the fish is limp and easy to pull, but it is regenerating rapidly!
+            // This gives you a frantic window to haul it in before it fully wakes up.
+            const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * 4.0);
+            
+            let pullSpeed = (20 * effectiveRodPower * dragNorm) / armorFactor;
+            
+            if (this.inSweetSpot) pullSpeed *= 1.5;
+            else pullSpeed *= 0.5;
+
+            this.catchProgress += (pullSpeed - (escapeSpeed * 0.5)) * dt;
         }
-        
+
         this.catchProgress = clamp(this.catchProgress, 0, 100);
+
     },
 
     _checkEndConditions() {

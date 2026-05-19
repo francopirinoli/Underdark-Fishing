@@ -416,16 +416,29 @@ function loadLocalNode(entryDir) {
         if (effStats.exploration.immunities.abyssal) setTimeout(() => HUD.logAction("Overclocked Motor engaging bypass thrust.", "safe"), 1500);
     }
 
-    // --- UPDATED: Damage Callback ---
+// --- UPDATED: Damage Callback with DR and Evasion ---
     ExplorationEngine.onDamage = (amount, reason) => {
+        // Handle Evasion
+        if (reason === "Dodge") {
+            HUD.logAction("Nimble steering! Dodged collision.", 'safe');
+            return;
+        }
+        
+        // Handle 100% Armor Absorption
+        if (amount <= 0 && reason === "Collision") {
+            SFX.playError(); // Dull thud
+            HUD.logAction("Armor absorbed the impact. No damage taken.", 'safe');
+            return;
+        }
+
+        // Apply Real Damage
         player.vitals.hp -= amount;
         SFX.playLineSnap(); // Crunch sound
         
         if (reason === "Boiling Water") {
             HUD.logAction(`Hull melting! Took ${amount} damage.`, 'danger');
         } else if (reason === "Falling Crystal") {
-            // NEW: Warn the player that a crystal hit them
-            HUD.logAction(`A falling crystal struck the hull! Took ${amount} damage.`, 'danger');
+            HUD.logAction(`Crystal shard struck the hull! Took ${amount} damage.`, 'danger');
         } else {
             HUD.logAction(`Collision! Hull took ${amount} damage.`, 'danger');
         }
@@ -869,18 +882,68 @@ function handleAttemptCast() {
             else if (tId === TILE.FLORA) maxDepth = castRng.int(20, 35);
             else maxDepth = castRng.int(12, 22);
 
-// 2. Generate Local Fish Pool as INSTANCES
+// 2. Setup Base Pool
             let pool = currentLocalFishPool; 
+
+            if (tId === TILE.DEEP_WATER) {
+                const ds = pool.filter(f => f.identity.family === 'deepsea');
+                if (ds.length > 0) pool = ds;
+            }
             
-            // --- NEW: APPLY BAIT MODIFIERS ---
+            // --- 3. APPLY TACTICAL STEALTH & NOISE FILTER ---
+            const noiseLevel = ExplorationEngine.currentNoise || 0;
+            let spookedCount = 0;
+            let predatorAttracted = false;
+
+            let modifiedPool = [];
+            pool.forEach(fishTemplate => {
+                const aggro = fishTemplate.combat.aggression;
+                
+                // High noise scares timid fish (aggression < 0.5)
+                if (noiseLevel > 60 && aggro < 0.5) {
+                    spookedCount++;
+                    return; // Flee!
+                }
+                modifiedPool.push(fishTemplate);
+                
+                // Extremely high noise attracts predators (aggression >= 0.7)
+                if (noiseLevel > 75 && aggro >= 0.7) {
+                    modifiedPool.push(fishTemplate);
+                    modifiedPool.push(fishTemplate); // Triple their spawn weight!
+                    predatorAttracted = true;
+                }
+            });
+
+            if (modifiedPool.length === 0) {
+                HUD.logAction("Your boat was too noisy. All fish fled!", "danger");
+                SFX.playError();
+                ExplorationRenderer.spawnFleeSplashes(tx, ty, 6);
+                mouse.isCharging = false;
+                mouse.chargePct = 0;
+                ExplorationEngine.velocity = 0;
+                return; 
+            }
+
+            // Visual & Text Feedback
+            if (spookedCount > 0) {
+                HUD.logAction(`Loud engine noise spooked timid fish away.`, "warn");
+                ExplorationRenderer.spawnFleeSplashes(tx, ty, 3);
+            } else if (noiseLevel < 30 && pool.length > 0) {
+                HUD.logAction(`A silent approach. The waters are undisturbed.`, "safe");
+            }
+            
+            if (predatorAttracted) {
+                HUD.logAction(`The commotion has attracted aggressive predators!`, "danger");
+                ExplorationRenderer.spawnFleeSplashes(tx, ty, 2); // Predators swirling
+            }
+
+            pool = modifiedPool;
+
+            // --- 4. APPLY BAIT MODIFIERS ---
             let baitBoost = 0;
             if (player.gear.bait) {
                 const b = player.gear.bait;
-                
-                // FIX: Fallback to itemData if targetFamilyIds is missing at the root (for older crafted bait)
                 const targetIds = b.targetFamilyIds || (b.itemData ? b.itemData.targetFamilyIds : []);
-                
-                // Filter the pool to ONLY include the target families if any exist in this node
                 const targetedFish = pool.filter(f => targetIds.includes(f.identity.family));
                 
                 if (targetedFish.length > 0) {
@@ -888,7 +951,6 @@ function handleAttemptCast() {
                     baitBoost = b.rarityBoostPct;
                 }
                 
-                // Deduct a charge
                 b.charges--;
                 if (b.charges <= 0) {
                     HUD.logAction(`Your ${b.name} was fully consumed!`, "warn");
@@ -896,33 +958,27 @@ function handleAttemptCast() {
                 }
             }
 
-            if (tId === TILE.DEEP_WATER) {
-                const ds = pool.filter(f => f.identity.family === 'deepsea');
-                if (ds.length > 0) pool = ds;
-            }
-
+            // --- 5. GENERATE INSTANCES ---
             let castPool = Array.from({length: 10}, (_, i) => {
                 const template = castRng.pick(pool);
-                
-                // If bait triggers, we use a rigged RNG that guarantees a high rarity roll (80-100)
                 let instanceRng = createRng(Date.now() + i);
+                
+                // If bait triggers, we use a rigged RNG that guarantees a high rarity roll
                 if (baitBoost > 0 && Math.random() < (baitBoost / 100)) {
                     const originalInt = instanceRng.int;
                     instanceRng.int = (min, max) => {
-                        if (max === 100) return originalInt(80, 100); // Rig the rarity roll!
+                        if (max === 100) return originalInt(80, 100); 
                         return originalInt(min, max);
                     };
                 }
-                
                 return generateFishInstance(template, instanceRng);
             });
 
-            // --- NEW: INJECT BOUNTY TARGETS ---
+            // --- 6. INJECT BOUNTY TARGETS ---
             player.activeQuests.forEach(q => {
                 if (q.type === 'bounty' && !q.isComplete && q.targetNode.x === globalX && q.targetNode.y === globalY) {
                     const template = currentLocalFishPool.find(f => f.id === q.targetSpeciesId);
                     if (template) {
-                        // Rig the RNG to guarantee the exact rarity the quest demands
                         const riggedRng = createRng(Date.now() + 999);
                         const originalInt = riggedRng.int;
                         riggedRng.int = (min, max) => {
@@ -933,29 +989,12 @@ function handleAttemptCast() {
                             }
                             return originalInt(min, max);
                         };
-                        
                         const bountyFish = generateFishInstance(template, riggedRng);
-                        
-                        // Ensure the bounty boss doesn't get scared away by boat noise
                         bountyFish.combat.aggression = Math.max(0.6, bountyFish.combat.aggression);
-                        
                         castPool.push(bountyFish);
                     }
                 }
             });
-
-            // 3. APPLY STEALTH & NOISE FILTER
-            const noiseLevel = ExplorationEngine.currentNoise || 0;
-            const spookFactor = noiseLevel / 100;
-
-            castPool = castPool.filter(fish => {
-                const courage = fish.combat.aggression + (fish.identity.rarity === 'Boss' ? 2 : 0);
-                if (Math.random() < spookFactor && courage < 0.6) {
-                    return false; // Spooked!
-                }
-                return true;
-            });
-
             // 4. Add Chest if in generous radius
             if (currentLocalChest) {
                 const distToChest = Math.hypot(tx - currentLocalChest.x, ty - currentLocalChest.y);

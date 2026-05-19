@@ -8,6 +8,7 @@ import { generateBoatData } from './boat_data_generator.js';
 import { generateRodData } from './rod_data_generator.js';
 import { generateLure } from '../art/lure_generator.js'; 
 import { createRng } from '../util/rng.js';
+import { clamp } from '../util/utils.js'; 
 
 const MAX_LEVEL = 10;
 const MAX_STAT_VALUE = 5; 
@@ -156,15 +157,14 @@ export const PlayerEngine = {
         
         let effectivePower = rodPower * (1 + (buffedStats.fishing * 0.2));
         let effectiveHookWindow = rodSens + (buffedStats.fishing * 100);
-        
-        // BALANCE FIX: Lowered base stamina from 75 to 50, and stat multiplier from 50 to 30.
-        // A level 1 player now has 80 Stamina instead of 125.
-        let effectiveStamina = 50 + (buffedStats.stamina * 30); 
-        
+        let effectiveStamina = 50 + (buffedStats.stamina * 40); 
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
         let effectiveSweetSpotTolerance = Math.max(3, Math.min(25, 8 + (rodSens / 100))); 
-        let effectiveReelScrollSpeed = Math.max(0.5, 1.0 + (rodSens / 500));
+        
+        // BALANCE FIX: Bumped base scroll speed from 1.0 to 1.8. 
+        // It now scales slightly faster with Sensitivity as well.
+        let effectiveReelScrollSpeed = Math.max(0.8, 1.8 + (rodSens / 400));
 
         if (rod && rod.traits) {
             rod.traits.forEach(t => {
@@ -173,12 +173,17 @@ export const PlayerEngine = {
             });
         }
 
-        // --- 2. EXPLORATION & BOAT UPGRADES ---
+// --- 2. EXPLORATION & BOAT UPGRADES ---
         let effectiveMaxHp = boat ? boat.stats.maxHp : 50;
         let effectiveSpeed = boat ? boat.stats.speed : 10; 
         let effectiveAccel = boat ? boat.stats.acceleration : 10;
+        let effectiveTurn = boat ? boat.stats.turnSpeed : 50;
         let effectiveStealth = boat ? boat.stats.stealth : 0.5;
         let effectiveCargo = boat ? boat.stats.cargoSpace : 10; 
+        
+        let effectiveMass = boat ? boat.stats.mass : 50;
+        let effectiveDR = boat ? boat.stats.damageReduction : 0;
+        let effectiveEvasion = boat ? boat.stats.evasion : 0;
         let collisionDamageMult = 1.0;
         
         const immunities = { volcanic: false, crystal: false, abyssal: false, fungal: false, frozen: false };
@@ -186,23 +191,41 @@ export const PlayerEngine = {
         if (boat && boat.upgrades) {
             const upg = boat.upgrades;
             if (upg.plating) {
-                if (upg.plating.id === 'upg_iron_plating') { effectiveMaxHp += 50; immunities.volcanic = true; } 
-                else if (upg.plating.id === 'upg_acoustic_dampening') { effectiveStealth *= 1.30; immunities.crystal = true; }
+                if (upg.plating.id === 'upg_iron_plating') { 
+                    effectiveMaxHp += 50; 
+                    effectiveMass += 25; // Iron is heavy!
+                    effectiveDR += 0.15; // +15% DR
+                    immunities.volcanic = true; 
+                } 
+                else if (upg.plating.id === 'upg_acoustic_dampening') { 
+                    effectiveStealth *= 1.30; 
+                    immunities.crystal = true; 
+                }
             }
             if (upg.engine) {
                 if (upg.engine.id === 'upg_overclocked_motor') { effectiveSpeed *= 1.20; immunities.abyssal = true; } 
                 else if (upg.engine.id === 'upg_alchemical_filter') { effectiveAccel *= 1.15; immunities.fungal = true; }
             }
             if (upg.prow) {
-                if (upg.prow.id === 'upg_icebreaker_prow') { collisionDamageMult = 0.5; immunities.frozen = true; }
+                if (upg.prow.id === 'upg_icebreaker_prow') { 
+                    collisionDamageMult = 0.5; 
+                    effectiveMass += 15;
+                    effectiveDR += 0.10;
+                    immunities.frozen = true; 
+                }
             }
             if (upg.storage && upg.storage.id === 'upg_cargo_net') effectiveCargo += 10;
         }
 
+        // Apply Player "Driving" Stat Modifiers
         effectiveSpeed *= (1 + (buffedStats.driving * 0.1));
         effectiveAccel *= (1 + (buffedStats.driving * 0.1));
+        effectiveTurn *= (1 + (buffedStats.driving * 0.1));
         effectiveStealth *= (1 + (buffedStats.driving * 0.1));
-        let hazardDodgeChance = buffedStats.driving * 0.04;
+        
+        // Driving stat buffs DR and Evasion, but caps them to prevent literal invincibility
+        effectiveDR = clamp(effectiveDR + (buffedStats.driving * 0.05), 0, 0.85);
+        effectiveEvasion = clamp(effectiveEvasion + (buffedStats.driving * 0.04), 0, 0.85);
 
 // --- 3. ECONOMY & CRAFTING STATS ---
         let storeDiscount = buffedStats.bartering * 0.08; 
@@ -237,8 +260,13 @@ export const PlayerEngine = {
                 maxHp: Math.round(effectiveMaxHp),
                 speed: Number(effectiveSpeed.toFixed(2)),
                 acceleration: Number(effectiveAccel.toFixed(2)),
+                turnSpeed: Number(effectiveTurn.toFixed(2)),
                 stealth: Number(effectiveStealth.toFixed(2)),
-                hazardDodgeChance: Number(hazardDodgeChance.toFixed(2)),
+                mass: Math.round(effectiveMass),
+                damageReduction: Number(effectiveDR.toFixed(2)),
+                evasion: Number(effectiveEvasion.toFixed(2)),
+                // FIX: Re-map the old name so game.js and grimoire_ui.js don't crash!
+                hazardDodgeChance: Number(effectiveEvasion.toFixed(2)), 
                 collisionDamageMult: Number(collisionDamageMult.toFixed(2)),
                 cargoSpace: effectiveCargo,
                 fuelEfficiencyMult: Number(Math.max(0.1, fuelEfficiencyMult).toFixed(2)),

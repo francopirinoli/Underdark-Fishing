@@ -98,7 +98,12 @@ export const FishingRenderer = {
             #bar-p-stam { background: #22D3EE; }
             #bar-f-stam { background: #A855F7; }
             
-            .behavior-text { margin-top: 1rem; text-align: center; font-size: 1.2rem; font-weight: bold; letter-spacing: 0.1em; transition: color 0.2s; }
+            .behavior-text { 
+                margin-top: 1rem; text-align: center; font-size: 1.2rem; 
+                font-weight: bold; letter-spacing: 0.1em; transition: color 0.2s; 
+                height: 1.5rem; line-height: 1.5rem; white-space: nowrap; overflow: hidden; 
+            }
+
             .depth-readout { text-align: center; font-size: 0.9rem; color: #22D3EE; margin-top: 0.5rem; font-weight: bold;}
             .controls-hint { text-align: center; font-size: 0.8rem; color: #64748B; margin-top: 0.5rem; }
         `;
@@ -481,6 +486,9 @@ export const FishingRenderer = {
         } else if (state === 'INANIMATE') {
             behaviorText = "Heavy dead weight...";
             behaviorColor = '#94A3B8';
+        } else if (state === 'SECOND_WIND') {
+            behaviorText = "It caught a second wind!";
+            behaviorColor = '#A855F7';
         }
 
         this.elements.behavior.innerText = behaviorText;

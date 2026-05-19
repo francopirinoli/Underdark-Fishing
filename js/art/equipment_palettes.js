@@ -34,5 +34,10 @@ export const BOAT_PALETTES = {
     SKIFF:   { name: 'Canvas Skiff',  hull: '#78350F', hullShadow: '#451A03', hullHigh: '#A16207', trim: '#0369A1', sail: '#FEF3C7', accent: '#F59E0B', window: '#FEF08A' },
     TRAWLER: { name: 'Iron Trawler',  hull: '#334155', hullShadow: '#0F172A', hullHigh: '#64748B', trim: '#B91C1C', sail: '#334155', accent: '#EAB308', window: '#67E8F9' },
     RUNNER:  { name: 'Shadow Runner', hull: '#1E1B4B', hullShadow: '#020617', hullHigh: '#4338CA', trim: '#C084FC', sail: '#312E81', accent: '#F0ABFC', window: '#A855F7' },
-    DREAD:   { name: 'Dreadnought',   hull: '#0F172A', hullShadow: '#000000', hullHigh: '#1E293B', trim: '#DC2626', sail: '#1F2937', accent: '#F97316', window: '#EF4444' }
+    DREAD:   { name: 'Dreadnought',   hull: '#0F172A', hullShadow: '#000000', hullHigh: '#1E293B', trim: '#DC2626', sail: '#1F2937', accent: '#F97316', window: '#EF4444' },
+    // --- NEW PALETTES ---
+    GHOST:   { name: 'Phantom Hull',  hull: '#064E3B', hullShadow: '#022C22', hullHigh: '#10B981', trim: '#34D399', sail: '#A7F3D0', accent: '#6EE7B7', window: '#A7F3D0' },
+    ROYAL:   { name: 'Royal Galleon', hull: '#7F1D1D', hullShadow: '#450A0A', hullHigh: '#991B1B', trim: '#FBBF24', sail: '#F8FAFC', accent: '#FDE047', window: '#FDE047' },
+    IVORY:   { name: 'Ivory Carver',  hull: '#E2E8F0', hullShadow: '#94A3B8', hullHigh: '#F8FAFC', trim: '#0284C7', sail: '#BAE6FD', accent: '#38BDF8', window: '#E0F2FE' },
+    RUSTED:  { name: 'Rustbucket',    hull: '#9A3412', hullShadow: '#431407', hullHigh: '#C2410C', trim: '#D97706', sail: '#FED7AA', accent: '#F59E0B', window: '#FDE68A' }
 };

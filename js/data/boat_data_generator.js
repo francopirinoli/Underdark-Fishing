@@ -18,22 +18,31 @@ const RARITY_TIERS =[
 ];
 
 // --- HULL ARCHETYPES (Base Stats) ---
+// Mass & Speed setup for the "Momentum" physics update in Step 2.
 const HULL_STATS = {
     'skiff': {
-        hp: 50, speed: 60, acceleration: 80, turnSpeed: 90, 
-        cargo: 20, stealth: 1.2 // 1.2x stealth means 20% harder for fish to hear you
+        hp: 50, speed: 60, acceleration: 120, turnSpeed: 90, 
+        cargo: 20, stealth: 1.2, mass: 20, dr: 0.0, evasion: 0.40
     },
     'trawler': {
-        hp: 100, speed: 50, acceleration: 50, turnSpeed: 50, 
-        cargo: 30, stealth: 0.8 // Noisy industrial boat
+        hp: 120, speed: 70, acceleration: 125, turnSpeed: 55, 
+        cargo: 35, stealth: 0.8, mass: 70, dr: 0.35, evasion: 0.10
     },
     'runner': {
-        hp: 70, speed: 85, acceleration: 70, turnSpeed: 80, 
-        cargo: 15, stealth: 1.8 // Drow stealth tech, incredibly quiet
+        hp: 70, speed: 90, acceleration: 160, turnSpeed: 85, 
+        cargo: 15, stealth: 1.8, mass: 35, dr: 0.10, evasion: 0.35
+    },
+    'corvette': {
+        hp: 90, speed: 110, acceleration: 190, turnSpeed: 65, 
+        cargo: 25, stealth: 1.0, mass: 55, dr: 0.20, evasion: 0.20
+    },
+    'barge': {
+        hp: 150, speed: 50, acceleration: 100, turnSpeed: 45, 
+        cargo: 60, stealth: 0.7, mass: 120, dr: 0.45, evasion: 0.05
     },
     'dreadnought': {
-        hp: 150, speed: 40, acceleration: 40, turnSpeed: 40, 
-        cargo: 50, stealth: 0.6 // A floating fortress, wakes everything up
+        hp: 200, speed: 85, acceleration: 150, turnSpeed: 35, 
+        cargo: 50, stealth: 0.5, mass: 150, dr: 0.60, evasion: 0.00
     }
 };
 
@@ -67,42 +76,39 @@ export function generateBoatData(options = {}) {
     const base = HULL_STATS[bType];
 
     let finalHp = base.hp * rarityObj.statMult;
-    let finalSpeed = base.speed * rarityObj.statMult;
+    let finalSpeed = base.speed * Math.pow(rarityObj.statMult, 0.8);
     let finalAccel = base.acceleration * Math.pow(rarityObj.statMult, 0.8);
     let finalTurn = base.turnSpeed * Math.pow(rarityObj.statMult, 0.8);
     let finalCargo = Math.floor(base.cargo * rarityObj.statMult);
-    let finalStealth = base.stealth; // Stealth is inherent to the design, rarity affects it minimally
+    let finalStealth = base.stealth; 
+    let finalMass = base.mass;
+
+    // Higher rarity slightly boosts DR and Evasion, but caps them to prevent invincibility
+    let finalDR = clamp(base.dr * (1 + (rarityObj.statMult - 1) * 0.3), 0.0, 0.85); 
+    let finalEvasion = clamp(base.evasion * (1 + (rarityObj.statMult - 1) * 0.5), 0.0, 0.70);
 
     // Apply minor visual physics modifiers
     if (hasSail) {
-        finalSpeed *= 1.1; // 10% speed boost from wind
+        finalSpeed *= 1.1; 
         finalAccel *= 1.15;
     }
     if (hasSpikes) {
-        finalHp *= 1.15; // 15% more collision durability
-        finalTurn *= 0.95; // Slightly heavier steering
+        finalHp *= 1.15; 
+        finalTurn *= 0.95; 
+        finalDR += 0.05; // Spikes add 5% damage reduction
     }
     if (hasSmoke) {
-        finalStealth *= 0.85; // Engine smoke makes you slightly louder
+        finalStealth *= 0.85; 
     }
 
-    // 4. Set Base Upgrades & Modules
-    // Players will buy better versions of these at the Docks and install them at their Safehouse
+    // 4. Set Base Upgrades
     const upgrades = {
-        plating: null, // Armor / Dampening
-        engine: null,  // Speed / Air Filters
-        prow: null,    // Collision / Icebreakers
-        lantern: {
-            id: 'lantern_oil',
-            name: 'Oil Lantern',
-            lightRadius: 250,
-            fuelDrainRate: 1.0 
-        },
-        storage: null  // Cargo nets
+        plating: null, engine: null, prow: null,
+        lantern: { id: 'lantern_oil', name: 'Oil Lantern', lightRadius: 250, fuelDrainRate: 1.0 },
+        storage: null 
     };
 
     // 5. Calculate Economy Value
-    // Base value * slight RNG fuzz
     let finalValue = rarityObj.valBase * rng.float(0.9, 1.1);
     finalValue = Math.round(finalValue);
 
@@ -110,7 +116,7 @@ export function generateBoatData(options = {}) {
         id: `boat_${rng.int(100000, 999999)}`,
         seed: seed,
         identity: {
-            name: artResult.name, // Rarity prefix removed!
+            name: artResult.name, 
             baseName: artResult.name,
             rarity: rarityObj.name
         },
@@ -127,7 +133,10 @@ export function generateBoatData(options = {}) {
             acceleration: Math.round(clamp(finalAccel, 10, 200)),
             turnSpeed: Math.round(clamp(finalTurn, 10, 200)),
             cargoSpace: finalCargo,
-            stealth: Number(clamp(finalStealth, 0.1, 3.0).toFixed(2))
+            stealth: Number(clamp(finalStealth, 0.1, 3.0).toFixed(2)),
+            mass: finalMass,
+            damageReduction: Number(finalDR.toFixed(2)),
+            evasion: Number(finalEvasion.toFixed(2))
         },
         upgrades: upgrades,
         economy: {

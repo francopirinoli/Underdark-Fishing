@@ -29,10 +29,25 @@ export const ExplorationRenderer = {
     // --- NEW: Atmospherics & Hazard State ---
     hazardParticles:[],
     wakeParticles:[],     // NEW
-    ambientRipples:[],    // NEW
-    currentBiome: null,    // NEW: Store the biome for colored effects
+    ambientRipples:[],    
+    fleeSplashes:[],      // <-- NEW: Tracks fish splashing away
+    currentBiome: null,   
     currentWeather: null,
     whirlpoolCanvas: null, 
+
+    // --- NEW: Spawn expanding splash rings ---
+    spawnFleeSplashes(tileX, tileY, count) {
+        for (let i = 0; i < count; i++) {
+            this.fleeSplashes.push({
+                wx: tileX * this.TILE_SIZE + (Math.random() - 0.5) * 40,
+                wy: tileY * this.TILE_SIZE + (Math.random() - 0.5) * 40,
+                radius: 1,
+                maxRadius: Math.random() * 15 + 10,
+                life: 1.0,
+                delay: Math.random() * 0.4 // Staggers the splashes so they don't happen all at once
+            });
+        }
+    },
 
     init(containerElement, width = 800, height = 600) {
         this.container = containerElement;
@@ -375,6 +390,33 @@ export const ExplorationRenderer = {
             }
         }
         this.ctx.globalAlpha = 1.0; // Reset alpha
+
+        // --- 3. FLEE SPLASHES (Stealth Feedback) ---
+        this.ctx.lineWidth = 1.5;
+        for (let i = this.fleeSplashes.length - 1; i >= 0; i--) {
+            const s = this.fleeSplashes[i];
+            if (s.delay > 0) {
+                s.delay -= dt;
+                continue;
+            }
+            s.life -= dt * 1.5;
+            s.radius += dt * 40;
+            
+            if (s.life <= 0) {
+                this.fleeSplashes.splice(i, 1);
+                continue;
+            }
+            
+            const screenX = s.wx - this.camX;
+            const screenY = s.wy - this.camY;
+            
+            if (screenX > 0 && screenX < this.VIEW_W && screenY > 0 && screenY < this.VIEW_H) {
+                this.ctx.beginPath();
+                this.ctx.arc(screenX, screenY, s.radius, 0, Math.PI * 2);
+                this.ctx.strokeStyle = `rgba(226, 232, 240, ${s.life})`; // White expanding ring
+                this.ctx.stroke();
+            }
+        }
     },
 
     render(engine, lightRadius, dt, castState = null, isFishingPhase = false, secondaryLights =[], chestPos = null, npcBoats =[]) {
