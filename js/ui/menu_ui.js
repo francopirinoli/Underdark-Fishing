@@ -212,7 +212,10 @@ export const MenuUI = {
         newBoat.invType = 'boat';
         this.ccBoat = newBoat;
 
-        document.getElementById('cc-boat-img').src = newBoat.art.profileDataUrl;
+        // --- FIX: Assign both the Profile and Top-Down images to the UI ---
+        document.getElementById('cc-boat-img-profile').src = newBoat.art.profileDataUrl;
+        document.getElementById('cc-boat-img-top').src = newBoat.art.topDownDataUrl;
+        
         document.getElementById('cc-boat-name').innerText = newBoat.identity.name;
         
         const s = newBoat.stats;
