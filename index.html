@@ -278,6 +278,7 @@
                 <div class="grim-tab" data-tab="character">Character</div>
                 <div class="grim-tab" data-tab="bestiary">Bestiary</div>
                 <div class="grim-tab" data-tab="quests">Quests</div>
+                <div class="grim-tab" data-tab="guide" style="color: var(--gold-warn);">Guide</div> <!-- NEW -->
             </div>
             
             <div class="grimoire-content" id="grimoire-body">
@@ -532,6 +533,19 @@
                     </div>
                     <div id="grim-quests-empty" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 1.8rem;">
                         No active quests. Check the Notice Board in a settlement.
+                    </div>
+                </div>
+
+                <!-- 8. GUIDE TAB (NEW) -->
+                <div id="grim-page-guide" class="grim-page" style="display: none; gap: 2rem; height: 100%;">
+                    <!-- Left: Navigation Menu -->
+                    <div style="flex: 1; max-width: 280px; display: flex; flex-direction: column; gap: 0.5rem; overflow-y: auto; padding-right: 1rem;" id="grim-guide-nav">
+                        <!-- Buttons injected via JS -->
+                    </div>
+                    
+                    <!-- Right: Formatted Text Content -->
+                    <div style="flex: 3; background: var(--bg-void); border: 2px solid var(--panel-border); border-radius: 8px; padding: 2rem; overflow-y: auto; font-family: var(--font-crpg), monospace; font-size: 1.2rem; line-height: 1.6;" id="grim-guide-content">
+                        <!-- Content injected via JS -->
                     </div>
                 </div>
 

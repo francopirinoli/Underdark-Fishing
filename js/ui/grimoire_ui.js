@@ -17,6 +17,7 @@ import { generateChest } from '../art/chest_generator.js';
 import { generateLurePart } from '../art/lure_generator.js'; 
 import { generateRodData } from '../data/rod_data_generator.js';
 import { EventManager } from '../events/event_manager.js';
+import { GUIDE_CHAPTERS } from '../data/guide_data.js'; // <-- ADD THIS LINE
 
 export const GrimoireUI = {
     selectedMapNode: null,
@@ -114,11 +115,12 @@ export const GrimoireUI = {
         if (!this.gameState) return;
         if (this.activeTab === 'map') this.renderMap();
         else if (this.activeTab === 'character') this.renderCharacter();
-        else if (this.activeTab === 'cargo') this.renderCargo();     // <-- NEW
-        else if (this.activeTab === 'tackle') this.renderTackle();   // <-- NEW
+        else if (this.activeTab === 'cargo') this.renderCargo();     
+        else if (this.activeTab === 'tackle') this.renderTackle();   
         else if (this.activeTab === 'loadout') this.renderLoadout();
         else if (this.activeTab === 'bestiary') this.renderBestiary();
         else if (this.activeTab === 'quests') this.renderQuests();
+        else if (this.activeTab === 'guide') this.renderGuide(); // <-- ADD THIS LINE
     },
 
     // --- MAP ---
@@ -1425,5 +1427,41 @@ renderBestiary() {
 
             list.appendChild(card);
         });
+    },
+    // --- GUIDE (TUTORIAL) ---
+    guideActiveChapterId: 'vitals', // State tracker for the sub-menu
+
+    renderGuide() {
+        const navContainer = document.getElementById('grim-guide-nav');
+        const contentContainer = document.getElementById('grim-guide-content');
+        
+        navContainer.innerHTML = '';
+        
+        // Build the Left Navigation Menu
+        GUIDE_CHAPTERS.forEach(chapter => {
+            const btn = document.createElement('button');
+            const isActive = this.guideActiveChapterId === chapter.id;
+            
+            btn.className = 'menu-btn';
+            btn.style.cssText = `
+                width: 100%; text-align: left; padding: 1rem; margin: 0; font-size: 1.2rem;
+                border-color: ${isActive ? 'var(--cyan-glow)' : 'var(--panel-border)'};
+                color: ${isActive ? 'var(--cyan-glow)' : 'var(--text-muted)'};
+                background: ${isActive ? 'var(--panel-base)' : 'transparent'};
+            `;
+            btn.innerText = chapter.title;
+            
+            btn.onclick = () => {
+                SFX.playUISelect();
+                this.guideActiveChapterId = chapter.id;
+                this.renderGuide(); // Re-render to update active states
+            };
+            
+            navContainer.appendChild(btn);
+        });
+
+        // Inject the Right Content Pane
+        const activeChapter = GUIDE_CHAPTERS.find(c => c.id === this.guideActiveChapterId) || GUIDE_CHAPTERS[0];
+        contentContainer.innerHTML = activeChapter.content;
     }
 };
