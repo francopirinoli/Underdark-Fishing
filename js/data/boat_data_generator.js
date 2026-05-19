@@ -65,8 +65,8 @@ export function generateBoatData(options = {}) {
         }
     }
 
-    // 2. Generate Pixel Art
-    const artResult = generateBoat({ rng });
+    // --- FIX: Pass the boatType from options into the art generator! ---
+    const artResult = generateBoat({ rng, boatType: options.boatType });
     const bType = artResult.data.boatType;
     const hasSail = artResult.data.hasSail;
     const hasSpikes = artResult.data.hasSpikes;

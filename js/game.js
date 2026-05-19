@@ -84,17 +84,15 @@ function initGameSystems() {
     // 2. Initialize UIs, injecting the new Audio trigger into the Menu
     MenuUI.init({
         onStartClick: async () => {
-            // Unlocks Audio Context upon the "Click to Start" action!
             await AudioEngine.init();
-            
             const savedMusicVol = localStorage.getItem('uf_vol_music') || 50;
             const savedSfxVol = localStorage.getItem('uf_vol_sfx') || 50;
             AudioEngine.setMusicVolume(savedMusicVol / 100);
             AudioEngine.setSfxVolume(savedSfxVol / 100);
-
             SFX.init();
         },
-        onNewGame: (slot, playerData, stats, points) => startNewDescent(slot, playerData, stats, points),
+        // --- FIX: Add starterBoat to the callback ---
+        onNewGame: (slot, playerData, stats, points, starterBoat) => startNewDescent(slot, playerData, stats, points, starterBoat),
         onLoadGame: (slot) => loadExistingDescent(slot)
     });
 
@@ -153,13 +151,19 @@ initGameSystems();
 
 // --- STATE MANAGEMENT (NEW/LOAD) ---
 
-function startNewDescent(slot, identityData, stats, points) {
+// --- FIX: Add starterBoat to the parameters ---
+    function startNewDescent(slot, identityData, stats, points, starterBoat) {
     currentSaveSlot = slot;
-    player = PlayerEngine.createPlayer(identityData);
+    
+    // --- FIX: Pass the boat into the player creation options ---
+    player = PlayerEngine.createPlayer({ ...identityData, starterBoat });
+    
     player.stats = stats;
     player.availablePoints = points;
     player.inventory = [];
-    player.activeQuests =[];
+    player.activeQuests = [];
+    player.completedQuests = []; 
+    player.activeBuffs = []; 
     player.bestiary = {}; 
     player.vitals.hp = player.gear.boat.stats.maxHp;
 

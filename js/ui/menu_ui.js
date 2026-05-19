@@ -14,6 +14,7 @@ import { STAT_DESCRIPTIONS } from '../data/player_data.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { generateFishData, generateFishInstance } from '../data/fish_data_generator.js';
 import { MusicEngine } from '../audio/music_engine.js';
+import { generateBoatData } from '../data/boat_data_generator.js'; // <-- ADD THIS LINE
 
 export const MenuUI = {
     ccStats: { fishing: 1, stamina: 1, driving: 1, crafting: 1, bartering: 1, intelligence: 1 },
@@ -21,7 +22,7 @@ export const MenuUI = {
     ccIdentity: null,
     callbacks: null,
     selectedSlot: 1,
-    
+    ccBoat: null, 
     // Background Animation State
     bgAnimFrame: null,
     bgThemeId: null,
@@ -34,28 +35,25 @@ export const MenuUI = {
         // --- AUDIO UNLOCK & TRANSITION ---
         document.getElementById('menu-start-prompt').onclick = async () => {
             document.getElementById('menu-start-prompt').style.display = 'none';
-            
-            // Wait for Audio Context to initialize (provided by game.js)
             if (this.callbacks.onStartClick) await this.callbacks.onStartClick();
-            
             document.getElementById('menu-save-select').style.display = 'flex';
-            
-            // Kick off the Dungeon Synth track matching the random background!
-            if (this.bgThemeId) {
-                MusicEngine.playBiome(this.bgThemeId, createRng(Date.now()));
-            }
+            if (this.bgThemeId) MusicEngine.playBiome(this.bgThemeId, createRng(Date.now()));
         };
 
+        // Identity Listeners
         document.getElementById('cc-race').onchange = () => this.updateCCPortrait();
         document.getElementById('cc-gender').onchange = () => this.updateCCPortrait();
         document.getElementById('btn-cc-reroll').onclick = () => { SFX.playUIHover(); this.updateCCPortrait(); };
+        
+        // --- NEW: Boat Listeners ---
+        document.getElementById('cc-boat-type').onchange = () => { SFX.playUISelect(); this.updateCCBoat(); };
+        document.getElementById('btn-cc-reroll-boat').onclick = () => { SFX.playUIHover(); this.updateCCBoat(); };
         
         document.getElementById('btn-cc-random-name').onclick = () => {
             SFX.playUIHover();
             const race = document.getElementById('cc-race').value;
             const gender = document.getElementById('cc-gender').value;
-            const rng = createRng(Date.now());
-            document.getElementById('cc-name').value = generateName(race, gender, rng);
+            document.getElementById('cc-name').value = generateName(race, gender, createRng(Date.now()));
         };
         
         document.getElementById('btn-embark').onclick = () => {
@@ -67,8 +65,9 @@ export const MenuUI = {
                 portraitData: this.ccIdentity.imageDataUrl,
                 portraitSeed: this.ccIdentity.seed 
             };
-            this.stopBackgroundLoop(); // Kill the animation before entering game
-            this.callbacks.onNewGame(this.selectedSlot, playerData, { ...this.ccStats }, this.ccPoints);
+            this.stopBackgroundLoop(); 
+            // --- FIX: Pass this.ccBoat as the 5th parameter! ---
+            this.callbacks.onNewGame(this.selectedSlot, playerData, { ...this.ccStats }, this.ccPoints, this.ccBoat);
         };
     },
 
@@ -183,6 +182,7 @@ export const MenuUI = {
         
         this.renderCCStats();
         this.updateCCPortrait();
+        this.updateCCBoat(); // <-- NEW: Generate the initial vessel
     },
 
     updateCCPortrait() {
@@ -196,6 +196,36 @@ export const MenuUI = {
         if (nameInput.value === 'Angler' || nameInput.value === '') {
             nameInput.value = this.ccIdentity.name;
         }
+    },
+
+    updateCCBoat() {
+        const selectedType = document.getElementById('cc-boat-type').value;
+        
+        let newBoat;
+        let attempts = 0;
+        
+        // Force it to be Common rarity to preserve early-game balance
+        do { 
+            newBoat = generateBoatData({ seed: Date.now() + ++attempts, boatType: selectedType }); 
+        } while (newBoat.identity.rarity !== 'Common');
+        
+        newBoat.invType = 'boat';
+        this.ccBoat = newBoat;
+
+        document.getElementById('cc-boat-img').src = newBoat.art.profileDataUrl;
+        document.getElementById('cc-boat-name').innerText = newBoat.identity.name;
+        
+        const s = newBoat.stats;
+        document.getElementById('cc-boat-stats').innerHTML = `
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Hull HP:</span> <span style="font-weight:bold; color:var(--ink);">${s.maxHp}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Top Speed:</span> <span style="font-weight:bold; color:var(--ink);">${s.speed}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Acceleration:</span> <span style="font-weight:bold; color:var(--ink);">${s.acceleration}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Handling:</span> <span style="font-weight:bold; color:var(--ink);">${s.turnSpeed}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Cargo Space:</span> <span style="font-weight:bold; color:var(--ink);">${s.cargoSpace}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Base Mass:</span> <span style="font-weight:bold; color:var(--ink);">${s.mass}</span></div>
+            <div style="display:flex; justify-content:space-between; padding-bottom: 0.1rem; border-bottom: 1px dashed var(--panel-border);"><span>Armor (DR):</span> <span style="font-weight:bold; color:var(--green-safe);">${Math.round(s.damageReduction * 100)}%</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Evasion:</span> <span style="font-weight:bold; color:var(--cyan-glow);">${Math.round(s.evasion * 100)}%</span></div>
+        `;
     },
 
     renderCCStats() {

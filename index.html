@@ -650,35 +650,37 @@
                 </div>
             </div>
 
-            <!-- CHARACTER CREATOR -->
+<!-- CHARACTER CREATOR -->
             <div id="screen-char-create" style="position: relative; z-index: 10; display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; background: rgba(2, 6, 23, 0.85);">
-                <h1 style="color: var(--cyan-glow); font-size: 3rem; margin-bottom: 1rem; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);">Forge Identity</h1>
+                <h1 style="color: var(--cyan-glow); font-size: 2.5rem; margin-bottom: 0.5rem; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);">Forge Identity</h1>
                 
-                <div class="char-create-container">
-                    <div class="char-left">
-                        <img id="cc-portrait" class="char-portrait-box" src="" />
-                        <button class="menu-btn" id="btn-cc-reroll" style="width: 100%; padding: 0.5rem; font-size: 1.2rem;">Randomize Appearance</button>
+                <div class="char-create-container" style="width: 1050px; display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 1.5rem; background: var(--panel-base); border: 2px solid var(--panel-border); padding: 1.5rem; border-radius: 8px;">
+                    
+                    <!-- COLUMN 1: Identity -->
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <img id="cc-portrait" class="char-portrait-box" src="" style="width: 192px; height: 192px; image-rendering: pixelated; border: 2px solid var(--panel-border); border-radius: 4px; background: #000; margin-bottom: 0.5rem;" />
+                        <button class="menu-btn" id="btn-cc-reroll" style="width: 100%; padding: 0.4rem; margin: 0 0 0.8rem 0; font-size: 1rem;">Randomize Appearance</button>
                         
-                        <div class="char-input-group" style="margin-top: 1rem;">
-                            <label>Angler Name</label>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <input type="text" id="cc-name" value="Angler" style="flex: 1; margin: 0;" />
-                                <button class="menu-btn" id="btn-cc-random-name" style="width: auto; padding: 0.5rem 1rem; margin: 0; font-size: 1.2rem;" title="Randomize Name">🎲</button>
+                        <div class="char-input-group" style="width: 100%; margin-bottom: 0.5rem;">
+                            <label style="color: var(--text-muted); font-size: 1rem;">Angler Name</label>
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.2rem;">
+                                <input type="text" id="cc-name" value="Angler" style="flex: 1; margin: 0; background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.4rem; font-family: inherit; font-size: 1.1rem;" />
+                                <button class="menu-btn" id="btn-cc-random-name" style="width: auto; padding: 0.4rem 0.8rem; margin: 0; font-size: 1.1rem;" title="Randomize Name">🎲</button>
                             </div>
                         </div>
                         <div style="display: flex; gap: 1rem; width: 100%;">
-                            <div class="char-input-group">
-                                <label>Race</label>
-                                <select id="cc-race">
+                            <div class="char-input-group" style="flex: 1; margin-bottom: 0;">
+                                <label style="color: var(--text-muted); font-size: 1rem;">Race</label>
+                                <select id="cc-race" style="width: 100%; background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.4rem; font-family: inherit; font-size: 1.1rem;">
                                     <option value="Human">Human</option>
                                     <option value="Dwarf">Dwarf</option>
                                     <option value="Elf">Elf</option>
                                     <option value="Orc">Orc</option>
                                 </select>
                             </div>
-                            <div class="char-input-group">
-                                <label>Gender</label>
-                                <select id="cc-gender">
+                            <div class="char-input-group" style="flex: 1; margin-bottom: 0;">
+                                <label style="color: var(--text-muted); font-size: 1rem;">Gender</label>
+                                <select id="cc-gender" style="width: 100%; background: var(--bg-void); color: var(--text-main); border: 1px solid var(--panel-border); padding: 0.4rem; font-family: inherit; font-size: 1.1rem;">
                                     <option value="Female">Female</option>
                                     <option value="Male">Male</option>
                                 </select>
@@ -686,20 +688,47 @@
                         </div>
                     </div>
 
-                    <div class="char-right">
-                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem;">
-                            <h2 style="margin: 0; font-size: 2rem;">Attributes</h2>
-                            <div style="color: var(--gold-warn); font-size: 1.2rem;">Points: <span id="cc-pts">3</span></div>
+                    <!-- COLUMN 2: Attributes -->
+                    <div style="display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.5rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.3rem;">
+                            <h2 style="margin: 0; font-size: 1.8rem; color: var(--cyan-glow);">Attributes</h2>
+                            <div style="color: var(--gold-warn); font-size: 1.1rem;">Points: <span id="cc-pts" style="font-weight: bold;">3</span></div>
+                        </div>
+                        <div id="cc-stats-list" style="display: flex; flex-direction: column; gap: 0.3rem;"></div>
+                    </div>
+
+                    <!-- COLUMN 3: Vessel Selection -->
+                    <div style="display: flex; flex-direction: column; background: var(--bg-void); border: 1px solid var(--panel-border); border-radius: 6px; padding: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                            <h2 style="margin: 0; font-size: 1.5rem; color: var(--gold-warn);">Vessel</h2>
+                            <select id="cc-boat-type" style="background: var(--panel-base); color: var(--cyan-glow); border: 1px solid var(--panel-border); padding: 0.3rem; font-family: inherit; font-size: 1rem; cursor: pointer; border-radius: 4px;">
+                                <option value="skiff">Skiff</option>
+                                <option value="runner">Runner</option>
+                                <option value="corvette">Corvette</option>
+                                <option value="trawler">Trawler</option>
+                                <option value="barge">Barge</option>
+                                <option value="dreadnought">Dreadnought</option>
+                            </select>
                         </div>
                         
-                        <div id="cc-stats-list"></div>
-
-                        <button class="menu-btn" id="btn-embark" style="width: 100%; margin-top: 2rem; border-color: var(--cyan-glow); color: var(--cyan-glow);">Embark</button>
+                        <img id="cc-boat-img" src="" style="width: 100%; height: 90px; object-fit: contain; image-rendering: pixelated; background: #000; border: 1px solid var(--panel-border); border-radius: 4px; margin-bottom: 0.5rem;" />
+                        
+                        <div id="cc-boat-name" style="text-align: center; color: var(--cyan-glow); font-weight: bold; font-size: 1.1rem; margin-bottom: 0.5rem; text-shadow: 1px 1px 2px #000;">Boat Name</div>
+                        
+                        <div id="cc-boat-stats" style="flex: 1; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; color: var(--text-main);">
+                            <!-- Stats injected via JS -->
+                        </div>
+                        
+                        <button class="menu-btn" id="btn-cc-reroll-boat" style="width: 100%; padding: 0.4rem; font-size: 1rem; margin: 0.8rem 0 0 0;">Reroll Paint & Details</button>
+                    </div>
+                    
+                    <!-- FOOTER: Embark Button -->
+                    <div style="grid-column: span 3; margin-top: 0.5rem;">
+                        <button class="menu-btn" id="btn-embark" style="width: 100%; padding: 0.6rem; font-size: 1.8rem; border-color: var(--cyan-glow); color: var(--cyan-glow); margin: 0; transition: all 0.2s;">Embark</button>
                     </div>
                 </div>
             </div>
-        </div>
-
+            
 <!-- ========================================== -->
         <!-- FLOATING TOOLTIPS                          -->
         <!-- ========================================== -->

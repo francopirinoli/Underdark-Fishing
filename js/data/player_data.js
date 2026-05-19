@@ -30,16 +30,21 @@ const XP_CURVE = {
 export const PlayerEngine = {
 
     createPlayer(options = {}) {
-        let starterBoat, starterRod;
-        let attempts = 0;
+        let starterBoat = options.starterBoat;
         
-        do { starterBoat = generateBoatData({ seed: Date.now() + ++attempts }); } 
-        while (starterBoat.identity.rarity !== 'Common');
+        // Safety fallback just in case the UI fails to pass a boat
+        if (!starterBoat) {
+            let attempts = 0;
+            do { starterBoat = generateBoatData({ seed: Date.now() + ++attempts }); } 
+            while (starterBoat.identity.rarity !== 'Common');
+        }
         starterBoat.invType = 'boat'; 
 
-        do { starterRod = generateRodData({ seed: Date.now() + ++attempts }); } 
+        let starterRod;
+        let attempts2 = 0;
+        do { starterRod = generateRodData({ seed: Date.now() + ++attempts2 }); } 
         while (starterRod.identity.rarity !== 'Common');
-        starterRod.invType = 'rod';   
+        starterRod.invType = 'rod';
 
         const starterLureSeed = Date.now();
         const starterComponents = ['iron_sinker', 'fish_gut'];

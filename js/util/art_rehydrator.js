@@ -61,7 +61,10 @@ export const ArtRehydrator = {
 
         try {
             if (item.invType === 'boat' || (item.art && item.art.boatType)) {
-                const b = generateBoatData({ seed: safeSeed });
+                // --- FIX: Pass the boatType back in so the RNG sequence doesn't shift! ---
+                const savedType = item.art ? item.art.boatType : undefined;
+                const b = generateBoatData({ seed: safeSeed, boatType: savedType });
+                
                 if (!item.art) item.art = {};
                 item.art.profileDataUrl = b.art.profileDataUrl;
                 item.art.topDownDataUrl = b.art.topDownDataUrl;
