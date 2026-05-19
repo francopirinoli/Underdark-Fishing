@@ -11,6 +11,7 @@ import { generateLurePart } from '../art/lure_generator.js';
 import { generateConsumable } from '../art/consumable_generator.js';
 import { AlchemyCrafter } from '../fishing/alchemy_crafter.js';
 import { LureCrafter } from '../fishing/lure_crafter.js';
+import { generateUpgrade } from '../art/upgrade_generator.js'; // <-- ADD THIS LINE
 
 // --- INVENTORY DATABASES ---
 const CONSUMABLES = [
@@ -66,7 +67,7 @@ export const MerchantGenerator = {
             inventory.push(formatted);
         });
 
-        // B. Pre-Crafted Alchemy & Lures (Dynamically Generated)
+// B. Pre-Crafted Alchemy & Lures (Dynamically Generated)
         const craftLvl = Math.max(1, Math.floor(playerBarterLevel / 2) + 1);
         const types = ['lure', 'potion', 'bait'];
         types.forEach((t) => {
@@ -74,12 +75,25 @@ export const MerchantGenerator = {
             for(let j = 0; j < numToMake; j++) {
                 const item = this._createRandomCraftedItem(t, createRng(rng.next() * 1000000), craftLvl);
                 if (item) {
-                    const storeItem = this._formatStoreItem(item, 1, buyMult, rng);
-                    storeItem.type = t;
+                    // FIX: Manually wrap the item so `itemData` contains the full object, preventing collisions
+                    const basePrice = item.basePrice || 10;
+                    const fuzzed = basePrice * rng.float(0.9, 1.1);
+                    
+                    const storeItem = {
+                        id: item.id,
+                        name: item.name,
+                        type: t,
+                        itemData: item, // <-- Properly wrapping the full item!
+                        price: Math.max(1, Math.round(fuzzed * buyMult)),
+                        stock: 1,
+                        desc: ''
+                    };
+
                     // Add desc for the shop UI
                     if (t === 'potion') storeItem.desc = `Grants +${item.buff.amount} ${item.buff.statName}`;
                     else if (t === 'bait') storeItem.desc = `Attracts: ${item.targetFamily}`;
                     else if (t === 'lure') storeItem.desc = `Durability: ${item.durability} Casts`;
+                    
                     inventory.push(storeItem);
                 }
             }
@@ -179,12 +193,16 @@ export const MerchantGenerator = {
             spawnedBoats++;
         }
 
-        // B. Upgrades
+// B. Upgrades
         const numUpgrades = rng.int(2, 4) + Math.floor(playerBarterLevel / 2);
         const shuffledUpgrades = [...BOAT_UPGRADES].sort(() => rng.float(-1, 1));
         for (let i = 0; i < Math.min(numUpgrades, shuffledUpgrades.length); i++) {
             const upg = this._formatStoreItem(shuffledUpgrades[i], 1, buyMult, rng);
             upg.invType = 'upgrade';
+            
+            // --- FIX: Generate the pixel art icon for the upgrade! ---
+            upg.imageDataUrl = generateUpgrade({ id: upg.id, rng: createRng(seed + i) }).imageDataUrl;
+            
             inventory.push(upg);
         }
 

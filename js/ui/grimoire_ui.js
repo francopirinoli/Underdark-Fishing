@@ -386,8 +386,8 @@ export const GrimoireUI = {
         document.getElementById('grim-cargo-name').innerText = itemName;
         document.getElementById('grim-cargo-name').style.color = getItemColor(item);
         
-        // --- RESTORED: Dynamic Subtitles ---
-        let subtitle = item.invType.toUpperCase();
+        // --- RESTORED: Dynamic Subtitles (With Safety Fallback) ---
+        let subtitle = (item.invType || 'BROKEN ITEM').toUpperCase();
         if (item.invType === 'fish') subtitle = `${item.identity.rarity} ${item.identity.family.charAt(0).toUpperCase() + item.identity.family.slice(1)}`;
         else if (item.invType === 'lure') subtitle = `Custom Lure (${item.componentsUsed || '?'} Parts)`;
         else if (item.invType === 'rod') subtitle = `${item.identity.rarity} Fishing Rod`;
@@ -473,22 +473,36 @@ export const GrimoireUI = {
                 };
             }
         }
-        // 3. BAITS
+// 3. BAITS
         else if (item.invType === 'bait') {
-            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Attracts: <b style="color:var(--gold-warn);">${item.targetFamily}</b><br>Charges: ${item.charges}/${item.maxCharges}<br>Rarity Boost: <span style="color:var(--green-safe);">+${item.rarityBoostPct}%</span></div>`;
+            // FIX: Safely fallback variables so corrupted items don't crash the UI
+            const targetFam = item.targetFamily || 'Unknown';
+            const charges = item.charges || 0;
+            const maxC = item.maxCharges || 0;
+            const rarityB = item.rarityBoostPct || 0;
+
+            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Attracts: <b style="color:var(--gold-warn);">${targetFam}</b><br>Charges: ${charges}/${maxC}<br>Rarity Boost: <span style="color:var(--green-safe);">+${rarityB}%</span></div>`;
+            
             btnEquip.style.display = 'block';
-            btnEquip.innerText = 'Equip Bait';
-            btnEquip.style.borderColor = 'var(--green-safe)';
-            btnEquip.style.color = 'var(--green-safe)';
+            btnEquip.innerText = charges > 0 ? 'Equip Bait' : 'Discard Broken Item';
+            btnEquip.style.borderColor = charges > 0 ? 'var(--green-safe)' : 'var(--red-danger)';
+            btnEquip.style.color = charges > 0 ? 'var(--green-safe)' : 'var(--red-danger)';
+            
             btnEquip.onclick = () => {
                 SFX.playUISelect();
-                const oldBait = player.gear.bait;
-                player.gear.bait = player.inventory.splice(invIndex, 1)[0];
-                if (oldBait) player.inventory.push(oldBait);
+                if (charges > 0) {
+                    const oldBait = player.gear.bait;
+                    player.gear.bait = player.inventory.splice(invIndex, 1)[0];
+                    if (oldBait) player.inventory.push(oldBait);
+                } else {
+                    // It's a broken item, delete it to clean the inventory
+                    player.inventory.splice(invIndex, 1);
+                }
                 if (this.callbacks.onSave) this.callbacks.onSave();
                 this.renderCargo();
             };
         }
+
         // --- RESTORED: 4. LURES ---
         else if (item.invType === 'lure') {
             const eqLure = player.gear.lure || { stats: {color:0, sound:0, light:0, weight:0}, durability: 0, maxDurability: 0 };

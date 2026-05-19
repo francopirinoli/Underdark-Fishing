@@ -13,6 +13,7 @@ import { generatePotion } from '../art/potion_generator.js'; // <-- NEW
 import { generateBait } from '../art/bait_generator.js';     // <-- NEW
 import { createRng } from './rng.js';
 import { generateConsumable } from '../art/consumable_generator.js'; // <-- ADD THIS LINE
+import { generateUpgrade } from '../art/upgrade_generator.js'; // <-- ADD THIS LINE
 
 export const ArtRehydrator = {
     rehydratePlayer(player) {
@@ -81,6 +82,12 @@ export const ArtRehydrator = {
                 // Rebuild using the exact ID (e.g., 'cons_repair_kit')
                 const c = generateConsumable({ id: item.id, rng, seed: safeSeed });
                 item.imageDataUrl = c.imageDataUrl;
+            }
+            // --- NEW: UPGRADE REHYDRATION ---
+            else if (item.invType === 'upgrade') {
+                const rng = createRng(safeSeed);
+                const u = generateUpgrade({ id: item.id, rng, seed: safeSeed });
+                item.imageDataUrl = u.imageDataUrl;
             }
 
             // --- NEW: POTION REHYDRATION ---
