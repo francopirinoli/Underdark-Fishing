@@ -31,6 +31,11 @@ export function clamp(v, a, b) {
 export function showStatTooltip(title, desc, e) {
     const tt = document.getElementById('stat-tooltip');
     if (!tt) return;
+    
+    // NEW: Self-repair nesting
+    const container = document.getElementById('game-container');
+    if (tt.parentNode !== container) container.appendChild(tt);
+
     document.getElementById('tt-stat-name').innerText = title;
     document.getElementById('tt-stat-desc').innerText = desc;
     tt.style.display = 'block';

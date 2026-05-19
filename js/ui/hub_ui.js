@@ -15,6 +15,7 @@ import { DialogueGenerator } from '../economy/dialogue_generator.js';
 import { QuestGenerator } from '../economy/quest_generator.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { PlayerEngine } from '../data/player_data.js';
+import { TooltipUI } from './tooltip_ui.js'; // <-- ADD THIS LINE
 
 export const HubUI = {
     gameState: null,
@@ -46,7 +47,7 @@ export const HubUI = {
             SFX.playUISelect();
             if (this.typewriterTimer) clearInterval(this.typewriterTimer);
             if (this.callbacks.onSave) this.callbacks.onSave(); 
-            this.hideShopTooltip(); 
+            TooltipUI.hide(); // <-- UPDATED
             this.close();
         });
 
@@ -92,7 +93,7 @@ export const HubUI = {
                 
                 this.activeTab = targetTab;
                 this.marketMode = 'buy'; 
-                this.hideShopTooltip();
+                TooltipUI.hide(); // <-- UPDATED
                 
                 this.renderActiveTab();
                 this.triggerTabDialogue();
@@ -271,13 +272,12 @@ export const HubUI = {
             <div id="hub-market-list"></div>
         `;
         
-        document.getElementById('btn-market-buy').onclick = () => { SFX.playUISelect(); this.marketMode = 'buy'; this.hideShopTooltip(); this.renderActiveTab(); };
-        document.getElementById('btn-market-sell').onclick = () => { SFX.playUISelect(); this.marketMode = 'sell'; this.hideShopTooltip(); this.renderActiveTab(); };
+        document.getElementById('btn-market-buy').onclick = () => { SFX.playUISelect(); this.marketMode = 'buy'; TooltipUI.hide(); this.renderActiveTab(); };
+        document.getElementById('btn-market-sell').onclick = () => { SFX.playUISelect(); this.marketMode = 'sell'; TooltipUI.hide(); this.renderActiveTab(); };
 
         const list = document.getElementById('hub-market-list');
         
         if (this.marketMode === 'buy') {
-            // Filter OUT boats and boat upgrades (No longer needed, but safe to keep)
             const marketItems = this.merchantInv.filter(i => i.type !== 'boat' && i.type !== 'upgrade');
             
             marketItems.forEach((item) => {
@@ -300,16 +300,14 @@ export const HubUI = {
 
                 const isDisabled = disableReason || !canAfford || !hasStock;
                 
-                // --- FIX: Smartly extract the true item data whether it's wrapped or not ---
                 const targetItem = (item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type)) ? item.itemData : item;
                 
-                // Safely grab the image URL (works for parts, upgrades, consumables, and gear)
                 let imgSrc = targetItem.imageDataUrl || (targetItem.art ? (targetItem.art.profileDataUrl || targetItem.art.imageDataUrl) : '');
                 
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:48px; height:48px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated; object-fit:contain;" />` : '';
 
                 const itemName = item.name || (item.identity ? item.identity.name : 'Item');
-                const nameColor = getItemColor(targetItem); // Use targetItem for correct colors!
+                const nameColor = getItemColor(targetItem);
 
                 row.innerHTML = `
                     <div style="display:flex; gap: 1rem; align-items:center;">
@@ -325,9 +323,8 @@ export const HubUI = {
                     </div>
                 `;
                 
-                row.addEventListener('mouseenter', (e) => this.showShopTooltip(item, e));
-                row.addEventListener('mousemove', (e) => this.moveShopTooltip(e));
-                row.addEventListener('mouseleave', () => this.hideShopTooltip());
+                // --- NEW UNIFIED TOOLTIP BINDER ---
+                TooltipUI.bind(row, item, player.gear);
 
                 if (!isDisabled) {
                     row.querySelector('.btn-buy').onclick = () => {
@@ -335,20 +332,16 @@ export const HubUI = {
                         player.vitals.gold -= item.price;
                         if (item.stock !== 99) item.stock--;
                         
-                        // --- UPDATED: Split Inventory Routing ---
                         if (item.id === 'cons_ration') {
                             player.vitals.rations = Math.min(20, player.vitals.rations + 1);
                         } else if (item.id === 'cons_fuel_oil') {
                             player.vitals.fuel = 100;
                         } else {
                             if (['rod', 'lure', 'bait', 'potion', 'consumable'].includes(item.type || item.invType)) {
-                                // Real items and storable consumables go to Cargo
-                                // FIX: Safely check if itemData exists before spreading it!
                                 const itemToPush = item.itemData ? { ...item.itemData } : { ...item };
                                 itemToPush.invType = item.type || item.invType;
                                 player.inventory.push(itemToPush);
                             } else {
-                                // Raw fish parts go to the Reagents Pouch
                                 player.reagents.push({ ...item, invType: 'part' }); 
                             }
                         }
@@ -356,15 +349,14 @@ export const HubUI = {
                         const rng = createRng(Date.now());
                         if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.market, DialogueGenerator.getHaggleResponse(true, rng));
                         
-                        this.hideShopTooltip();
+                        TooltipUI.hide(); // <-- UPDATED
                         this.renderActiveTab(); 
                     };
                 }
                 list.appendChild(row);
             });
         } 
-else {
-            // SELL MODE: Only Manufactured Goods (Rods, Lures, Potions, Baits)
+        else {
             const sellableItems = player.inventory.filter(i => ['rod', 'lure', 'potion', 'bait'].includes(i.invType));
             
             if (sellableItems.length === 0) {
@@ -377,8 +369,6 @@ else {
                 
                 const baseVal = item.economy ? item.economy.value : (item.basePrice || 10);
                 const sellValue = Math.max(1, Math.round(baseVal * effStats.economy.sellMultiplier));
-                
-                // Because they are manufactured goods, they will ALWAYS be in the Cargo inventory
                 const realIndex = player.inventory.indexOf(item);
                 
                 let imgSrc = item.imageDataUrl || (item.art ? item.art.imageDataUrl : '');
@@ -400,10 +390,14 @@ else {
                     </div>
                 `;
 
+                // --- NEW UNIFIED TOOLTIP BINDER ---
+                TooltipUI.bind(row, item, player.gear);
+
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
                     player.vitals.gold += sellValue;
                     player.inventory.splice(realIndex, 1);
+                    TooltipUI.hide(); // <-- UPDATED
                     this.renderActiveTab();
                 };
 
@@ -434,8 +428,8 @@ else {
             <div id="hub-fish-list"></div>
         `;
         
-        document.getElementById('btn-fm-buy').onclick = () => { SFX.playUISelect(); this.fishmongerMode = 'buy'; this.hideShopTooltip(); this.renderActiveTab(); };
-        document.getElementById('btn-fm-sell').onclick = () => { SFX.playUISelect(); this.fishmongerMode = 'sell'; this.hideShopTooltip(); this.renderActiveTab(); };
+        document.getElementById('btn-fm-buy').onclick = () => { SFX.playUISelect(); this.fishmongerMode = 'buy'; TooltipUI.hide(); this.renderActiveTab(); };
+        document.getElementById('btn-fm-sell').onclick = () => { SFX.playUISelect(); this.fishmongerMode = 'sell'; TooltipUI.hide(); this.renderActiveTab(); };
 
         const list = document.getElementById('hub-fish-list');
 
@@ -471,9 +465,8 @@ else {
                     </div>
                 `;
                 
-                row.addEventListener('mouseenter', (e) => this.showShopTooltip(item, e));
-                row.addEventListener('mousemove', (e) => this.moveShopTooltip(e));
-                row.addEventListener('mouseleave', () => this.hideShopTooltip());
+                // --- NEW UNIFIED TOOLTIP BINDER ---
+                TooltipUI.bind(row, item, player.gear);
 
                 if (!isDisabled) {
                     row.querySelector('.btn-buy').onclick = () => {
@@ -485,14 +478,13 @@ else {
                         const rng = createRng(Date.now());
                         if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.fishmonger, DialogueGenerator.getHaggleResponse(true, rng));
                         
-                        this.hideShopTooltip();
+                        TooltipUI.hide(); // <-- UPDATED
                         this.renderActiveTab(); 
                     };
                 }
                 list.appendChild(row);
             });
         } else {
-            // SELL MODE: Fish and Parts
             const sellableItems = [
                 ...player.inventory.filter(i => i.invType === 'fish'),
                 ...player.reagents
@@ -528,11 +520,15 @@ else {
                         </div>
                     `;
                     
+                    // --- NEW UNIFIED TOOLTIP BINDER ---
+                    TooltipUI.bind(row, item, player.gear);
+
                     row.querySelector('.btn-sell').onclick = () => {
                         SFX.playGold();
                         player.vitals.gold += sellValue;
                         if (isReagent) player.reagents.splice(realIndex, 1);
                         else player.inventory.splice(realIndex, 1);
+                        TooltipUI.hide(); // <-- UPDATED
                         this.renderActiveTab();
                     };
                     list.appendChild(row);
@@ -596,7 +592,6 @@ else {
             };
         }
 
-        // SHIPYARD INVENTORY (Buy Boats/Upgrades)
         const shipyardList = document.getElementById('hub-shipyard-list');
         const shipyardItems = this.boatwrightInv.filter(item => item.type === 'boat' || item.type === 'upgrade');
 
@@ -608,7 +603,6 @@ else {
             const row = document.createElement('div');
             row.className = 'shop-item-row';
             
-            // --- FIX 1: Cargo check and Equipment check for Upgrades ---
             let disableReason = null;
             if (item.type === 'boat') {
                 let newCargoLimit = item.itemData.stats.cargoSpace;
@@ -630,7 +624,6 @@ else {
 
             const isDisabled = disableReason || !canAfford || !hasStock;
 
-            // --- FIX: Smartly extract for Boats and Upgrades ---
             const targetItem = (item.itemData && item.type === 'boat') ? item.itemData : item;
             
             let imgSrc = targetItem.imageDataUrl || (targetItem.art ? (targetItem.art.profileDataUrl || targetItem.art.imageDataUrl) : '');
@@ -653,9 +646,8 @@ else {
                 </div>
             `;
             
-            row.addEventListener('mouseenter', (e) => this.showShopTooltip(item, e));
-            row.addEventListener('mousemove', (e) => this.moveShopTooltip(e));
-            row.addEventListener('mouseleave', () => this.hideShopTooltip());
+            // --- NEW UNIFIED TOOLTIP BINDER ---
+            TooltipUI.bind(row, item, player.gear);
 
             if (!isDisabled) {
                 row.querySelector('.btn-buy').onclick = () => {
@@ -663,7 +655,6 @@ else {
                     player.vitals.gold -= item.price;
                     if (item.stock !== 99) item.stock--;
                     
-                    // --- FIX 2: Send directly to inventory so player can install at Safehouse! ---
                     if (item.type === 'upgrade') {
                         player.inventory.push({ ...item, invType: 'upgrade' });
                     } else if (item.type === 'boat') {
@@ -672,7 +663,6 @@ else {
                         newBoat.invType = 'boat'; 
                         newBoat.upgrades = oldUpgrades; 
                         
-                        // Push old boat to inventory (resetting its upgrades safely)
                         const oldBoatCopy = JSON.parse(JSON.stringify(player.gear.boat));
                         oldBoatCopy.upgrades = { lantern: { id: 'lantern_basic', name: 'Basic Lantern', lightRadius: 100, fuelDrainRate: 1.0 }, plating: null, engine: null, prow: null, storage: null };
                         player.inventory.push(oldBoatCopy);
@@ -681,7 +671,7 @@ else {
                         player.vitals.hp = Math.min(player.vitals.hp, newBoat.stats.maxHp); 
                     }
 
-                    this.hideShopTooltip();
+                    TooltipUI.hide(); // <-- UPDATED
                     this.renderActiveTab(); 
                 };
             }
@@ -705,7 +695,6 @@ else {
                 const sellValue = Math.max(1, Math.round(baseVal * effStats.economy.sellMultiplier));
                 const realIndex = player.inventory.findIndex(i => i === oldItem);
 
-                // Upgrades don't have images right now
                 let imgSrc = oldItem.invType === 'boat' ? oldItem.art.profileDataUrl : ''; 
                 let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
 
@@ -722,10 +711,14 @@ else {
                     </div>
                 `;
 
+                // --- NEW UNIFIED TOOLTIP BINDER ---
+                TooltipUI.bind(row, oldItem, player.gear);
+
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
                     player.vitals.gold += sellValue;
                     player.inventory.splice(realIndex, 1);
+                    TooltipUI.hide(); // <-- UPDATED
                     this.renderActiveTab();
                 };
                 oldBoatContainer.appendChild(row);
@@ -1180,12 +1173,11 @@ else {
             if (imgSrc) slot.innerHTML = `<img src="${imgSrc}" />`;
             else slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${item.name.substring(0,6)}</span>`;
 
-            slot.addEventListener('mouseenter', (e) => this.showShopTooltip(item, e));
-            slot.addEventListener('mousemove', (e) => this.moveShopTooltip(e));
-            slot.addEventListener('mouseleave', () => this.hideShopTooltip());
+            // --- NEW UNIFIED TOOLTIP BINDER ---
+            TooltipUI.bind(slot, item, player.gear);
 
             slot.onclick = () => {
-                this.hideShopTooltip();
+                TooltipUI.hide(); // <-- UPDATED
                 if (isCargo) {
                     if (item.invType === 'fish' || item.invType === 'boat' || item.invType === 'chest') {
                         SFX.playError(); return; 
@@ -1375,12 +1367,11 @@ else {
             slot.className = 'inv-slot';
             slot.innerHTML = `<img src="${fish.art.imageDataUrl}" />`;
 
-            slot.addEventListener('mouseenter', (e) => this.showShopTooltip(fish, e));
-            slot.addEventListener('mousemove', (e) => this.moveShopTooltip(e));
-            slot.addEventListener('mouseleave', () => this.hideShopTooltip());
+            // --- NEW UNIFIED TOOLTIP BINDER ---
+            TooltipUI.bind(slot, fish, player.gear);
 
             slot.onclick = () => {
-                this.hideShopTooltip();
+                TooltipUI.hide(); // <-- UPDATED
                 if (isCargo) {
                     if (safehouse.aquarium.length < safehouse.aquariumCapacity) {
                         SFX.playSplash();
@@ -1676,143 +1667,4 @@ else {
             this.aquariumAnimFrame = null;
         }
     },
-
-    // --- TOOLTIP HELPERS ---
-// --- TOOLTIP HELPERS ---
-    formatDelta(newVal, oldVal, invertGoodBad = false) {
-        if (newVal === undefined || oldVal === undefined) return '';
-        const diff = newVal - oldVal;
-        if (diff === 0) return `<span style="color:var(--text-muted); font-size: 0.85em; margin-left: 0.5rem;">(+0)</span>`;
-        
-        let color = 'var(--green-safe)';
-        if ((diff > 0 && invertGoodBad) || (diff < 0 && !invertGoodBad)) color = 'var(--red-danger)';
-        
-        const sign = diff > 0 ? '+' : '';
-        const formattedDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
-        return `<span style="color:${color}; font-size: 0.85em; margin-left: 0.5rem;">(${sign}${formattedDiff})</span>`;
-    },
-
-    showShopTooltip(item, e) {
-        const tt = document.getElementById('shop-tooltip');
-        if (!tt) return;
-        
-        const player = this.gameState.player;
-        
-        // --- FIX: Prevent Potion/Bait art metadata from overriding the actual item ---
-        const isShopWrapper = item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type);
-        const target = isShopWrapper ? item.itemData : item;
-        
-        const invType = item.type || target.invType || 'unknown';
-        
-        let itemName = item.name || target.identity?.name || 'Unknown Item';
-        let nameColor = getItemColor(target);
-        let html = `<b style="color: ${nameColor}; font-size: 1.2rem;">${itemName}</b>`;
-        
-        // Dynamic Subtitles
-        let subtitle = invType.toUpperCase();
-        if (invType === 'fish') subtitle = `${target.identity.rarity} ${target.identity.family.charAt(0).toUpperCase() + target.identity.family.slice(1)}`;
-        else if (invType === 'rod') subtitle = `${target.identity.rarity} Fishing Rod`;
-        else if (invType === 'boat') subtitle = `${target.identity.rarity} Boat Hull`;
-        else if (invType === 'upgrade') subtitle = `Boat Upgrade`;
-        else if (invType === 'potion') subtitle = `Alchemical Draught`;
-        else if (invType === 'bait') subtitle = `Targeted Bait`;
-        else if (invType === 'lure') subtitle = `Custom Lure`;
-        else if (invType === 'part') subtitle = `${target.rarity} Reagent`;
-
-        html += `<div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; border-bottom: 1px solid var(--panel-border); padding-bottom: 0.3rem;">${subtitle}</div>`;
-
-        if (invType === 'rod') {
-            const eq = player.gear.rod ? player.gear.rod.stats : { power: 0, maxTension: 0, flexibility: 0, sensitivity: 0 };
-            const ns = target.stats;
-            html += `<div class="tt-row"><span>Power:</span> <span>${ns.power}x ${this.formatDelta(ns.power, eq.power)}</span></div>
-                     <div class="tt-row"><span>Tension:</span> <span>${ns.maxTension} ${this.formatDelta(ns.maxTension, eq.maxTension)}</span></div>
-                     <div class="tt-row"><span>Flex:</span> <span>${ns.flexibility}x ${this.formatDelta(ns.flexibility, eq.flexibility)}</span></div>
-                     <div class="tt-row"><span>Sensitivity:</span> <span>${ns.sensitivity}ms ${this.formatDelta(ns.sensitivity, eq.sensitivity)}</span></div>`;
-            
-            if (target.traits && target.traits.length > 0) {
-                html += `<div style="margin-top:0.5rem; border-top:1px dashed var(--panel-border); padding-top:0.3rem;">`;
-                target.traits.forEach(t => {
-                    html += `<div style="color:#A855F7; font-size:0.9rem; font-weight:bold;">✨ ${t.name}</div>
-                             <div style="color:var(--text-muted); font-size:0.8rem; line-height:1.2; margin-bottom:0.3rem;">${t.desc}</div>`;
-                });
-                html += `</div>`;
-            }
-        } else if (invType === 'boat') {
-            const eq = player.gear.boat ? player.gear.boat.stats : { maxHp: 0, speed: 0, stealth: 0, cargoSpace: 0 };
-            const ns = target.stats;
-            html += `<div class="tt-row"><span>Hull HP:</span> <span>${ns.maxHp} ${this.formatDelta(ns.maxHp, eq.maxHp)}</span></div>
-                     <div class="tt-row"><span>Speed:</span> <span>${ns.speed} ${this.formatDelta(ns.speed, eq.speed)}</span></div>
-                     <div class="tt-row"><span>Stealth:</span> <span>${ns.stealth}x ${this.formatDelta(ns.stealth, eq.stealth)}</span></div>
-                     <div class="tt-row"><span>Cargo:</span> <span>${ns.cargoSpace} ${this.formatDelta(ns.cargoSpace, eq.cargoSpace)}</span></div>`;
-        } else if (invType === 'part' || invType === 'lure') {
-            html += `<div class="loadout-details" style="margin-top: 0.2rem;">`;
-            if (invType === 'lure') {
-                const eqDur = player.gear.lure ? player.gear.lure.maxDurability : 0;
-                html += `<div class="tt-row" style="margin-bottom:0.5rem; border-bottom:1px solid var(--panel-border); padding-bottom:0.3rem;">
-                            <span>Durability:</span> <span>${target.durability}/${target.maxDurability} ${this.formatDelta(target.maxDurability, eqDur)}</span>
-                         </div>`;
-            }
-            html += `
-                ${buildStatSlider('Color', target.stats.color, 'Cold', 'Warm')}
-                ${buildStatSlider('Sound', target.stats.sound, 'Silent', 'Loud')}
-                ${buildStatSlider('Light', target.stats.light, 'Dark', 'Glow')}
-                ${buildStatSlider('Weight', target.stats.weight, 'Float', 'Sink')}
-            </div>`;
-        } else if (invType === 'fish') {
-            html += `<div class="tt-row"><span>Size:</span> <span style="color:var(--text-main);">${target.physical.sizeTier}</span></div>
-                     <div class="tt-row"><span>Weight:</span> <span style="color:var(--text-main);">${target.actualWeight}kg</span></div>
-                     <div class="tt-row"><span>Habitat:</span> <span style="text-transform:capitalize; color:var(--text-main);">${target.environment.depthPref}</span></div>
-                     <div class="tt-row" style="margin-top:0.3rem;"><span>Value:</span> <span style="color:var(--gold-warn);">${target.economy.baseValue}g</span></div>`;
-        } else if (invType === 'potion') {
-            const buff = target.buff;
-            const hrs = Math.floor(buff.durationMins / 60);
-            const mins = buff.durationMins % 60;
-            html += `<div class="tt-row" style="margin-top:0.2rem;"><span>Effect:</span> <span style="color:var(--cyan-glow); font-weight:bold;">+${buff.amount} ${buff.statName}</span></div>
-                     <div class="tt-row"><span>Duration:</span> <span style="color:var(--text-main);">${hrs}h ${mins}m</span></div>`;
-        } else if (invType === 'bait') {
-            html += `<div class="tt-row" style="margin-top:0.2rem;"><span>Attracts:</span> <span style="color:var(--gold-warn); font-weight:bold;">${target.targetFamily}</span></div>
-                     <div class="tt-row"><span>Charges:</span> <span style="color:var(--text-main);">${target.charges} Casts</span></div>
-                     <div class="tt-row"><span>Rarity Boost:</span> <span style="color:var(--green-safe);">+${target.rarityBoostPct}%</span></div>`;
-        } else if (invType === 'upgrade') {
-            html += `<div class="tt-row" style="margin-top:0.2rem; margin-bottom:0.5rem;"><span>Slot:</span> <span style="color:var(--cyan-glow); text-transform:uppercase;">${target.slot}</span></div>
-                     <p style="margin:0; color:var(--text-main); font-size:0.95rem; line-height:1.4;">${target.desc || item.desc}</p>`;
-        } else if (invType === 'consumable') {
-            html += `<p style="margin:0; color:var(--text-main); font-size:0.95rem; line-height:1.4;">${target.desc || item.desc}</p>`;
-        } else if (invType === 'chest' || invType === 'chest_encounter') {
-            html += `<p style="margin:0; color:var(--text-main); font-size:0.95rem;">A heavy, waterlogged chest.</p>`;
-        } else {
-            html += `<p style="margin:0; color:var(--text-main);">${target.desc || item.desc || ''}</p>`;
-        }
-
-        tt.innerHTML = html;
-        tt.style.display = 'block';
-        this.moveShopTooltip(e);
-    },
-
-    moveShopTooltip(e) {
-        const tt = document.getElementById('shop-tooltip');
-        if (!tt || tt.style.display === 'none') return;
-        
-        const container = document.getElementById('game-container');
-        const rect = container.getBoundingClientRect();
-        const scaleX = 1280 / rect.width;
-        const scaleY = 720 / rect.height;
-        
-        let x = (e.clientX - rect.left) * scaleX + 15;
-        let y = (e.clientY - rect.top) * scaleY + 15;
-        
-        const ttW = tt.offsetWidth || 250;
-        const ttH = tt.offsetHeight || 150;
-
-        if (x + ttW > 1280) x = (e.clientX - rect.left) * scaleX - ttW - 15;
-        if (y + ttH > 720) y = (e.clientY - rect.top) * scaleY - ttH - 15;
-        
-        tt.style.left = `${x}px`;
-        tt.style.top = `${y}px`;
-    },
-
-    hideShopTooltip() {
-        const tt = document.getElementById('shop-tooltip');
-        if (tt) tt.style.display = 'none';
-    }
 };
