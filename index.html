@@ -594,23 +594,51 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
+<!-- ========================================== -->
         <!-- Z-200 | SYSTEM MENUS (Start, Character)    -->
         <!-- ========================================== -->
-        <div id="z200-menus">
-            <!-- START SCREEN -->
-            <div id="screen-start" style="display: flex; flex-direction: column; align-items: center;">
-                <h1 class="menu-title">UNDERDARK<br>FISHING</h1>
+        <style>
+            @keyframes pulse-text {
+                0% { opacity: 1; }
+                50% { opacity: 0.3; }
+                100% { opacity: 1; }
+            }
+            .pulse-anim { animation: pulse-text 2s infinite; }
+        </style>
+
+        <div id="z200-menus" style="background: transparent;">
+            <!-- NEW: Menu Background Canvas -->
+            <canvas id="menu-bg-canvas" style="position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1;"></canvas>
+            
+        <!-- START SCREEN -->
+            <div id="screen-start" style="position: relative; z-index: 10; display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; background: rgba(2, 6, 23, 0.4);">
                 
-                <h2 style="color: var(--text-muted); font-size: 1.5rem; margin-bottom: 1rem;">Select a Save Slot</h2>
-                <div id="save-slots-container" style="display: flex; gap: 1.5rem; justify-content: center;">
-                    <!-- Buttons injected via JS -->
+                <!-- Added ID and Transition -->
+                <h1 id="menu-title-text" class="menu-title" style="margin-top: -100px; text-shadow: 0 5px 20px rgba(0,0,0,0.8), 0 0 20px rgba(34, 211, 238, 0.5); transition: color 1s, text-shadow 1s;">UNDERDARK<br>FISHING</h1>
+                
+                <!-- State 1: Click to Start -->
+                <div id="menu-start-prompt" style="cursor: pointer; display: flex; flex-direction: column; align-items: center; margin-top: 2rem;">
+                    <!-- Added ID and Transition -->
+                    <div id="menu-prompt-text" class="pulse-anim" style="font-size: 2.5rem; color: var(--glow); text-shadow: 0 2px 10px rgba(0,0,0,0.8); font-weight: bold; transition: color 1s, text-shadow 1s;">Click to Start</div>
+                </div>
+
+                <!-- State 2: Save Slots (Hidden initially) -->
+                <div id="menu-save-select" style="display: none; flex-direction: column; align-items: center; margin-top: 1rem;">
+                    <h2 style="color: var(--text-main); font-size: 1.5rem; margin-bottom: 1.5rem; text-shadow: 0 2px 5px rgba(0,0,0,0.8);">Select a Save Slot</h2>
+                    <div id="save-slots-container" style="display: flex; gap: 1.5rem; justify-content: center;">
+                        <!-- Buttons injected via JS -->
+                    </div>
+                </div>
+                
+                <!-- Watermark: Styled like the title and added ID -->
+                <div id="menu-watermark" style="position: absolute; bottom: 15px; right: 20px; font-size: 1.1rem; font-family: var(--font-crpg), 'VT323', monospace; text-shadow: 0 2px 10px rgba(0,0,0,0.8), 0 0 10px rgba(34, 211, 238, 0.3); transition: color 1s, text-shadow 1s;">
+                    A game by Beholdr.
                 </div>
             </div>
 
             <!-- CHARACTER CREATOR -->
-            <div id="screen-char-create" style="display: none; flex-direction: column; align-items: center;">
-                <h1 style="color: var(--cyan-glow); font-size: 3rem; margin-bottom: 1rem;">Forge Identity</h1>
+            <div id="screen-char-create" style="position: relative; z-index: 10; display: none; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; background: rgba(2, 6, 23, 0.85);">
+                <h1 style="color: var(--cyan-glow); font-size: 3rem; margin-bottom: 1rem; text-shadow: 0 0 10px rgba(34, 211, 238, 0.4);">Forge Identity</h1>
                 
                 <div class="char-create-container">
                     <div class="char-left">
@@ -652,7 +680,7 @@
                         
                         <div id="cc-stats-list"></div>
 
-                        <button class="menu-btn" id="btn-embark" style="width: 100%; margin-top: 2rem; border-color: var(--cyan-glow);">Embark</button>
+                        <button class="menu-btn" id="btn-embark" style="width: 100%; margin-top: 2rem; border-color: var(--cyan-glow); color: var(--cyan-glow);">Embark</button>
                     </div>
                 </div>
             </div>

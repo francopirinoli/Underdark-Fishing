@@ -71,46 +71,36 @@ let isReeling = false;
 
 // --- INITIALIZATION ---
 
-const startOverlay = document.createElement('div');
-startOverlay.style.cssText = "position:absolute; inset:0; z-index:3000; background:rgba(2,6,23,0.95); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#22D3EE; cursor:pointer;";
-startOverlay.innerHTML = "<h1>SYSTEM INITIALIZATION</h1><p style='color:#64748B'>Click to connect Audio Context...</p>";
-document.getElementById('game-container').appendChild(startOverlay);
-
-startOverlay.addEventListener('click', async () => {
-    startOverlay.remove();
-    await initGameSystems();
-});
-
-async function initGameSystems() {
-    await AudioEngine.init();
-    
-    // NEW: Load saved volumes immediately upon boot
-    const savedMusicVol = localStorage.getItem('uf_vol_music') || 50;
-    const savedSfxVol = localStorage.getItem('uf_vol_sfx') || 50;
-    AudioEngine.setMusicVolume(savedMusicVol / 100);
-    AudioEngine.setSfxVolume(savedSfxVol / 100);
-
-    SFX.init();
-    
+function initGameSystems() {
+    // 1. Initialize Renderers immediately (No Audio required)
     ExplorationRenderer.init(document.getElementById('z0-world'), 1280, 720);
     FishingRenderer.init(document.getElementById('z50-action'));
 
     const interactPrompt = document.createElement('div');
     interactPrompt.id = 'interact-prompt';
-    // Center it in the 1024px playable area (1280 total - 256 sidebar). 1024 / 2 = 512px from left.
     interactPrompt.style.cssText = "position:absolute; bottom: 80px; left: 512px; transform: translateX(-50%); font-size: 1.6rem; color: var(--gold-warn); background: rgba(15, 23, 42, 0.9); padding: 0.5rem 1.5rem; border: 2px solid var(--panel-border); border-radius: 6px; display: none; z-index: 40; text-shadow: 0 0 10px rgba(251, 191, 36, 0.4); pointer-events: none;";
-    
-    // CRITICAL FIX: Append to game-container, NOT z10-hud!
     document.getElementById('game-container').appendChild(interactPrompt);
 
+    // 2. Initialize UIs, injecting the new Audio trigger into the Menu
     MenuUI.init({
+        onStartClick: async () => {
+            // Unlocks Audio Context upon the "Click to Start" action!
+            await AudioEngine.init();
+            
+            const savedMusicVol = localStorage.getItem('uf_vol_music') || 50;
+            const savedSfxVol = localStorage.getItem('uf_vol_sfx') || 50;
+            AudioEngine.setMusicVolume(savedMusicVol / 100);
+            AudioEngine.setSfxVolume(savedSfxVol / 100);
+
+            SFX.init();
+        },
         onNewGame: (slot, playerData, stats, points) => startNewDescent(slot, playerData, stats, points),
         onLoadGame: (slot) => loadExistingDescent(slot)
     });
 
     GrimoireUI.init({
         onSave: () => saveCurrentState(),
-        onDeath: () => handleDeath() // <-- NEW: Allow Grimoire to kill the player
+        onDeath: () => handleDeath() 
     });
 
     HubUI.init({
@@ -118,7 +108,6 @@ async function initGameSystems() {
         onDepart: () => resumeFromHub()
     });
 
-    // NEW: Init Encounter UI
     EncounterUI.init({
         onSave: () => saveCurrentState(),
         onLeave: () => {
@@ -128,18 +117,29 @@ async function initGameSystems() {
         }
     });
 
-    // NEW: Init Pause UI
     PauseUI.init({
         onResume: () => togglePause(),
         onQuit: () => {
             saveCurrentState();
-            location.reload(); // Instantly refreshes the browser to cleanly return to main menu
+            location.reload(); 
+        }
+    });
+
+    TournamentUI.init({
+        onSave: () => saveCurrentState(),
+        onLeave: () => {
+            currentState = STATE.EXPLORATION;
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
         }
     });
 
     setupInputListeners();
     MenuUI.showMainMenu();
 }
+
+// Automatically start the boot sequence when the script loads!
+initGameSystems();
 
 // NEW: Init Tournament UI
     TournamentUI.init({

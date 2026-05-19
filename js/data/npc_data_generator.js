@@ -33,57 +33,61 @@ const ART_GENERATORS = {
 const NAMES = {
     Human: {
         Male: {
-            prefix:['Ald', 'Gar', 'Tor', 'Bran', 'Kael', 'Sil', 'Cor', 'Fen', 'Mar', 'Val'],
-            suffix:['ric', 'in', 'on', 'is', 'as', 'ok', 'en', 'ar', 'us', 'ian']
+            prefix: ['Ald', 'Gar', 'Tor', 'Bran', 'Kael', 'Sil', 'Cor', 'Fen', 'Mar', 'Val', 'Row', 'Der', 'Jal', 'Cas', 'Thom', 'Ed', 'Bal', 'Ric', 'Gal', 'Perr', 'Hal', 'Ul', 'Rey', 'Kev', 'Dav', 'Jon', 'Mat', 'Rob', 'Sam', 'Wil'],
+            suffix: ['ric', 'in', 'on', 'is', 'as', 'ok', 'en', 'ar', 'us', 'ian', 'ard', 'ock', 'eth', 'am', 'or', 'ul', 'ys', 'id', 'ik', 'os', 'an', 'el', 'ald', 'er', 'ley', 'son', 'man', 'well', 'ton', 'ford']
         },
         Female: {
-            prefix:['El', 'Ar', 'Mir', 'Lir', 'Sel', 'Val', 'Kae', 'Ly', 'Syr', 'Is'],
-            suffix:['ena', 'is', 'a', 'ia', 'ina', 'wen', 'lys', 'ra', 'elle', 'ana']
+            prefix: ['El', 'Ar', 'Mir', 'Lir', 'Sel', 'Val', 'Kae', 'Ly', 'Syr', 'Is', 'Mar', 'Jes', 'Cat', 'Ros', 'Lin', 'Ael', 'Sar', 'Ann', 'Bet', 'Car', 'Dor', 'Ele', 'Fay', 'Gwe', 'Hel', 'Ily', 'Jan', 'Kla', 'Lys', 'Mel'],
+            suffix: ['ena', 'is', 'a', 'ia', 'ina', 'wen', 'lys', 'ra', 'elle', 'ana', 'eth', 'lyn', 'bel', 'wyn', 'yss', 'ah', 'ine', 'ice', 'ith', 'ari', 'ora', 'y', 'ie', 'elle', 'anne', 'ette', 'ia', 'isa', 'ita', 'sea']
         }
     },
     Dwarf: {
         Male: {
-            prefix:['Thor', 'Bram', 'Durg', 'Grim', 'Garr', 'Thra', 'Kran', 'Bro', 'Hroth', 'Or'],
-            suffix:['in', 'or', 'ur', 'ak', 'ar', 'ek', 'im', 'ir', 'ok', 'ik']
+            prefix: ['Thor', 'Bram', 'Durg', 'Grim', 'Garr', 'Thra', 'Kran', 'Bro', 'Hroth', 'Or', 'Bal', 'Dain', 'Farg', 'Gim', 'Kild', 'Mor', 'Nof', 'Orik', 'Rur', 'Tord', 'Ulf', 'Vond', 'Yar', 'Zan', 'Bof', 'Dor', 'Glov', 'Har', 'Kor', 'Mag'],
+            suffix: ['in', 'or', 'ur', 'ak', 'ar', 'ek', 'im', 'ir', 'ok', 'ik', 'uk', 'am', 'us', 'as', 'i', 'o', 'un', 'ond', 'and', 'end', 'ath', 'eth', 'ith', 'oth', 'uth', 'dar', 'dor', 'dur', 'gar', 'gor']
         },
         Female: {
-            prefix:['Hel', 'Dis', 'Brin', 'Kov', 'Thal', 'Dag', 'Gim', 'Nyr', 'Run', 'Sig'],
-            suffix:['ga', 'a', 'ia', 'ra', 'da', 'na', 'dis', 'run', 'gret', 'va']
+            prefix: ['Hel', 'Dis', 'Brin', 'Kov', 'Thal', 'Dag', 'Gim', 'Nyr', 'Run', 'Sig', 'Aud', 'Bav', 'Dov', 'Eld', 'Fren', 'Gerd', 'Hild', 'Irg', 'Karg', 'Lif', 'Marn', 'Nald', 'Olv', 'Tir', 'Urd', 'Vig', 'Ylf', 'Zil', 'Brog', 'Gund'],
+            suffix: ['ga', 'a', 'ia', 'ra', 'da', 'na', 'dis', 'run', 'gret', 'va', 'hild', 'gild', 'frid', 'rid', 'lin', 'rin', 'gin', 'din', 'tha', 'dha', 'la', 'ma', 'sa', 'za', 'sha', 'cha', 'nya', 'mya', 'rya', 'lya']
         }
     },
     Elf: {
         Male: {
-            prefix:['Fae', 'Syl', 'Aer', 'Luc', 'Mith', 'Ith', 'Cae', 'Lor', 'Zan', 'Tae'],
-            suffix:['lar', 'in', 'on', 'ian', 'rel', 'el', 'ir', 'is', 'orn', 'thil']
+            prefix: ['Fae', 'Syl', 'Aer', 'Luc', 'Mith', 'Ith', 'Cae', 'Lor', 'Zan', 'Tae', 'Ael', 'Bae', 'Cor', 'Dae', 'Eil', 'Fela', 'Gae', 'Hae', 'Ili', 'Jae', 'Kae', 'Lia', 'Nae', 'Olo', 'Pae', 'Qin', 'Ria', 'Sia', 'Ume', 'Vae'],
+            suffix: ['lar', 'in', 'on', 'ian', 'rel', 'el', 'ir', 'is', 'orn', 'thil', 'dil', 'fin', 'lin', 'mion', 'nion', 'rion', 'sion', 'tion', 'vion', 'wion', 'xion', 'yion', 'zion', 'las', 'mas', 'nas', 'pas', 'ras', 'tas', 'vas']
         },
         Female: {
-            prefix:['Ael', 'Thal', 'Ily', 'Loe', 'Xil', 'Mae', 'Syr', 'Nym', 'Vae', 'Lyr'],
-            suffix:['iana', 'ia', 'en', 'ra', 'ys', 'a', 'elle', 'wen', 'wyn', 'ria']
+            prefix: ['Ael', 'Thal', 'Ily', 'Loe', 'Xil', 'Mae', 'Syr', 'Nym', 'Vae', 'Lyr', 'Aria', 'Cae', 'Dae', 'Ea', 'Fae', 'Gae', 'Hae', 'Iaa', 'Jae', 'Kae', 'Lae', 'Nae', 'Oae', 'Pae', 'Qae', 'Rae', 'Sae', 'Tae', 'Uae', 'Zae'],
+            suffix: ['iana', 'ia', 'en', 'ra', 'ys', 'a', 'elle', 'wen', 'wyn', 'ria', 'sia', 'tia', 'via', 'wia', 'xia', 'yia', 'zia', 'lea', 'mea', 'nea', 'pea', 'rea', 'sea', 'tea', 'vea', 'wea', 'xea', 'yea', 'zea', 'bella']
         }
     },
     Orc: {
         Male: {
-            prefix:['Grom', 'Urz', 'Thrak', 'Kha', 'Mog', 'Ghash', 'Bru', 'Drog', 'Gru', 'Skum'],
-            suffix:['ak', 'ul', 'ka', 'arg', 'or', 'uk', 'at', 'mash', 'nak', 'gash']
+            prefix: ['Grom', 'Urz', 'Thrak', 'Kha', 'Mog', 'Ghash', 'Bru', 'Drog', 'Gru', 'Skum', 'Az', 'Bok', 'Crug', 'Dakk', 'Gar', 'Hok', 'Ig', 'Jok', 'Krug', 'Lug', 'Mak', 'Nok', 'Ogg', 'Pug', 'Qok', 'Ruk', 'Snag', 'Tug', 'Ug', 'Vok'],
+            suffix: ['ak', 'ul', 'ka', 'arg', 'or', 'uk', 'at', 'mash', 'nak', 'gash', 'og', 'ug', 'ig', 'ag', 'eg', 'ash', 'ish', 'osh', 'ush', 'esh', 'bak', 'dak', 'gak', 'hak', 'jak', 'lak', 'mak', 'rak', 'sak', 'tak']
         },
         Female: {
-            prefix:['Maz', 'Ruz', 'Ghar', 'Shag', 'Zog', 'Baga', 'Nar', 'Mor', 'Gral', 'Ur'],
-            suffix:['ga', 'ra', 'ba', 'na', 'ma', 'za', 'gash', 'ub', 'at', 'ka']
+            prefix: ['Maz', 'Ruz', 'Ghar', 'Shag', 'Zog', 'Baga', 'Nar', 'Mor', 'Gral', 'Ur', 'Aga', 'Bula', 'Carg', 'Dura', 'Gash', 'Hura', 'Iga', 'Jura', 'Karg', 'Luga', 'Mura', 'Narga', 'Oga', 'Pura', 'Qura', 'Raga', 'Sura', 'Taga', 'Uga', 'Vura'],
+            suffix: ['ga', 'ra', 'ba', 'na', 'ma', 'za', 'gash', 'ub', 'at', 'ka', 'da', 'fa', 'ha', 'ja', 'la', 'pa', 'qa', 'sa', 'ta', 'va', 'wa', 'xa', 'ya', 'bu', 'du', 'gu', 'hu', 'ku', 'mu', 'nu']
         }
     }
 };
 
 const SURNAMES = {
     Civilized: { // Human, Dwarf
-        prefix:['Iron', 'Stone', 'Gloom', 'Deep', 'Shadow', 'Cave', 'Rust', 'Mud', 'Ash', 'Slate'],
-        suffix:['breaker', 'walker', 'forge', 'weaver', 'born', 'shield', 'fist', 'river', 'skipper', 'heart']
+        prefix: ['Iron', 'Stone', 'Gloom', 'Deep', 'Shadow', 'Cave', 'Rust', 'Mud', 'Ash', 'Slate', 'Copper', 'Brass', 'Gold', 'Silver', 'Dark', 'Light', 'Stout', 'Hard', 'Swift', 'Black', 'White', 'Red', 'Blue', 'Water', 'Lake', 'River', 'Rock', 'Coal', 'Salt', 'Brine', 'Hook', 'Line', 'Bait', 'Net'],
+        suffix: ['breaker', 'walker', 'forge', 'weaver', 'born', 'shield', 'fist', 'river', 'skipper', 'heart', 'smith', 'worker', 'hand', 'foot', 'beard', 'helm', 'brow', 'fall', 'stream', 'fisher', 'hook', 'line', 'caster', 'tide', 'water', 'lake', 'boat', 'ship', 'sail', 'mast']
     },
     Sylvan: { // Elf
-        prefix:['Night', 'Moon', 'Star', 'Cave', 'Glow', 'Void', 'Dusk', 'Abyss', 'Silver', 'Silk'],
-        suffix:['shade', 'whisper', 'weaver', 'bloom', 'fall', 'song', 'breeze', 'leaf', 'tide', 'glimmer']
+        prefix: ['Night', 'Moon', 'Star', 'Cave', 'Glow', 'Void', 'Dusk', 'Abyss', 'Silver', 'Silk', 'Lichen', 'Spore', 'Fern', 'Moss', 'Pearl', 'Shell', 'Coral', 'Deep', 'Fae', 'Dream', 'Glimmer', 'Shimmer', 'Whisper', 'Silent', 'Still', 'Dark', 'Blind', 'Echo', 'Tide', 'Wave'],
+        suffix: ['shade', 'whisper', 'weaver', 'bloom', 'fall', 'song', 'breeze', 'leaf', 'tide', 'glimmer', 'glow', 'spark', 'dust', 'pool', 'ripple', 'drift', 'wing', 'eye', 'beam', 'tear', 'water', 'lake', 'stream', 'river', 'sea', 'ocean', 'depth', 'abyss', 'void', 'shadow']
     },
     Brutal: { // Orc (Usually Titles instead of surnames)
-        titles:['the Brutal', 'Skull-Crusher', 'the Scarred', 'the Pale', 'Blood-Drinker', 'Bone-Snapper', 'the Fierce', 'Trench-Walker', 'the Broken']
+        titles: [
+            'the Brutal', 'Skull-Crusher', 'the Scarred', 'the Pale', 'Blood-Drinker', 'Bone-Snapper', 'the Fierce', 'Trench-Walker', 'the Broken',
+            'the Mad', 'Spine-Breaker', 'the Red', 'Meat-Cleaver', 'the Vile', 'Hook-Jaw', 'the Blind', 'Rock-Smasher', 'the Bloated', 'Deep-Lurker', 'the Cruel',
+            'Net-Tearer', 'the Unyielding', 'Gore-Splattered', 'the Putrid', 'Iron-Hide', 'the Mangled', 'Shark-Bait', 'the Drowned', 'Cave-Stalker', 'the Grim'
+        ]
     }
 };
 

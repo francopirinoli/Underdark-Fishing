@@ -325,13 +325,11 @@ export const FishingEngine = {
         if (isReeling) {
             this.playerStaminaDelayTimer = 1.0; 
             
-            // BALANCE FIX: Lowered base tension build rate (was 1.5 and 0.5)
-            let tensionBuild = (baseFishPull * dragNorm * 1.3) + (this.reelPower * 0.35);
+            let tensionBuild = (baseFishPull * dragNorm * 1.5) + (this.reelPower * 0.5);
             
             if (!this.inSweetSpot) {
                 const overpull = Math.max(0, Math.abs(powerDiff) - tol) / 50;
-                // BALANCE FIX: Softened the penalty for missing the sweet spot (was 3.0, now 2.2)
-                tensionBuild *= (1.0 + Math.pow(overpull, 1.5) * 2.2); 
+                tensionBuild *= (1.0 + Math.pow(overpull, 1.5) * 3.0); 
             } else {
                 tensionBuild *= 0.6; 
             }
@@ -341,9 +339,9 @@ export const FishingEngine = {
             this.playerStaminaDelayTimer -= dt;
             const flex = this.playerStats.minigame.flexibility;
             
-            // BALANCE FIX: Increased base tension decay (was 40, now 60). 
-            // Tension now drops 50% faster when you let go of the reel!
-            const tensionDecay = 60 * flex * (1.1 - dragNorm);
+            // BALANCE FIX: Increased tension decay from 40 to 75. 
+            // Tension drops much faster when resting, getting you out of the red zone quicker.
+            const tensionDecay = 75 * flex * (1.1 - dragNorm);
             const passivePullTension = baseFishPull * dragNorm * 0.5;
             
             tensionDelta = passivePullTension - tensionDecay;
@@ -355,10 +353,11 @@ export const FishingEngine = {
 
         // --- 4. STAMINA DRAIN ---
         
-        // Player (FIXED: Now properly calculates based on line resistance)
+        // Player
         if (isReeling) {
             const resistance = Math.max(1.0, behavior.pullMult); 
-            const drainRate = 25 * resistance * Math.pow(dragNorm + 0.2, 1.2); 
+            // BALANCE FIX: Lowered drain rate from 25 to 20. Reeling is less exhausting.
+            const drainRate = 20 * resistance * Math.pow(dragNorm + 0.2, 1.2); 
             this.playerStamina -= drainRate * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;
@@ -369,19 +368,15 @@ export const FishingEngine = {
         let fishDrain = 0;
         
         if (behavior.invincible) {
-            // SECOND WIND: Massive 15% Max HP regen per second!
             fishDrain = -(this.maxFishStamina * 0.15); 
         } else if (behavior.drainMult > 0) {
-            // Running against drag
             fishDrain = behavior.drainMult * 12 * dragNorm; 
         } else {
-            // Normal Rest
             fishDrain = behavior.drainMult * 5; 
             const regenBoost = (this.maxFishStamina * 0.03);
-            fishDrain -= regenBoost; // Additional passive regen based on max health
+            fishDrain -= regenBoost; 
         }
         
-        // Reeling in the sweet spot damages fish stamina (if not invincible)
         if (isReeling && this.inSweetSpot && !behavior.invincible) {
             fishDrain += 18 * effectiveRodPower;
         }
@@ -391,18 +386,20 @@ export const FishingEngine = {
 
 
         // --- 5. CATCH PROGRESS (The True Tug-of-War) ---
-        const escapeSpeed = baseFishPull * (1.1 - dragNorm) * 0.25;
+        // BALANCE FIX: Reduced escape speed multiplier from 0.25 to 0.20. Fish steal line slightly slower.
+        const escapeSpeed = baseFishPull * (1.1 - dragNorm) * 0.20;
         
         if (!isReeling) {
             this.catchProgress -= escapeSpeed * dt;
             if (this.catchProgress <= 5) this.fightTimer -= dt * 2.0;
         } else {
             // Fish Stamina acts as Armor. 
-            // FIX: During Second Wind, the fish is limp and easy to pull, but it is regenerating rapidly!
-            // This gives you a frantic window to haul it in before it fully wakes up.
-            const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * 4.0);
+            // BALANCE FIX: Reduced max armor factor from 4.0 to 3.0. 
+            // A fresh fish is now 4x harder to pull instead of 5x, making early progress less sluggish.
+            const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * 3.0);
             
-            let pullSpeed = (20 * effectiveRodPower * dragNorm) / armorFactor;
+            // BALANCE FIX: Increased base pull speed from 20 to 24.
+            let pullSpeed = (24 * effectiveRodPower * dragNorm) / armorFactor;
             
             if (this.inSweetSpot) pullSpeed *= 1.5;
             else pullSpeed *= 0.5;
@@ -411,7 +408,6 @@ export const FishingEngine = {
         }
 
         this.catchProgress = clamp(this.catchProgress, 0, 100);
-
     },
 
     _checkEndConditions() {

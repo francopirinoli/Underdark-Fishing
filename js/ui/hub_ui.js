@@ -1552,7 +1552,8 @@ else {
 
                     // AI: CRUSTACEANS
                     if (ent.family === 'crustacean') {
-                        const targetY = floorY - (h / 2);
+                        // FIX: Hugs the sea floor
+                        const targetY = floorY - (h * 0.2);
                         ent.y += (targetY - ent.y) * 2 * dt; 
                         ent.timer -= dt;
                         if (ent.timer <= 0) {
@@ -1614,7 +1615,8 @@ else {
                     }
                     // AI: RAYS
                     else if (ent.family === 'ray') {
-                        const targetY = floorY - 15 - (h / 2);
+                        // FIX: Skim just above the rocks
+                        const targetY = floorY - (h * 0.3);
                         ent.y += (targetY - ent.y) * 0.8 * dt; 
                         if (Math.random() < 0.01) ent.vx = (Math.random() > 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.3);
                         ent.x += ent.vx * 60 * dt;
@@ -1630,7 +1632,7 @@ else {
                         bobY = Math.sin(ent.bobPhase) * 12; 
                         ent.bobPhase += dt * 5;
                     }
-                    // AI: DEFAULT WANDERER (Standard Fish / Deepsea Horrors)
+                    // AI: DEFAULT WANDERER 
                     else {
                         if (Math.random() < 0.01) ent.vx = (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5);
                         if (Math.random() < 0.02) ent.vy = (Math.random() - 0.5) * 0.4;
@@ -1647,7 +1649,9 @@ else {
                     if (ent.x > canvas.width - 50) { ent.x = canvas.width - 50; ent.vx = -Math.abs(ent.vx) || -0.5; }
                     
                     if (ent.y < 50) { ent.y = 50; ent.vy = Math.abs(ent.vy); }
-                    if (ent.y > floorY - (h/2)) { ent.y = floorY - (h/2); ent.vy = -Math.abs(ent.vy); }
+                    
+                    // FIX: Relaxed the bottom boundary to allow fish to visually overlap the floor
+                    if (ent.y > floorY - (h * 0.2)) { ent.y = floorY - (h * 0.2); ent.vy = -Math.abs(ent.vy); }
 
                     // --- RENDER ---
                     if (ent.img.complete) {
