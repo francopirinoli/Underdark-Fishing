@@ -396,7 +396,7 @@ function loadLocalNode(entryDir) {
     ExplorationRenderer.initHazards(currentBiome.id, activeWeather);
     
     // Pass everything into the Engine
-    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity, currentLocalFisherman, currentBiome.id, activeWeather);
+    ExplorationEngine.init(spawnX, spawnY, engineStats, currentLocalMap, ExplorationEngine.heading, ExplorationEngine.velocity, currentLocalNPCBoats, currentBiome.id, activeWeather);
     
     HUD.cacheMinimap(currentLocalMap);
 

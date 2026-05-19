@@ -15,7 +15,8 @@ import { DialogueGenerator } from '../economy/dialogue_generator.js';
 import { QuestGenerator } from '../economy/quest_generator.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { PlayerEngine } from '../data/player_data.js';
-import { TooltipUI } from './tooltip_ui.js'; // <-- ADD THIS LINE
+import { TooltipUI } from './tooltip_ui.js';
+import { generateLurePart } from '../art/lure_generator.js'; // <-- ADD THIS IMPORT
 
 export const HubUI = {
     gameState: null,
@@ -827,12 +828,24 @@ export const HubUI = {
                     if (leveledUp) SFX.playLevelUp();
                     
                     if (q.rewards.item) {
-                        player.inventory.push({ 
-                            id: `part_${Date.now()}`, invType: 'part',
-                            name: q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                            visualId: q.rewards.item.id.replace('part_', ''), rarity: 'Rare',
-                            stats: { color: 10, sound: 10, light: 10, weight: 10 }
-                        });
+                        const pId = q.rewards.item.id.replace('part_', '');
+                        const pName = pId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        const rng = createRng(Date.now());
+                        
+                        // Loop to give the exact quantity promised
+                        for (let k = 0; k < q.rewards.item.qty; k++) {
+                            // 1. Push to reagents (Tackle Box) instead of inventory
+                            player.reagents.push({ 
+                                id: `part_${rng.int(10000, 99999)}`, 
+                                invType: 'part',
+                                name: pName, 
+                                visualId: pId, 
+                                rarity: 'Rare',
+                                stats: { color: 10, sound: 10, light: 10, weight: 10 },
+                                // 2. Generate the missing pixel art!
+                                imageDataUrl: generateLurePart({ visualId: pId, rng: createRng(Date.now() + k) })
+                            });
+                        }
                     }
 
                     const activeIdx = player.activeQuests.findIndex(aq => aq.id === q.id);

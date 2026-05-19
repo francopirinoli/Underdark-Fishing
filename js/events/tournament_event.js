@@ -117,6 +117,7 @@ export const TournamentEvent = {
             // Live player state
             isPlayerParticipating: false,
             playerScore: 0,
+            playerDeliveredValue: 0, // <-- NEW: Tracks market value of delivered fish
             timeRemaining: 300, // 5 minutes (in seconds)
             isFinished: false,
             hasClaimedReward: false
@@ -128,10 +129,18 @@ getTournament(x, y) {
     },
 
     // --- NEW HELPER ---
-    getLiveCompetitors(tournament) {
+        getLiveCompetitors(tournament) {
         const totalDuration = 300; // 5 minutes
         const elapsed = Math.max(0, totalDuration - tournament.timeRemaining);
-        const progress = elapsed / totalDuration;
+        
+        let progress = 0;
+        if (tournament.timeRemaining <= 0) {
+            progress = 1.0; // Force 100% when time runs out
+        } else {
+            // NEW: Chunk the elapsed time into 30-second blocks for natural jumps
+            const steppedElapsed = Math.floor(elapsed / 30) * 30;
+            progress = steppedElapsed / totalDuration;
+        }
         
         // Calculate current interpolated scores
         return tournament.competitors.map(c => {
@@ -145,6 +154,7 @@ getTournament(x, y) {
         }).sort((a, b) => b.currentScore - a.currentScore);
     },
 
+    // --- RESTORED SAVE FUNCTIONS ---
     getSaveData() { return this.activeNodes; },
     loadSaveData(data) { this.activeNodes = data || {}; }
 };

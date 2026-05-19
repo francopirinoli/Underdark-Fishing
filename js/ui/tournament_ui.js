@@ -131,7 +131,7 @@ export const TournamentUI = {
             this.triggerDialogue(`Time is ticking! Deliver your haul to update your score.`);
             
             // Check inventory for valid fish
-            let validFish =[];
+            let validFish = [];
             player.inventory.forEach(item => {
                 if (item.invType === 'fish') {
                     if (t.objectiveType === 'specialist' && item.id !== t.targetSpeciesId) return;
@@ -174,6 +174,15 @@ export const TournamentUI = {
                     if (t.objectiveType === 'trophy') t.playerScore = Math.max(t.playerScore, potentialPoints);
                     else t.playerScore += potentialPoints;
 
+                    // --- NEW: Calculate market value of delivered fish ---
+                    t.playerDeliveredValue = t.playerDeliveredValue || 0; // Fallback for older saves
+                    let deliveredGold = 0;
+                    validFish.forEach(fish => {
+                        const baseVal = fish.economy ? (fish.economy.baseValue || fish.economy.value) : 10;
+                        deliveredGold += Math.max(1, Math.round(baseVal * effStats.economy.sellMultiplier));
+                    });
+                    t.playerDeliveredValue += deliveredGold;
+
                     // Remove delivered fish from inventory
                     player.inventory = player.inventory.filter(item => !validFish.includes(item));
                     
@@ -183,7 +192,7 @@ export const TournamentUI = {
             }
         }
 
-        // 3. TOURNAMENT FINISHED (Results & Payout)
+// 3. TOURNAMENT FINISHED (Results & Payout)
         else if (t.isFinished && !t.hasClaimedReward) {
             this.triggerDialogue(`Time's up! Let's look at the final standings.`);
             
@@ -202,16 +211,30 @@ export const TournamentUI = {
                 const color = c.isPlayer ? 'var(--green-safe)' : 'var(--text-main)';
                 const rankColors = ['#FBBF24', '#94A3B8', '#B45309', 'var(--text-muted)'];
                 html += `<div style="display:flex; justify-content:space-between; font-size:1.3rem; color:${color}; padding:0.4rem; background:rgba(15,23,42,0.5); border-radius:4px;">
-                            <span><b style="color:${rankColors[index]}; width:30px; display:inline-block;">#${index+1}</b> ${c.name}</span>
+                            <span><b style="color:${rankColors[index] || 'var(--text-muted)'}; width:30px; display:inline-block;">#${index+1}</b> ${c.name}</span>
                             <b>${c.currentScore}</b>
                          </div>`;
             });
 
-            html += `</div><button class="menu-btn" id="btn-claim" style="width: 100%; padding: 0.8rem; margin: 0; border-color: var(--cyan-glow); color: var(--cyan-glow);">Claim Prize</button></div>`;
+            const deliveredVal = t.playerDeliveredValue || 0;
+
+            html += `</div>
+                     <div style="margin-bottom: 1.5rem; text-align: center; font-size: 1.2rem; color: var(--text-main);">
+                         Market Value of Delivered Catch: <span style="color:var(--green-safe); font-weight:bold;">${deliveredVal}g</span>
+                     </div>
+                     <button class="menu-btn" id="btn-claim" style="width: 100%; padding: 0.8rem; margin: 0; border-color: var(--cyan-glow); color: var(--cyan-glow);">Claim Payout</button>
+                     </div>`;
+                     
             content.innerHTML = html;
 
             document.getElementById('btn-claim').onclick = () => {
                 t.hasClaimedReward = true;
+                
+                // EVERYONE gets their fish market value back
+                if (deliveredVal > 0) {
+                    player.vitals.gold += deliveredVal;
+                    HUD.logAction(`Earned ${deliveredVal}g from delivered fish.`, "safe");
+                }
                 
                 if (playerRank === 1) {
                     SFX.playLevelUp(); 
@@ -245,11 +268,11 @@ export const TournamentUI = {
                     HUD.logAction(`2nd Place. Recouped ${t.entryFee}g entry fee.`, "normal");
                 } else {
                     SFX.playError();
-                    HUD.logAction(`You lost the tournament. Better luck next time!`, "danger");
+                    HUD.logAction(`You placed #${playerRank}. Better luck next time!`, "danger");
                 }
 
                 if (this.callbacks.onSave) this.callbacks.onSave();
-                this.renderContent(); // <-- Re-render to show the post-tournament screen
+                this.renderContent(); 
             };
         }
 
