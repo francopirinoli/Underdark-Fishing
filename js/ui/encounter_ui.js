@@ -131,11 +131,14 @@ export const EncounterUI = {
 
                 const isDisabled = disableReason || !canAfford || !hasStock;
                 
-                let imgSrc = item.imageDataUrl || (item.itemData ? item.itemData.art.imageDataUrl : '');
-                let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
+                // --- FIX: Universal Image Extraction ---
+                const targetItem = (item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type)) ? item.itemData : item;
+                
+                let imgSrc = targetItem.imageDataUrl || (targetItem.art ? (targetItem.art.profileDataUrl || targetItem.art.imageDataUrl) : '');
+                let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:40px; height:40px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated; object-fit:contain;" />` : '';
 
                 const itemName = item.name || (item.identity ? item.identity.name : 'Item');
-                const nameColor = getItemColor(item.itemData || item);
+                const nameColor = getItemColor(targetItem);
 
                 row.innerHTML = `
                     <div style="display:flex; gap: 1rem; align-items:center;">
@@ -260,8 +263,8 @@ export const EncounterUI = {
         const player = this.gameState.player;
         
         // --- FIX: Prevent Potion/Bait art metadata from overriding the actual item ---
-        const isShopWrapper = item.itemData && (item.type === 'rod' || item.type === 'boat');
-        const target = isShopWrapper ? item.itemData : item; 
+        const isShopWrapper = item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type);
+        const target = isShopWrapper ? item.itemData : item;
         
         const invType = item.type || target.invType || 'unknown';
         

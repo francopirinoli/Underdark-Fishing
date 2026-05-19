@@ -1207,8 +1207,8 @@ renderBestiary() {
         const player = this.gameState.player;
         
         // --- FIX: Prevent Potion/Bait art metadata from overriding the actual item ---
-        const isShopWrapper = item.itemData && (item.type === 'rod' || item.type === 'boat');
-        const target = isShopWrapper ? item.itemData : item; 
+        const isShopWrapper = item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type);
+        const target = isShopWrapper ? item.itemData : item;
         
         const invType = item.type || target.invType || 'unknown';
         

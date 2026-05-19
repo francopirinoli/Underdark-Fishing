@@ -300,17 +300,16 @@ export const HubUI = {
 
                 const isDisabled = disableReason || !canAfford || !hasStock;
                 
-                // NEW: Grab the pixel art if it exists
-                let imgSrc = item.imageDataUrl || '';
+                // --- FIX: Smartly extract the true item data whether it's wrapped or not ---
+                const targetItem = (item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type)) ? item.itemData : item;
                 
-                // Overrides for complex nested equipment
-                if (item.type === 'rod' && item.itemData) imgSrc = item.itemData.art.imageDataUrl;
-                else if (item.type === 'boat' && item.itemData) imgSrc = item.itemData.art.profileDataUrl;
+                // Safely grab the image URL (works for parts, upgrades, consumables, and gear)
+                let imgSrc = targetItem.imageDataUrl || (targetItem.art ? (targetItem.art.profileDataUrl || targetItem.art.imageDataUrl) : '');
                 
-                let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:48px; height:48px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated;" />` : '';
+                let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:48px; height:48px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated; object-fit:contain;" />` : '';
 
                 const itemName = item.name || (item.identity ? item.identity.name : 'Item');
-                const nameColor = getItemColor(item.itemData || item);
+                const nameColor = getItemColor(targetItem); // Use targetItem for correct colors!
 
                 row.innerHTML = `
                     <div style="display:flex; gap: 1rem; align-items:center;">
@@ -631,13 +630,14 @@ else {
 
             const isDisabled = disableReason || !canAfford || !hasStock;
 
-            let imgSrc = '';
-            if (item.type === 'boat') imgSrc = item.itemData.art.profileDataUrl;
+            // --- FIX: Smartly extract for Boats and Upgrades ---
+            const targetItem = (item.itemData && item.type === 'boat') ? item.itemData : item;
             
+            let imgSrc = targetItem.imageDataUrl || (targetItem.art ? (targetItem.art.profileDataUrl || targetItem.art.imageDataUrl) : '');
             let imgHtml = imgSrc ? `<img src="${imgSrc}" style="width:64px; height:64px; background:#000; border:1px solid var(--panel-border); border-radius:4px; image-rendering:pixelated; object-fit:contain;" />` : '';
 
             const itemName = item.name || (item.identity ? item.identity.name : 'Item');
-            const nameColor = getItemColor(item.itemData || item);
+            const nameColor = getItemColor(targetItem);
 
             row.innerHTML = `
                 <div style="display:flex; gap: 1rem; align-items:center;">
@@ -1699,8 +1699,8 @@ else {
         const player = this.gameState.player;
         
         // --- FIX: Prevent Potion/Bait art metadata from overriding the actual item ---
-        const isShopWrapper = item.itemData && (item.type === 'rod' || item.type === 'boat');
-        const target = isShopWrapper ? item.itemData : item; 
+        const isShopWrapper = item.itemData && ['rod', 'boat', 'lure', 'potion', 'bait'].includes(item.type);
+        const target = isShopWrapper ? item.itemData : item;
         
         const invType = item.type || target.invType || 'unknown';
         
