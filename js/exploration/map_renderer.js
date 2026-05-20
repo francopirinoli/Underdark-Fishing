@@ -5,14 +5,20 @@
 
 import { TILE } from './local_map.js';
 
-export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQuests =[], weatherNodes = {}, tournamentNodes = {}) {
+export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, incompleteQuests = [], completeQuests = [], weatherNodes = {}, tournamentNodes = {}) {
     const ctx = canvas.getContext('2d');
     const tileW = canvas.width / globalMap.width;
     const tileH = canvas.height / globalMap.height;
     
-    const questNodes = new Set();
-    activeQuests.forEach(q => {
-        if (q.targetNode) questNodes.add(`${q.targetNode.x},${q.targetNode.y}`);
+    const incompleteNodes = new Set();
+    incompleteQuests.forEach(q => {
+        if (q.targetNode) incompleteNodes.add(`${q.targetNode.x},${q.targetNode.y}`);
+    });
+
+    const completeNodes = new Set();
+    completeQuests.forEach(q => {
+        const node = q.turnInNode || q.targetNode; // fallback for older saves
+        if (node) completeNodes.add(`${node.x},${node.y}`);
     });
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -21,7 +27,8 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
     for (let y = 0; y < globalMap.height; y++) {
         for (let x = 0; x < globalMap.width; x++) {
             const node = globalMap.nodes[y][x];
-            const isQuestTarget = questNodes.has(`${x},${y}`);
+            const isCompleteTarget = completeNodes.has(`${x},${y}`);
+            const isIncompleteTarget = incompleteNodes.has(`${x},${y}`);
             const hasWeather = weatherNodes[`${x},${y}`];
             const hasTournament = tournamentNodes[`${x},${y}`];
             
@@ -32,20 +39,22 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
             }
             ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             
-            // Hazard Overlay
             if (node.isDiscovered && hasWeather) {
                 ctx.fillStyle = 'rgba(239, 68, 68, 0.25)'; // Red tint
                 ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             }
 
-            // Tournament Overlay
             if (node.isDiscovered && hasTournament && !hasTournament.isFinished) {
                 ctx.fillStyle = 'rgba(251, 191, 36, 0.15)'; // Gold tint
                 ctx.fillRect(x * tileW, y * tileH, tileW, tileH);
             }
             
-            if (isQuestTarget) {
-                ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; 
+            if (isCompleteTarget) {
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)'; // Green border
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x * tileW + 1, y * tileH + 1, tileW - 2, tileH - 2);
+            } else if (isIncompleteTarget) {
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)'; // Yellow border
                 ctx.lineWidth = 2;
                 ctx.strokeRect(x * tileW + 1, y * tileH + 1, tileW - 2, tileH - 2);
             } else {
@@ -63,7 +72,8 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
             const node = globalMap.nodes[y][x];
             const cx = x * tileW + tileW / 2;
             const cy = y * tileH + tileH / 2;
-            const isQuestTarget = questNodes.has(`${x},${y}`);
+            const isCompleteTarget = completeNodes.has(`${x},${y}`);
+            const isIncompleteTarget = incompleteNodes.has(`${x},${y}`);
             const hasWeather = weatherNodes[`${x},${y}`];
             const hasTournament = tournamentNodes[`${x},${y}`];
             
@@ -83,7 +93,6 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fill();
                 }
 
-                // Hazard Warning Icon (Top-Left)
                 if (hasWeather) {
                     ctx.fillStyle = '#EF4444';
                     ctx.font = `bold ${tileH * 0.4}px "Courier New", monospace`;
@@ -92,7 +101,6 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fillText('⚠', x * tileW + 2, y * tileH + 2);
                 }
 
-                // Tournament Icon (Bottom-Left)
                 if (hasTournament && !hasTournament.isFinished) {
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `${tileH * 0.45}px "Courier New", monospace`;
@@ -101,8 +109,14 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fillText('🏆', x * tileW + 2, y * tileH + tileH - 2);
                 }
 
-                // Quest Icon (Top-Right)
-                if (isQuestTarget) {
+                // --- NEW: Green Checkmark for Ready Quests ---
+                if (isCompleteTarget) {
+                    ctx.fillStyle = '#22C55E';
+                    ctx.font = `bold ${tileH * 0.5}px "Courier New", monospace`;
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText('✓', x * tileW + tileW - 4, y * tileH + 4);
+                } else if (isIncompleteTarget) {
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `bold ${tileH * 0.5}px "Courier New", monospace`;
                     ctx.textAlign = 'right';
@@ -110,7 +124,13 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
                     ctx.fillText('!', x * tileW + tileW - 4, y * tileH + 4);
                 }
             } else {
-                if (isQuestTarget) {
+                if (isCompleteTarget) {
+                    ctx.fillStyle = '#22C55E';
+                    ctx.font = `bold ${tileH * 0.6}px "Courier New", monospace`; 
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('✓', cx, cy + 2);
+                } else if (isIncompleteTarget) {
                     ctx.fillStyle = '#FBBF24';
                     ctx.font = `bold ${tileH * 0.6}px "Courier New", monospace`; 
                     ctx.textAlign = 'center';
@@ -127,7 +147,6 @@ export function renderGlobalMap(canvas, globalMap, biomes, selectedNode, activeQ
         }
     }
     
-    // Pass 3: Selected Node Highlight
     if (selectedNode) {
         ctx.strokeStyle = '#22D3EE'; 
         ctx.lineWidth = 3;

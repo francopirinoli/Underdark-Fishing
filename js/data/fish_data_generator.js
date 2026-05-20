@@ -29,56 +29,56 @@ const ART_GENERATORS = {
 };
 
 // --- RARITY MULTIPLIERS ---
-// V4: Softened Speed and Stamina multipliers slightly. 
-// Increased tolerance and hook modifiers so higher rarities are hard but not impossible.
+// V5: Softened Stamina multipliers so rare fish aren't endurance sponges
 const RARITY_TIERS =[
     { name: 'Common',    weight: 50, stamMult: 1.0, speedMult: 1.0,  weightMult: 1.0, valBase: 10,  xpBase: 5,   tolerance: 0.80, hookMod: 1.0 },
-    { name: 'Uncommon',  weight: 30, stamMult: 1.3, speedMult: 1.1,  weightMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.60, hookMod: 0.8 }, // stamMult 1.4 -> 1.3
-    { name: 'Rare',      weight: 14, stamMult: 2.0, speedMult: 1.2,  weightMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.40, hookMod: 0.6 }, // stamMult 2.2 -> 2.0, speedMult 1.25 -> 1.2
-    { name: 'Legendary', weight: 5,  stamMult: 2.8, speedMult: 1.3,  weightMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.25, hookMod: 0.45 },// stamMult 3.5 -> 2.8, speedMult 1.35 -> 1.3
-    { name: 'Boss',      weight: 1,  stamMult: 4.0, speedMult: 1.4,  weightMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.15, hookMod: 0.30 } // stamMult 5.0 -> 4.0, speedMult 1.5 -> 1.4
+    { name: 'Uncommon',  weight: 30, stamMult: 1.2, speedMult: 1.1,  weightMult: 1.4, valBase: 35,  xpBase: 10,  tolerance: 0.60, hookMod: 0.8 }, 
+    { name: 'Rare',      weight: 14, stamMult: 1.8, speedMult: 1.2,  weightMult: 2.2, valBase: 120, xpBase: 25,  tolerance: 0.40, hookMod: 0.6 }, 
+    { name: 'Legendary', weight: 5,  stamMult: 2.5, speedMult: 1.3,  weightMult: 3.5, valBase: 500, xpBase: 50,  tolerance: 0.25, hookMod: 0.45 },
+    { name: 'Boss',      weight: 1,  stamMult: 3.5, speedMult: 1.4,  weightMult: 6.0, valBase: 2500,xpBase: 100, tolerance: 0.15, hookMod: 0.30 } 
 ];
 
 // --- FAMILY ARCHETYPES (Base Stats before Rarity scaling) ---
+// V5: Lowered base stamina across all families
 const ARCHETYPES = {
     'fish': {
         sizes:['Tiny', 'Small', 'Medium', 'Large'], depths:['Surface', 'Mid-water', 'Bottom-feeder'],
-        baseStamina: 55, baseSpeed: 50, baseAggro: 0.35, optimalReelRange: [40, 60],
+        baseStamina: 45, baseSpeed: 50, baseAggro: 0.35, optimalReelRange: [40, 60],
         baseValueMod: 1.0, prefBias: { color: 0, sound: 0, light: 0, weight: 0 } 
     },
     'shark': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Surface', 'Mid-water'],
-        baseStamina: 50, baseSpeed: 100, baseAggro: 0.85, optimalReelRange: [75, 95], 
+        baseStamina: 40, baseSpeed: 100, baseAggro: 0.85, optimalReelRange: [75, 95], 
         baseValueMod: 1.4, prefBias: { color: 70, sound: 80, light: 10, weight: 20 } 
     },
     'eel': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Bottom-feeder'],
-        baseStamina: 120, baseSpeed: 40, baseAggro: 0.25, optimalReelRange:[25, 45], 
+        baseStamina: 90, baseSpeed: 40, baseAggro: 0.25, optimalReelRange:[25, 45], 
         baseValueMod: 0.9, prefBias: { color: -40, sound: -80, light: -50, weight: 60 } 
     },
     'ray': {
         sizes: ['Medium', 'Large', 'Massive'], depths:['Bottom-feeder'],
-        baseStamina: 85, baseSpeed: 50, baseAggro: 0.35, optimalReelRange:[30, 50],
+        baseStamina: 65, baseSpeed: 50, baseAggro: 0.35, optimalReelRange:[30, 50],
         baseValueMod: 1.1, prefBias: { color: 0, sound: -40, light: 0, weight: 80 } 
     },
     'crustacean': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Bottom-feeder'],
-        baseStamina: 130, baseSpeed: 30, baseAggro: 0.55, optimalReelRange:[15, 30], 
+        baseStamina: 95, baseSpeed: 30, baseAggro: 0.55, optimalReelRange:[15, 30], 
         baseValueMod: 1.4, prefBias: { color: -20, sound: 0, light: -20, weight: 90 } 
     },
     'jellyfish': {
         sizes: ['Tiny', 'Small', 'Medium'], depths:['Surface', 'Mid-water'],
-        baseStamina: 45, baseSpeed: 35, baseAggro: 0.25, optimalReelRange:[10, 30], 
+        baseStamina: 35, baseSpeed: 35, baseAggro: 0.25, optimalReelRange:[10, 30], 
         baseValueMod: 0.6, prefBias: { color: 0, sound: -90, light: 80, weight: -80 } 
     },
     'cephalopod': {
         sizes: ['Small', 'Medium', 'Large'], depths:['Mid-water', 'Bottom-feeder'],
-        baseStamina: 75, baseSpeed: 65, baseAggro: 0.55, optimalReelRange:[45, 65],
+        baseStamina: 60, baseSpeed: 65, baseAggro: 0.55, optimalReelRange:[45, 65],
         baseValueMod: 1.2, prefBias: { color: -60, sound: -50, light: 0, weight: 10 } 
     },
     'deepsea': {
         sizes:['Medium', 'Large', 'Massive'], depths: ['Bottom-feeder'],
-        baseStamina: 110, baseSpeed: 75, baseAggro: 0.75, optimalReelRange:[50, 85], 
+        baseStamina: 80, baseSpeed: 75, baseAggro: 0.75, optimalReelRange:[50, 85], 
         baseValueMod: 1.6, prefBias: { color: -80, sound: 50, light: -90, weight: 70 } 
     }
 };

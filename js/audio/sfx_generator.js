@@ -1,8 +1,7 @@
 /**
  * js/audio/sfx_generator.js
  * Procedural Sound Effects synthesizer.
- * V3 - Audio thread optimization: Lookahead scheduling, queue flushing, 
- * and continuous reel/tension modulation to prevent buffer underruns.
+ * V4 - Throttled continuous stream updates to stop WebAudio buffer crashes.
  */
 
 import { AudioEngine } from './audio_engine.js';
@@ -14,7 +13,9 @@ let isReelingPlaying = false;
 let speechTimeout = null;
 
 // Throttling trackers
-const LOOKAHEAD = 0.05; // 50ms buffer to prevent crackling
+const LOOKAHEAD = 0.05; 
+let _lastReelTime = 0;    // <-- NEW
+let _lastTensionTime = 0; // <-- NEW
 
 export const SFX = {
     _lastTension: 0,
@@ -23,76 +24,65 @@ export const SFX = {
     init() {
         if (!AudioEngine.isInitialized) return;
 
-        // UI: Soft wooden thock
         SYNTHS.uiHover = new Tone.MembraneSynth({
             pitchDecay: 0.01, envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
         }).connect(AudioEngine.sfxNode);
         SYNTHS.uiHover.volume.value = -18; 
 
-        // UI: Crystal ping
         SYNTHS.uiSelect = new Tone.FMSynth({
             harmonicity: 3, modulationIndex: 2, envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.2 }
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.uiSelect.volume.value = -14; 
 
-        // UI: Error / Deny (Dull thud)
         SYNTHS.error = new Tone.MembraneSynth({
             pitchDecay: 0.05, octaves: 1, envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 }
         }).connect(AudioEngine.sfxNode);
         SYNTHS.error.volume.value = -2;
 
-        // Coins / Gold
         SYNTHS.gold = new Tone.MetalSynth({
             frequency: 1500, envelope: { attack: 0.001, decay: 0.4, release: 0.2 },
             harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5
         }).connect(AudioEngine.sfxNode);
         SYNTHS.gold.volume.value = -16;
 
-        // Fishing Cast (Sine sweep)
         SYNTHS.cast = new Tone.Synth({
             oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.4 }
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.cast.volume.value = -6;
 
-        // Splash (Filtered noise burst)
         SYNTHS.splashFilter = new Tone.Filter(1000, "lowpass").connect(AudioEngine.sfxReverb);
         SYNTHS.splash = new Tone.NoiseSynth({
             noise: { type: "white" }, envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.5 }
         }).connect(SYNTHS.splashFilter);
         SYNTHS.splash.volume.value = -8; 
 
-        // Boat Move / Water Ripple
         SYNTHS.rippleFilter = new Tone.Filter(400, "bandpass").connect(AudioEngine.sfxNode);
         SYNTHS.ripple = new Tone.NoiseSynth({
             noise: { type: "pink" }, envelope: { attack: 0.2, decay: 0.5, sustain: 0, release: 0.5 }
         }).connect(SYNTHS.rippleFilter);
         SYNTHS.ripple.volume.value = -8;
 
-        // Line Snap (Harsh Sawtooth)
         SYNTHS.snap = new Tone.Synth({
             oscillator: { type: 'sawtooth' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.1 }
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.snap.volume.value = -2;
 
-        // Success / Catch (PolySynth Arpeggio)
         SYNTHS.catch = new Tone.PolySynth(Tone.Synth, {
             oscillator: { type: "triangle" }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 1 }
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.catch.volume.value = -10;
 
-        // Level Up (FM Sweeps)
         SYNTHS.levelUp = new Tone.PolySynth(Tone.FMSynth, {
             harmonicity: 2, modulationIndex: 5, envelope: { attack: 0.1, decay: 0.3, sustain: 0.4, release: 2 }
         }).connect(AudioEngine.sfxReverb);
         SYNTHS.levelUp.volume.value = -10;
 
-        // Dialogue Blip 
         SYNTHS.dialogue = new Tone.Synth({
             oscillator: { type: 'triangle' }, envelope: { attack: 0.01, decay: 0.05, sustain: 0, release: 0.02 }
         }).connect(AudioEngine.sfxNode);
         SYNTHS.dialogue.volume.value = -16;
 
-        // --- OPTIMIZED: REELING RATCHET (Continuous Tremolo) ---
+        // --- CONTINUOUS STREAM SYNTHS ---
         SYNTHS.reelOsc = new Tone.Oscillator({ type: 'square' }).start();
         SYNTHS.reelFilter = new Tone.Filter(1000, "bandpass", -24);
         SYNTHS.reelVol = new Tone.Volume(-Infinity).connect(AudioEngine.sfxNode);
@@ -102,7 +92,6 @@ export const SFX = {
         SYNTHS.reelFilter.connect(SYNTHS.reelTremolo);
         SYNTHS.reelTremolo.connect(SYNTHS.reelVol);
 
-        // --- OPTIMIZED: TENSION ROPE CREAK ---
         SYNTHS.tensionNoise = new Tone.NoiseSynth({
             noise: { type: 'brown' },
             envelope: { attack: 0.5, decay: 0, sustain: 1, release: 0.5 }
@@ -116,7 +105,6 @@ export const SFX = {
         SYNTHS.tensionTremolo.connect(SYNTHS.tensionVol);
     },
 
-    // Standard UI Triggers with Lookahead
     playUIHover() { try { if (SYNTHS.uiHover) SYNTHS.uiHover.triggerAttackRelease("C3", "32n", Tone.now() + LOOKAHEAD); } catch(e){} },
     playUISelect() { try { if (SYNTHS.uiSelect) SYNTHS.uiSelect.triggerAttackRelease("E6", "16n", Tone.now() + LOOKAHEAD); } catch(e){} },
     playError() { try { if (SYNTHS.error) SYNTHS.error.triggerAttackRelease("C2", "8n", Tone.now() + LOOKAHEAD); } catch(e){} },
@@ -210,7 +198,6 @@ export const SFX = {
             if (char.match(/[a-zA-Z0-9]/)) {
                 const charCodeOffset = (char.charCodeAt(0) % 15) * 5; 
                 const inflection = (index % 2 === 0) ? charCodeOffset : -charCodeOffset;
-                // Add lookahead internally for speech stability
                 SYNTHS.dialogue.triggerAttackRelease(baseFreq + inflection, "32n", Tone.now() + LOOKAHEAD);
             } 
             else if (char === '.' || char === '!' || char === '?') delay += 250;
@@ -223,23 +210,26 @@ export const SFX = {
         playNextCharacter();
     },
 
-// --- CONTINUOUS REEL UPDATE ---
+    // --- OPTIMIZED CONTINUOUS REEL UPDATE ---
     updateReel(isReeling, powerPct = 50) {
         if (!SYNTHS.reelOsc) return;
 
         if (isReeling) {
             if (!isReelingPlaying) {
-                // .rampTo glides the volume up safely without popping
                 SYNTHS.reelVol.volume.rampTo(-14, 0.05);
                 isReelingPlaying = true;
             }
 
+            // --- CPU THROTTLE: Only update WebAudio queue every 100ms ---
+            const now = Date.now();
+            if (now - _lastReelTime < 100) return;
+            _lastReelTime = now;
+
             if (Math.abs(powerPct - this._lastReelPower) < 1.0) return;
             this._lastReelPower = powerPct;
 
-            // .rampTo handles smoothing automatically without disconnecting the signal stream!
             const speed = 5 + (powerPct / 100) * 20;
-            SYNTHS.reelTremolo.frequency.rampTo(speed, 0.1);
+            SYNTHS.reelTremolo.frequency.rampTo(speed, 0.1); // Perfect 100ms ramp
 
             const pitch = 300 + (powerPct * 5);
             SYNTHS.reelOsc.frequency.rampTo(pitch, 0.1);
@@ -253,7 +243,6 @@ export const SFX = {
         }
     },
 
-    // To prevent immediate crashes before we update the renderer, map old API to new
     playReel(powerPct = 50) {
         this.updateReel(true, powerPct);
     },
@@ -268,11 +257,16 @@ export const SFX = {
                 isTensionPlaying = true;
             }
             
+            // --- CPU THROTTLE: Only update WebAudio queue every 100ms ---
+            const now = Date.now();
+            if (now - _lastTensionTime < 100) return;
+            _lastTensionTime = now;
+
             if (Math.abs(tensionValue - this._lastTension) < 1.0) return;
             this._lastTension = tensionValue;
 
             const vol = -20 + ((tensionValue - 50) / 50) * 15;
-            SYNTHS.tensionVol.volume.rampTo(vol, 0.1);
+            SYNTHS.tensionVol.volume.rampTo(vol, 0.1); // Perfect 100ms ramp
             
             const tremFreq = 3 + ((tensionValue - 50) / 50) * 15; 
             SYNTHS.tensionTremolo.frequency.rampTo(tremFreq, 0.1);

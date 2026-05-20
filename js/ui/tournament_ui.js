@@ -79,18 +79,26 @@ export const TournamentUI = {
         const t = this.tournament;
         const player = this.gameState.player;
 
-        // 1. NOT YET PARTICIPATING (Sign Up)
+// 1. NOT YET PARTICIPATING (Sign Up)
         if (!t.isPlayerParticipating) {
             this.triggerDialogue(`Are you here for the tournament? The objective is ${this.getObjectiveText()}. Entry fee is ${t.entryFee}g.`);
             
             const hasFish = player.inventory.some(item => item.invType === 'fish');
             const canAfford = player.vitals.gold >= t.entryFee;
             
+            // --- NEW: Time Restriction Check ---
+            const currentMins = this.gameState.gameTimeMinutes || 0;
+            const isTooLate = currentMins >= 18 * 60; // 18:00 PM
+            
             let btnState = '';
             let btnText = `Pay Entry Fee (${t.entryFee}g)`;
             let warningHtml = '';
 
-            if (hasFish) {
+            if (isTooLate) {
+                btnState = 'disabled';
+                btnText = 'Too Late To Enter';
+                warningHtml = `<div style="color:var(--red-danger); font-size: 1.1rem; margin-bottom: 1rem; text-align: center;">⚠ It's past 18:00. Tournament registration is closed for today. Come back tomorrow!</div>`;
+            } else if (hasFish) {
                 btnState = 'disabled';
                 btnText = 'Empty Fish from Cargo';
                 warningHtml = `<div style="color:var(--red-danger); font-size: 1.1rem; margin-bottom: 1rem; text-align: center;">⚠ You must empty your cargo of all fish before entering!</div>`;
@@ -103,7 +111,7 @@ export const TournamentUI = {
                     <h3 style="margin: 0 0 1rem 0; color: var(--cyan-glow);">Tournament Rules</h3>
                     <ul style="color: var(--text-main); font-size: 1.2rem; line-height: 1.5; padding-left: 1.5rem; margin-bottom: 1.5rem;">
                         <li><b>Objective:</b> ${this.getObjectiveText()}</li>
-                        <li><b>Time Limit:</b> 5 Minutes</li>
+                        <li><b>Time Limit:</b> 5 Hours</li> <!-- UPDATED -->
                         <li><b>Delivery:</b> You must bring your catches back to a competitor boat BEFORE time runs out to score points!</li>
                     </ul>
                     ${warningHtml}
@@ -124,7 +132,7 @@ export const TournamentUI = {
                     this.renderContent();
                 };
             }
-        } 
+        }
         
         // 2. ACTIVE TOURNAMENT (Deliver Catch)
         else if (t.isPlayerParticipating && !t.isFinished) {
@@ -289,7 +297,7 @@ export const TournamentUI = {
         }
     },
 
-    // --- TRACKER HUD UPDATES ---
+// --- TRACKER HUD UPDATES ---
     updateTracker(tournament) {
         const tracker = document.getElementById('tournament-tracker');
         if (!tournament.isPlayerParticipating || tournament.hasClaimedReward) {
@@ -300,11 +308,14 @@ export const TournamentUI = {
         tracker.style.display = 'flex';
         document.getElementById('tt-objective').innerText = this.getObjectiveText.call({tournament});
 
-        // Time
-        const mins = Math.floor(tournament.timeRemaining / 60).toString().padStart(2, '0');
-        const secs = Math.floor(tournament.timeRemaining % 60).toString().padStart(2, '0');
-        document.getElementById('tt-time').innerText = `${mins}:${secs}`;
-        document.getElementById('tt-time').style.color = tournament.timeRemaining <= 30 ? 'var(--red-danger)' : 'var(--text-main)';
+        // --- NEW: Format as In-Game Hours & Minutes ---
+        const totalMinsRemaining = Math.floor(tournament.timeRemaining);
+        const hrs = Math.floor(totalMinsRemaining / 60);
+        const mins = (totalMinsRemaining % 60).toString().padStart(2, '0');
+        
+        document.getElementById('tt-time').innerText = `${hrs}h ${mins}m`;
+        // Turns red when less than 1 in-game hour remains (60 real-time seconds)
+        document.getElementById('tt-time').style.color = tournament.timeRemaining <= 60 ? 'var(--red-danger)' : 'var(--text-main)';
 
         // Dynamic 1st/2nd Place text based on who is winning
         const leaderboard = EventManager.Tournament.getLiveCompetitors(tournament);

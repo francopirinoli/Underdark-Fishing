@@ -130,28 +130,47 @@ export const GrimoireUI = {
         const world = this.gameState.world;
         const player = this.gameState.player;
 
-        const incompleteQuests = player.activeQuests.filter(q => {
+        const incompleteQuests = [];
+        const completeQuests = [];
+
+        player.activeQuests.forEach(q => {
+            let isComplete = false;
             if (q.type === 'hunt') {
                 const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
-                return count < q.requiredAmount;
-            }
-            if (q.type === 'trophy') {
+                isComplete = count >= q.requiredAmount;
+            } else if (q.type === 'trophy') {
                 const maxW = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).reduce((max, f) => Math.max(max, f.actualWeight), 0);
-                return maxW < q.requiredWeight;
+                isComplete = maxW >= q.requiredWeight;
+            } else if (q.type === 'research') {
+                let curLvl = 0;
+                const bestiaryEntry = player.bestiary[q.targetSpeciesId];
+                if (bestiaryEntry) {
+                    if (bestiaryEntry.xp >= 250) curLvl = 3;
+                    else if (bestiaryEntry.xp >= 100) curLvl = 2;
+                    else curLvl = 1;
+                }
+                isComplete = curLvl >= q.requiredKnowledgeLevel;
+            } else if (q.type === 'bounty') {
+                isComplete = q.isComplete;
+            } else if (q.type === 'courier') {
+                // Courier is "Complete" (ready to turn in) if you are alive and at the destination
+                isComplete = !q.isFailed; 
+            } else if (q.type === 'crafting') {
+                isComplete = player.inventory.some(item => {
+                    if (item.invType !== 'lure') return false;
+                    return q.requirements.every(req => item.stats[req.stat] >= req.min && item.stats[req.stat] <= req.max);
+                });
             }
-            if (q.type === 'bounty') return !q.isComplete;
-            if (q.type === 'research') {
-                const entry = player.bestiary[q.targetSpeciesId];
-                return (entry ? (entry.xp >= 250 ? 3 : entry.xp >= 100 ? 2 : 1) : 0) < q.requiredKnowledgeLevel;
-            }
-            return true;
+
+            if (isComplete) completeQuests.push(q);
+            else incompleteQuests.push(q);
         });
         
-        // Pass Weather Nodes and Tournament Nodes to renderer
         const activeWeather = EventManager.Weather.activeNodes;
         const activeTournaments = EventManager.Tournament.activeNodes;
 
-        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, activeWeather, activeTournaments);
+        // Pass BOTH lists to the global map renderer!
+        renderGlobalMap(canvas, world, BIOMES, this.selectedMapNode, incompleteQuests, completeQuests, activeWeather, activeTournaments);
 
         // Calculate Detail Text for the info panel
         const weather = EventManager.Weather.getWeather(this.selectedMapNode.x, this.selectedMapNode.y);
@@ -256,10 +275,30 @@ export const GrimoireUI = {
         for (const [key, val] of Object.entries(player.stats)) {
             const row = document.createElement('div');
             row.className = 'grim-stat-row';
+            
+            const buff = (player.activeBuffs || []).find(b => b.stat === key);
+            
+            // --- FIX: Use a fixed-width container so the '+' buttons stay perfectly aligned! ---
+            let valHtml = `
+                <div style="width: 90px; display: flex; justify-content: flex-end; align-items: center;">
+                    <span class="grim-stat-val">${val}</span>
+                </div>
+            `;
+            
+            if (buff) {
+                // Base stat in parenthesis, purple buff indicator to the side
+                valHtml = `
+                <div style="width: 90px; display: flex; justify-content: flex-end; align-items: center;">
+                    <span class="grim-stat-val" style="width: auto; margin-right: 0.5rem;">(${val})</span>
+                    <span style="color: #A855F7; font-weight: bold; font-size: 1.5rem;">+${buff.amount}</span>
+                </div>
+                `;
+            }
+
             row.innerHTML = `
                 <span class="grim-stat-name">${displayNames[key]}</span>
                 <div class="grim-stat-controls">
-                    <span class="grim-stat-val">${val}</span>
+                    ${valHtml}
                     <button class="grim-stat-btn" data-stat="${key}" ${(player.availablePoints <= 0 || val >= 5) ? 'disabled' : ''}>+</button>
                 </div>
             `;
@@ -457,23 +496,44 @@ export const GrimoireUI = {
                 this.renderCargo(); 
             };
         } 
-        // 2. POTIONS
+// 2. POTIONS
         else if (item.invType === 'potion') {
-            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Grants <b style="color:var(--cyan-glow);">+${item.buff.amount} ${item.buff.statName}</b><br>for ${Math.floor(item.buff.durationMins / 60)}h ${item.buff.durationMins % 60}m.</div>`;
+            const buff = item.buff || { durationMins: 0, amount: 0, statName: '?' };
+            statsEl.innerHTML = `<div style="text-align:center; padding: 1rem 0;">Grants <b style="color:var(--cyan-glow);">+${buff.amount} ${buff.statName}</b><br>for ${Math.floor(buff.durationMins / 60)}h ${buff.durationMins % 60}m.</div>`;
             btnAction.style.display = 'block';
             
-            if (player.activeBuffs && player.activeBuffs.length >= 3) {
+            // --- NEW: Check for Existing Buffs on this specific stat ---
+            const existingBuffIndex = player.activeBuffs ? player.activeBuffs.findIndex(b => b.stat === buff.stat) : -1;
+            const existingBuff = existingBuffIndex > -1 ? player.activeBuffs[existingBuffIndex] : null;
+
+            // Block consumption if a stronger buff is already running
+            if (existingBuff && existingBuff.amount > buff.amount) {
+                btnAction.innerText = 'Stronger Buff Active';
+                btnAction.style.borderColor = 'var(--panel-border)';
+                btnAction.style.color = 'var(--text-muted)';
+                btnAction.onclick = () => { SFX.playError(); };
+            } 
+            // Standard 3-buff limit
+            else if (!existingBuff && player.activeBuffs && player.activeBuffs.length >= 3) {
                 btnAction.innerText = 'Max Buffs Reached';
                 btnAction.style.borderColor = 'var(--panel-border)';
                 btnAction.style.color = 'var(--text-muted)';
                 btnAction.onclick = () => { SFX.playError(); };
-            } else {
-                btnAction.innerText = '🧪 Drink Potion';
+            } 
+            // Allow drinking (replaces old buff if it exists)
+            else {
+                btnAction.innerText = existingBuff ? '🧪 Drink Potion (Refresh)' : '🧪 Drink Potion';
                 btnAction.style.borderColor = '#A855F7';
                 btnAction.style.color = '#A855F7';
                 btnAction.onclick = () => {
                     SFX.playUISelect();
                     if (!item.buff.maxDurationMins) item.buff.maxDurationMins = item.buff.durationMins;
+                    
+                    // If an older/weaker buff for this stat exists, remove it before applying the new one
+                    if (existingBuff) {
+                        player.activeBuffs.splice(existingBuffIndex, 1);
+                    }
+                    
                     player.activeBuffs.push(item.buff);
                     player.inventory.splice(invIndex, 1);
                     if (this.callbacks.onSave) this.callbacks.onSave();
@@ -481,6 +541,7 @@ export const GrimoireUI = {
                 };
             }
         }
+
 // 3. BAITS
         else if (item.invType === 'bait') {
             // FIX: Safely fallback variables so corrupted items don't crash the UI
@@ -1232,7 +1293,6 @@ renderBestiary() {
         const list = document.getElementById('grim-quests-list');
         list.innerHTML = '';
         
-        // NEW: Update Header to show the 8 quest cap
         const header = document.querySelector('#grim-page-quests h1');
         if (header) {
             header.innerText = `Active Quests (${player.activeQuests.length}/8)`;
@@ -1273,13 +1333,12 @@ renderBestiary() {
                     </div>
                 `;
             } else if (q.type === 'research') {
-                // Dynamically calculate current knowledge from the bestiary
                 let curLvl = 0;
                 const bestiaryEntry = player.bestiary[q.targetSpeciesId];
                 if (bestiaryEntry) {
                     if (bestiaryEntry.xp >= 250) curLvl = 3;
                     else if (bestiaryEntry.xp >= 100) curLvl = 2;
-                    else curLvl = 1; // Caught at least once
+                    else curLvl = 1;
                 }
                 
                 isComplete = curLvl >= q.requiredKnowledgeLevel;
@@ -1293,13 +1352,57 @@ renderBestiary() {
             } else if (q.type === 'bounty') {
                 isComplete = q.isComplete;
                 progressHtml = `<div style="margin-top: 1rem; color:${isComplete ? 'var(--green-safe)' : 'var(--gold-warn)'}; font-weight:bold;">${isComplete ? 'Bounty Slain' : 'Target still at large...'}</div>`;
+            } else if (q.type === 'courier') {
+                if (q.isFailed) {
+                    isComplete = false;
+                    progressHtml = `<div style="margin-top: 1rem; color:var(--red-danger); font-weight:bold; font-size: 1.4rem;">Delivery Failed: Package Expired</div>`;
+                } else {
+                    const mins = Math.max(0, Math.floor(q.timeRemaining));
+                    const pct = Math.max(0, (q.timeRemaining / q.maxTime) * 100);
+                    const color = q.timeRemaining < 60 ? 'var(--red-danger)' : 'var(--cyan-glow)';
+                    
+                    isComplete = this.gameState.globalX === q.targetNode.x && this.gameState.globalY === q.targetNode.y;
+                    
+                    progressHtml = `
+                        <div style="margin-top: 1rem;">
+                            <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;">
+                                <span>Time Remaining</span> 
+                                <span style="color:${color}; font-weight:bold;">${mins} Mins</span>
+                            </div>
+                            <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;">
+                                <div style="height:100%; width:${pct}%; background:${color};"></div>
+                            </div>
+                            <div style="margin-top: 0.5rem; color:var(--text-muted); font-size: 1.1rem;">Deliver to: [${q.targetNode.x}, ${q.targetNode.y}]</div>
+                        </div>
+                    `;
+                }
+            } else if (q.type === 'crafting') {
+                const hasMatch = player.inventory.some(item => {
+                    if (item.invType !== 'lure') return false;
+                    return q.requirements.every(req => item.stats[req.stat] >= req.min && item.stats[req.stat] <= req.max);
+                });
+                isComplete = hasMatch;
+                progressHtml = `
+                    <div style="margin-top: 1rem;">
+                        <div style="display:flex; justify-content:space-between; margin-bottom: 0.2rem;">
+                            <span>Status</span> 
+                            <span style="color:${isComplete ? 'var(--green-safe)' : 'var(--gold-warn)'}">${isComplete ? 'Lure Crafted (In Cargo)' : 'Awaiting Crafting'}</span>
+                        </div>
+                        <div style="width:100%; height:10px; background:#000; border-radius:5px; overflow:hidden;">
+                            <div style="height:100%; width:${isComplete ? '100' : '0'}%; background:${isComplete ? 'var(--green-safe)' : 'var(--gold-warn)'}"></div>
+                        </div>
+                    </div>
+                `;
             }
 
+            // GUARANTEED SAFE INITIALIZATION
             let rewardItemText = '';
-            if (q.rewards.item) {
+            if (q.rewards && q.rewards.item) {
                 const itemName = q.rewards.item.id.replace('part_', '').split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 rewardItemText = `<br/><span style="color:var(--cyan-glow); font-weight:bold;">+ ${q.rewards.item.qty}x ${itemName}</span>`;
             }
+
+            const returnText = q.turnInName ? `Return to ${q.turnInName} to claim!` : `Return to a Settlement Notice Board to claim!`;
 
             card.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -1316,7 +1419,7 @@ renderBestiary() {
                 
                 ${progressHtml}
                 
-                ${isComplete ? '<div style="margin-top:1.5rem; color:var(--green-safe); font-weight:bold; font-size:1.4rem; text-align:center;">Return to a Settlement Notice Board to claim!</div>' : ''}
+                ${isComplete ? `<div style="margin-top:1.5rem; color:var(--green-safe); font-weight:bold; font-size:1.4rem; text-align:center;">${returnText}</div>` : ''}
             `;
 
             card.querySelector('.btn-abandon').onclick = () => {
@@ -1329,6 +1432,7 @@ renderBestiary() {
             list.appendChild(card);
         });
     },
+    
     // --- GUIDE (TUTORIAL) ---
     guideActiveChapterId: 'vitals', // State tracker for the sub-menu
 

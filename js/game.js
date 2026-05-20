@@ -59,10 +59,11 @@ let currentLocalNPCBoats =[];
 let currentLocalFisherman = null; 
 
 // World State
-let discoveredNodes =[];
+let discoveredNodes = [];
 let gameDay = 1;
 let gameTimeMinutes = 8 * 60; 
-let fungalRotTimer = 0; // NEW: Tracks time inside toxic spore storms
+let fungalRotTimer = 0; 
+let rationConsumeTimer = 0; // <-- ADD THIS LINE
 
 // Inputs
 const keys = { forward: false, backward: false, left: false, right: false, action: false, actionJustPressed: false };
@@ -547,7 +548,9 @@ function enterTournament(npcBoat) {
     document.getElementById('interact-prompt').style.display = 'none';
     
     const activeTournament = EventManager.Tournament.getTournament(globalX, globalY);
-    TournamentUI.open({ player, world, globalX, globalY }, npcBoat, activeTournament);
+    
+    // --- FIX: Pass gameTimeMinutes into the UI state object so it can check the clock! ---
+    TournamentUI.open({ player, world, globalX, globalY, gameTimeMinutes }, npcBoat, activeTournament);
     
     saveCurrentState();
 }
@@ -572,7 +575,8 @@ function enterHub() {
 
 function resumeFromHub() {
     currentState = STATE.EXPLORATION;
-    if (player.vitals.hp <= 0) player.vitals.hp = player.gear.boat.stats.maxHp;
+    const effStats = PlayerEngine.getEffectiveStats(player); // <-- NEW
+    if (player.vitals.hp <= 0) player.vitals.hp = effStats.exploration.maxHp; // <-- UPDATED
     
     // --- NEW: Switch back to dark Biome Music! ---
     const targetNode = world.nodes[globalY][globalX];
@@ -592,10 +596,8 @@ function gameLoop(timestamp) {
 
     HUD.update(player, gameDay, gameTimeMinutes);
 
-    // --- PHASE 4 FIX: GLOBAL TOURNAMENT TICKER ---
-    // Moved outside EXPLORATION so the timer ticks down WHILE you are fighting a fish!
+    // --- TOURNAMENT TICKER ---
     const activeTournament = EventManager.Tournament.getTournament(globalX, globalY);
-    
     if (activeTournament && activeTournament.isPlayerParticipating && !activeTournament.hasClaimedReward) {
         if (activeTournament.timeRemaining > 0) {
             activeTournament.timeRemaining -= dt;
@@ -611,57 +613,91 @@ function gameLoop(timestamp) {
         TournamentUI.hideTracker();
     }
 
-    if (currentState === STATE.EXPLORATION) {
-        const effStats = PlayerEngine.getEffectiveStats(player);
+    // --- SHARED TIME & SURVIVAL BLOCK (Runs during Exploration AND Fishing) ---
+    const effStats = PlayerEngine.getEffectiveStats(player);
+    const activeWeather = EventManager.Weather.getWeather(globalX, globalY);
 
-        if (player.vitals.fuel > 0) {
-            const fuelMult = effStats.exploration.fuelEfficiencyMult;
-            player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
+    if (player.vitals.fuel > 0) {
+        const fuelMult = effStats.exploration.fuelEfficiencyMult;
+        player.vitals.fuel -= (player.gear.boat.upgrades.lantern.fuelDrainRate || 1.0) * fuelMult * dt * 0.1;
+    }
+
+    // 1. Time & Day Rollover
+    gameTimeMinutes += dt; 
+    if (gameTimeMinutes >= 24 * 60) { 
+        gameTimeMinutes -= 24 * 60; 
+        gameDay++; 
+        EventManager.onNewDay(gameDay, world); 
+        player.completedQuests = []; 
+        HUD.logAction("A new day begins. The Darklake shifts...", "safe");
+    }
+
+    // 2. Hunger (8-Hour Ration Consumption)
+    rationConsumeTimer += dt;
+    if (rationConsumeTimer >= 8 * 60) { // 8 hours = 480 in-game minutes
+        rationConsumeTimer -= 8 * 60;
+        player.vitals.rations--;
+        if (player.vitals.rations < 0) {
+            player.vitals.rations = 0;
+            player.vitals.hp -= 20;
+            HUD.logAction("Starving! Hull took 20 damage.", 'danger');
+            if (player.vitals.hp <= 0) { handleDeath(); return; } // Abort loop if dead
+        } else {
+            HUD.logAction("You ate a meal. (-1 Ration)", "normal");
         }
+    }
 
-// --- TIME & DAY ROLLOVER (Events) ---
-        gameTimeMinutes += dt; 
-        if (gameTimeMinutes >= 24 * 60) { 
-            gameTimeMinutes -= 24 * 60; 
-            gameDay++; 
-            EventManager.onNewDay(gameDay, world); 
-            player.completedQuests = []; // <-- NEW: Clear the completed list for the new day
-            HUD.logAction("A new day begins. The Darklake shifts...", "safe");
-        }
-
-// --- TICK DOWN ACTIVE BUFFS ---
-        if (player.activeBuffs && player.activeBuffs.length > 0) {
-            for (let i = player.activeBuffs.length - 1; i >= 0; i--) {
-                // FIX: Removed the "/ 60". dt already perfectly represents 1 in-game minute!
-                player.activeBuffs[i].durationMins -= dt; 
-                if (player.activeBuffs[i].durationMins <= 0) {
-                    HUD.logAction(`${player.activeBuffs[i].statName} potion effect has worn off.`, "warn");
-                    player.activeBuffs.splice(i, 1);
-                }
+    // 3. Tick Down Active Buffs
+    if (player.activeBuffs && player.activeBuffs.length > 0) {
+        for (let i = player.activeBuffs.length - 1; i >= 0; i--) {
+            player.activeBuffs[i].durationMins -= dt; 
+            if (player.activeBuffs[i].durationMins <= 0) {
+                HUD.logAction(`${player.activeBuffs[i].statName} potion effect has worn off.`, "warn");
+                player.activeBuffs.splice(i, 1);
             }
         }
+    }
 
+    // 4. Hazard: Fungal Rot
+    if (activeWeather === 'spores' && !effStats.exploration.immunities.fungal && player.vitals.rations > 0) {
+        fungalRotTimer += dt;
+        if (fungalRotTimer >= 45.0) { // Rot 1 ration every 45 in-game minutes
+            fungalRotTimer = 0;
+            player.vitals.rations--;
+            HUD.logAction("Spores rotting food. Lost 1 Ration.", "danger");
+            if (player.vitals.rations <= 0) {
+                player.vitals.hp -= 20;
+                HUD.logAction("Starving! Hull took 20 damage.", 'danger');
+                if (player.vitals.hp <= 0) { handleDeath(); return; } // Abort loop if dead
+            }
+        }
+    } else {
+        fungalRotTimer = 0; // Reset if safe
+    }
+
+    // --- NEW: 5. Courier Quest Timers ---
+    if (player.activeQuests && player.activeQuests.length > 0) {
+        player.activeQuests.forEach(q => {
+            if (q.type === 'courier' && !q.isFailed) {
+                q.timeRemaining -= dt;
+                if (q.timeRemaining <= 0) {
+                    q.timeRemaining = 0;
+                    q.isFailed = true;
+                    SFX.playError();
+                    HUD.logAction(`Delivery Failed: ${q.title}. The package expired.`, "danger");
+                }
+            }
+        });
+    }
+
+    // ==========================================
+    // EXPLORATION STATE
+    // ==========================================
+    
+    if (currentState === STATE.EXPLORATION) {
         if (mouse.isCharging) {
             mouse.chargePct = Math.min(1.0, mouse.chargePct + dt * 1.5);
             keys.forward = keys.backward = keys.left = keys.right = false; 
-        }
-
-         // --- HAZARD FUNGAL ROT ---
-        const activeWeather = EventManager.Weather.getWeather(globalX, globalY);
-        if (activeWeather === 'spores' && !effStats.exploration.immunities.fungal && player.vitals.rations > 0) {
-            fungalRotTimer += dt;
-            if (fungalRotTimer >= 45.0) { // Loses 1 ration every 45 real-time seconds in a storm
-                fungalRotTimer = 0;
-                player.vitals.rations--;
-                HUD.logAction("Spores rotting food. Lost 1 Ration.", "danger");
-                if (player.vitals.rations <= 0) {
-                    player.vitals.hp -= 20;
-                    HUD.logAction("Starving! Hull took 20 damage.", 'danger');
-                    if (player.vitals.hp <= 0) handleDeath();
-                }
-            }
-        } else {
-            fungalRotTimer = 0; // Reset if safe
         }
 
         ExplorationEngine.update(dt, keys);
@@ -674,7 +710,7 @@ function gameLoop(timestamp) {
         const ty = Math.floor(ExplorationEngine.y);
         
         // 1. Check for Settlement Docks
-        const searchRadius = 8; // Allows docking from further away
+        const searchRadius = 8; 
         for (let y = Math.max(0, ty - searchRadius); y <= Math.min(LOCAL_MAP_SIZE - 1, ty + searchRadius); y++) {
             for (let x = Math.max(0, tx - searchRadius); x <= Math.min(LOCAL_MAP_SIZE - 1, tx + searchRadius); x++) {
                 if (currentLocalMap.grid[y][x] === TILE.DOCK) {
@@ -687,7 +723,7 @@ function gameLoop(timestamp) {
             if (canInteract) break;
         }
 
-        // 2. Check for NPC Boats (Wanderers & Tournaments)
+        // 2. Check for NPC Boats
         if (!canInteract && currentLocalNPCBoats.length > 0) {
             for (const npcBoat of currentLocalNPCBoats) {
                 const distToBoat = Math.hypot(tx - npcBoat.x, ty - npcBoat.y);
@@ -695,7 +731,7 @@ function gameLoop(timestamp) {
                     canInteract = true;
                     if (npcBoat.isTournament) {
                         interactMsg = `Press [E] to hail ${npcBoat.npc.name} (Tournament)`;
-                        interactAction = () => { enterTournament(npcBoat); }; // <-- UPDATED
+                        interactAction = () => { enterTournament(npcBoat); }; 
                     } else {
                         interactMsg = `Press [E] to hail ${npcBoat.npc.name}`;
                         interactAction = () => { 
@@ -723,17 +759,17 @@ function gameLoop(timestamp) {
         keys.actionJustPressed = false;
 
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
-        
-        // Pass the array of boats into the renderer!
-        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, mouse, false,[], currentLocalChest, currentLocalNPCBoats);
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, mouse, false, [], currentLocalChest, currentLocalNPCBoats);
         HUD.drawMinimap(ExplorationEngine.x, ExplorationEngine.y);
     }
 
+    // ==========================================
+    // FISHING STATE
+    // ==========================================
     else if (currentState === STATE.FISHING) {
         const lightRad = player.vitals.fuel > 0 ? player.gear.boat.upgrades.lantern.lightRadius : 40;
         
-        // Pass the array of boats here as well so they render in the background!
-        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, null, true,[], currentLocalChest, currentLocalNPCBoats);
+        ExplorationRenderer.render(ExplorationEngine, lightRad, dt, null, true, [], currentLocalChest, currentLocalNPCBoats);
         
         FishingEngine.update(dt, isReeling);
         FishingRenderer.update(FishingEngine, dt, isReeling);
@@ -744,7 +780,6 @@ function gameLoop(timestamp) {
                 
                 const caughtFish = FishingEngine.fishData; 
                 
-                // --- PROCESS TREASURE CHEST CATCH ---
                 if (caughtFish.invType === 'chest_encounter') {
                     player.inventory.push({
                         id: `chest_${Date.now()}`,
@@ -761,8 +796,6 @@ function gameLoop(timestamp) {
                     handleEndFishing("You hauled up a Sunken Chest!", "safe");
                     saveCurrentState();
                 }
-
-// --- PROCESS NORMAL FISH CATCH ---
                 else {
                     player.inventory.push(caughtFish);
                     
@@ -774,8 +807,6 @@ function gameLoop(timestamp) {
                     const prevKnowledge = player.bestiary[caughtFish.id].xp;
                     player.bestiary[caughtFish.id].caught++;
 
-                    // --- NEW: Passive Bestiary XP from Catching ---
-                    // Catching gives half the knowledge of dissecting, still scaling with Intelligence
                     const baseKnowledge = { 'Common': 10, 'Uncommon': 20, 'Rare': 40, 'Legendary': 70, 'Boss': 100 }[caughtFish.identity.rarity] || 10;
                     const knowledgeXpGain = Math.round(baseKnowledge * effStats.economy.knowledgeXpMult);
                     player.bestiary[caughtFish.id].xp += knowledgeXpGain;
@@ -789,7 +820,6 @@ function gameLoop(timestamp) {
 
                     player.activeQuests.forEach(q => {
                         if (q.type === 'bounty' && !q.isComplete) {
-                            // UPDATED: Check for specific species, rarity requirement, and location
                             if (caughtFish.id === q.targetSpeciesId && 
                                 caughtFish.identity.rarity === q.targetRarity && 
                                 globalX === q.targetNode.x && 
@@ -801,7 +831,6 @@ function gameLoop(timestamp) {
                         }
                     });
 
-                    // --- XP & LEVEL UP LOGIC ---
                     const finalXpGain = Math.round(caughtFish.economy.baseXp * effStats.economy.generalXpMult);
                     const leveledUp = PlayerEngine.addXp(player, finalXpGain);
                     
@@ -812,11 +841,9 @@ function gameLoop(timestamp) {
 
                     handleEndFishing(`Caught a ${caughtFish.identity.name} (+${finalXpGain} XP)!`, "safe");
                     
-                    // Trigger a notification if the passive XP pushed the Bestiary to a new tier!
                     if (prevKnowledge < 100 && newKnowledge >= 100) HUD.logAction(`Bestiary Updated: ${caughtFish.identity.name} (Lv.2)`, "warn");
                     if (prevKnowledge < 250 && newKnowledge >= 250) HUD.logAction(`Bestiary Updated: ${caughtFish.identity.name} (MAX)`, "warn");
                     
-                    // --- TOURNAMENT FEEDBACK ---
                     if (activeTournament && activeTournament.isPlayerParticipating && !activeTournament.isFinished) {
                         let isRelevant = true;
                         if (activeTournament.objectiveType === 'specialist' && caughtFish.id !== activeTournament.targetSpeciesId) {
@@ -1130,7 +1157,9 @@ function handleDeath() {
         });
 
         // Restore HP to full
-        player.vitals.hp = player.gear.boat.stats.maxHp;
+        const effStats = PlayerEngine.getEffectiveStats(player); // <-- NEW
+        player.vitals.hp = effStats.exploration.maxHp; // <-- UPDATED
+
 
         // Find Nearest Discovered Settlement
         let bestNode = world.nodes[world.startY][world.startX]; // Fallback to start node

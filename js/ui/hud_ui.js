@@ -5,6 +5,7 @@
  */
 
 import { TILE, LOCAL_MAP_SIZE } from '../exploration/local_map.js';
+import { PlayerEngine } from '../data/player_data.js'; // <-- ADD THIS IMPORT
 
 export const HUD = {
     minimapCacheCanvas: null,
@@ -12,9 +13,11 @@ export const HUD = {
 
     update(player, gameDay, gameTimeMinutes) {
         // OPTIMIZATION: Round percentages to integers to prevent sub-pixel DOM layout thrashing
+        
+        const effStats = PlayerEngine.getEffectiveStats(player); // <-- NEW: Grab Effective Stats!
 
         // 1. HP Bar
-        const maxHp = player.gear.boat.stats.maxHp;
+        const maxHp = effStats.exploration.maxHp; // <-- UPDATED
         const currentHp = Math.floor(player.vitals.hp);
         const hpPct = Math.round(Math.max(0, currentHp / maxHp * 100));
         if (this._cache.hpPct !== hpPct || this._cache.currentHp !== currentHp) {

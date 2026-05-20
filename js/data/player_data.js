@@ -154,7 +154,7 @@ export const PlayerEngine = {
         const boat = player.gear.boat;
         const lure = player.gear.lure;
 
-        // --- 1. MINIGAME PHYSICS STATS ---
+// --- 1. MINIGAME PHYSICS STATS ---
         const rodPower = rod ? rod.stats.power : 0.5;
         const rodTension = rod ? rod.stats.maxTension : 50;
         const rodFlex = rod ? rod.stats.flexibility : 0.5;
@@ -163,16 +163,15 @@ export const PlayerEngine = {
         let effectivePower = rodPower * (1 + (buffedStats.fishing * 0.2));
         let effectiveHookWindow = rodSens + (buffedStats.fishing * 100);
         
-        // BALANCE FIX: Buffed base stamina from 50 to 60.
-        // A level 1 player now has 90 Stamina instead of 80.
         let effectiveStamina = 60 + (buffedStats.stamina * 30); 
         
         let effectiveMaxTension = rodTension;
         let effectiveFlexibility = rodFlex;
-        let effectiveSweetSpotTolerance = Math.max(3, Math.min(25, 8 + (rodSens / 100))); 
         
-        // BALANCE FIX: Bumped base scroll speed from 1.0 to 1.8. 
-        // It now scales slightly faster with Sensitivity as well.
+        // DIFFICULTY BALANCE: Lowered base tolerance from 8 to 6.
+        // It now scales slightly with Rod Sensitivity AND your Player Fishing Stat.
+        let effectiveSweetSpotTolerance = Math.max(3, Math.min(25, 6 + (rodSens / 120) + (buffedStats.fishing * 0.5))); 
+        
         let effectiveReelScrollSpeed = Math.max(0.8, 1.8 + (rodSens / 400));
 
         if (rod && rod.traits) {

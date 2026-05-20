@@ -21,8 +21,8 @@ const CONSUMABLES = [
 ];
 
 const BOAT_UPGRADES = [
-    { id: 'upg_lantern_kero', name: 'Kerosene Lantern', slot: 'lantern', type: 'upgrade', basePrice: 500, desc: 'Increases light radius to 350px.' },
-    { id: 'upg_lantern_magic', name: 'Magic Orb Lantern', slot: 'lantern', type: 'upgrade', basePrice: 1500, desc: 'Increases light radius to 500px.' },
+    { id: 'upg_lantern_kero', name: 'Kerosene Lantern', slot: 'lantern', type: 'upgrade', basePrice: 500, desc: 'Increases light radius to 350px.', lightRadius: 350, fuelDrainRate: 0.8 },
+    { id: 'upg_lantern_magic', name: 'Magic Orb Lantern', slot: 'lantern', type: 'upgrade', basePrice: 1500, desc: 'Increases light radius to 500px.', lightRadius: 500, fuelDrainRate: 0.1 },
     { id: 'upg_cargo_net', name: 'Cargo Netting', slot: 'storage', type: 'upgrade', basePrice: 300, desc: 'Increases boat storage by +10 slots.' },
     { id: 'upg_iron_plating', name: 'Iron Plating', slot: 'plating', type: 'upgrade', basePrice: 800, desc: '+50 Hull HP. Grants immunity to Volcanic boiling waters.' },
     { id: 'upg_acoustic_dampening', name: 'Acoustic Dampening', slot: 'plating', type: 'upgrade', basePrice: 900, desc: '+30% Stealth. Grants immunity to Crystal shatter-storms.' },

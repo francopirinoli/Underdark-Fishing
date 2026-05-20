@@ -16,7 +16,8 @@ import { QuestGenerator } from '../economy/quest_generator.js';
 import { BIOMES } from '../exploration/biomes.js';
 import { PlayerEngine } from '../data/player_data.js';
 import { TooltipUI } from './tooltip_ui.js';
-import { generateLurePart } from '../art/lure_generator.js'; // <-- ADD THIS IMPORT
+import { generateLurePart } from '../art/lure_generator.js';
+import { HUD } from './hud_ui.js'; // <-- ADD THIS IMPORT
 
 export const HubUI = {
     gameState: null,
@@ -153,7 +154,7 @@ export const HubUI = {
         this.boatwrightInv = MerchantGenerator.getBoatwrightStock(dailySeed + 2, node.biomeId, player.stats.bartering);
         
         // --- FIX: Filter out quests already completed today ---
-        const allQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, state.world);
+        const allQuests = QuestGenerator.generateQuestBoard(dailySeed, player.vitals.level, state.world, node);
         this.currentQuests = allQuests.filter(q => !player.completedQuests.includes(q.id));
         
         this.activeTab = 'market';
@@ -546,8 +547,8 @@ export const HubUI = {
         const maxCargo = effStats.exploration.cargoSpace;
         const currentInvCount = player.inventory.length;
 
-        const boat = player.gear.boat;
-        const missingHp = boat.stats.maxHp - player.vitals.hp;
+        const maxHp = effStats.exploration.maxHp; // <-- UPDATED to Effective HP
+        const missingHp = maxHp - player.vitals.hp;
         const repairCost = Math.ceil(missingHp * 2); 
         const canAfford = player.vitals.gold >= repairCost;
         const isDamaged = missingHp > 0;
@@ -562,7 +563,7 @@ export const HubUI = {
                 <div>
                     <h3 style="margin:0 0 0.5rem 0; color:var(--text-main); font-size: 1.4rem;">Hull Integrity</h3>
                     <div style="font-size:1.2rem; color: ${isDamaged ? 'var(--red-danger)' : 'var(--green-safe)'}; margin-bottom: 0.5rem;">
-                        ${Math.floor(player.vitals.hp)} / ${boat.stats.maxHp} HP
+                        ${Math.floor(player.vitals.hp)} / ${maxHp} HP <!-- UPDATED -->
                     </div>
                     <p style="margin:0; color:var(--text-muted); font-size: 1rem;">
                         ${isDamaged ? `It will cost 2g per point of damage to patch her up.` : `She's ship-shape and ready to sail.`}
@@ -586,7 +587,7 @@ export const HubUI = {
                 if (isDamaged && canAfford) {
                     SFX.playUIHover(); 
                     player.vitals.gold -= repairCost;
-                    player.vitals.hp = boat.stats.maxHp;
+                    player.vitals.hp = maxHp; // <-- UPDATED to fill up the effective HP!
                     this.triggerDialogue(this.currentNPCs.boatwright, "She'll hold water now. Try not to hit any more rocks.");
                     this.renderActiveTab();
                 }
@@ -753,11 +754,10 @@ export const HubUI = {
         
         let hasTurnIns = false;
         
-        // --- 1. TURN IN COMPLETED QUESTS ---
+// --- 1. TURN IN COMPLETED QUESTS ---
         player.activeQuests.forEach((q, index) => {
             let isComplete = false;
             
-            // Dynamic inventory counting
             if (q.type === 'hunt') {
                 const count = player.inventory.filter(i => i.invType === 'fish' && i.id === q.targetSpeciesId).length;
                 isComplete = count >= q.requiredAmount;
@@ -773,8 +773,28 @@ export const HubUI = {
                     else curLvl = 1;
                 }
                 isComplete = curLvl >= q.requiredKnowledgeLevel;
+            } else if (q.type === 'bounty') {
+                isComplete = q.isComplete;
+            } else if (q.type === 'courier') {
+                isComplete = !q.isFailed; // Being at the node is checked below
+            } else if (q.type === 'crafting') {
+                isComplete = player.inventory.some(item => {
+                    if (item.invType !== 'lure') return false;
+                    return q.requirements.every(req => item.stats[req.stat] >= req.min && item.stats[req.stat] <= req.max);
+                });
             }
-            else if (q.type === 'bounty') isComplete = q.isComplete;
+
+            // ENFORCE TURN-IN LOCATION (If the quest has a turnInNode assigned)
+            if (isComplete && q.turnInNode) {
+                if (this.gameState.globalX !== q.turnInNode.x || this.gameState.globalY !== q.turnInNode.y) {
+                    isComplete = false;
+                }
+            } else if (isComplete && (q.type === 'courier' || q.type === 'crafting')) {
+                // Fallback for older saves that didn't have turnInNode
+                if (this.gameState.globalX !== q.targetNode.x || this.gameState.globalY !== q.targetNode.y) {
+                    isComplete = false;
+                }
+            }
 
             if (isComplete) {
                 hasTurnIns = true;
@@ -795,7 +815,7 @@ export const HubUI = {
                     let fishValueBonus = 0;
                     const effStats = PlayerEngine.getEffectiveStats(player);
 
-                    // --- Consume Fish & Calculate Fair-Trade Payout ---
+                    // --- Consume Fish/Items & Calculate Fair-Trade Payout ---
                     if (q.type === 'hunt') {
                         let removed = 0;
                         for (let i = player.inventory.length - 1; i >= 0; i--) {
@@ -819,6 +839,15 @@ export const HubUI = {
                             const f = player.inventory.splice(heaviestIdx, 1)[0];
                             fishValueBonus += Math.max(1, Math.round(f.economy.baseValue * effStats.economy.sellMultiplier));
                         }
+                    } else if (q.type === 'crafting') {
+                        // Find the matching custom lure and hand it to the NPC
+                        const matchIdx = player.inventory.findIndex(item => {
+                            if (item.invType !== 'lure') return false;
+                            return q.requirements.every(req => item.stats[req.stat] >= req.min && item.stats[req.stat] <= req.max);
+                        });
+                        if (matchIdx > -1) {
+                            player.inventory.splice(matchIdx, 1);
+                        }
                     }
                     
                     // Add the base reward + the market value of the fish consumed
@@ -827,14 +856,21 @@ export const HubUI = {
                     const leveledUp = PlayerEngine.addXp(player, q.rewards.xp);
                     if (leveledUp) SFX.playLevelUp();
                     
+                    // --- NEW: HUD Logging ---
+                    HUD.logAction(`Quest Complete: ${q.title}`, "safe");
+                    HUD.logAction(`+${q.rewards.gold}g (Reward)`, "safe");
+                    if (fishValueBonus > 0) HUD.logAction(`+${fishValueBonus}g (Fish Market Value)`, "safe");
+                    HUD.logAction(`+${q.rewards.xp} XP`, "safe");
+
                     if (q.rewards.item) {
                         const pId = q.rewards.item.id.replace('part_', '');
                         const pName = pId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                         const rng = createRng(Date.now());
                         
+                        HUD.logAction(`+${q.rewards.item.qty}x ${pName}`, "safe"); // <-- Item log
+                        
                         // Loop to give the exact quantity promised
                         for (let k = 0; k < q.rewards.item.qty; k++) {
-                            // 1. Push to reagents (Tackle Box) instead of inventory
                             player.reagents.push({ 
                                 id: `part_${rng.int(10000, 99999)}`, 
                                 invType: 'part',
@@ -842,7 +878,6 @@ export const HubUI = {
                                 visualId: pId, 
                                 rarity: 'Rare',
                                 stats: { color: 10, sound: 10, light: 10, weight: 10 },
-                                // 2. Generate the missing pixel art!
                                 imageDataUrl: generateLurePart({ visualId: pId, rng: createRng(Date.now() + k) })
                             });
                         }
@@ -854,7 +889,6 @@ export const HubUI = {
                     const boardIdx = this.currentQuests.findIndex(bq => bq.id === q.id);
                     if (boardIdx > -1) this.currentQuests.splice(boardIdx, 1);
 
-                    // --- FIX: Remember this quest was completed so it doesn't regenerate today ---
                     if (!player.completedQuests) player.completedQuests = [];
                     player.completedQuests.push(q.id);
 

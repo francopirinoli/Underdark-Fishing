@@ -1,20 +1,20 @@
 /**
  * js/fishing/fishing_engine.js
  * The core physics and AI state machine for the fishing minigame.
- * V9 - Second Wind, Self-Preservation AI, and Fixed Stamina Math.
+ * V12 - Smoothed Weight Curves and Stat-Driven "Breathing" Sweet Spots.
  */
 
 import { getRandomInRange, clamp } from '../util/utils.js';
 
 // Define how the fish behaves physically in each state
+// V12: Widened base sweet spot ranges. The engine now adds dynamic drift on top of these.
 const BEHAVIORS = {
-    // targetSweet: The required Drag setting (Reel Power) to avoid line snaps.
-    HOLD:        { pullMult: 0.1, drainMult: -0.8, targetSweet: [80, 100], invincible: false }, // Resting: Recovers stamina. Crank drag and pull!
-    RUN:         { pullMult: 1.4, drainMult: 1.8,  targetSweet: [15, 35],  invincible: false }, // Fleeing: Burns stamina fast. Drop drag or line snaps!
-    THRASH:      { pullMult: 0.8, drainMult: 1.2,  targetSweet: 'wobble',  invincible: false }, // Panicking: Unpredictable jerks.
-    BURST:       { pullMult: 2.5, drainMult: 2.5,  targetSweet: [10, 20],  invincible: false }, // Violent jerk: Drop drag immediately!
-    INANIMATE:   { pullMult: 0.0, drainMult: 0.0,  targetSweet: [50, 60],  invincible: false }, // For treasure chests
-    SECOND_WIND: { pullMult: 0.4, drainMult: 0.0,  targetSweet: [40, 60],  invincible: true  }  // Special 0 HP state. Massive regen, immune to reel damage.
+    HOLD:        { pullMult: 0.1, drainMult: -0.8, targetSweet: [65, 95], invincible: false }, 
+    RUN:         { pullMult: 1.4, drainMult: 1.8,  targetSweet: [20, 45],  invincible: false }, 
+    THRASH:      { pullMult: 0.8, drainMult: 1.2,  targetSweet: 'wobble',  invincible: false }, 
+    BURST:       { pullMult: 2.5, drainMult: 2.5,  targetSweet: [5, 25],   invincible: false }, 
+    INANIMATE:   { pullMult: 0.0, drainMult: 0.0,  targetSweet: [50, 60],  invincible: false }, 
+    SECOND_WIND: { pullMult: 0.4, drainMult: 0.0,  targetSweet: [35, 65],  invincible: true  }  
 };
 
 export const FishingEngine = {
@@ -42,11 +42,12 @@ export const FishingEngine = {
     playerStaminaDelayTimer: 0, 
     catchProgress: 0, 
     
-    // Dynamic Sweet Spot Mechanics (The Drag Dial)
+    // Dynamic Sweet Spot Mechanics
     reelPower: 50,      
     currentSweetSpot: 50, 
     targetSweetSpot: 50,  
-    inSweetSpot: false, 
+    currentTolerance: 8, // <-- ADD THIS LINE
+    inSweetSpot: false,
     
     currentTimeMins: 480, 
     hookTimerMs: 0,
@@ -69,8 +70,6 @@ export const FishingEngine = {
 
         this.maxPlayerStamina = this.playerStats.minigame.stamina;
         this.playerStamina = this.maxPlayerStamina;
-        
-        // Base regeneration
         this.playerStaminaRegen = 15 + (rawPlayerStaminaStat * 5); 
         this.playerStaminaDelayTimer = 0;
 
@@ -81,16 +80,15 @@ export const FishingEngine = {
         this.reelPower = 50;      
         this.currentSweetSpot = 50; 
         this.targetSweetSpot = 50;  
-        this.inSweetSpot = false; 
+        this.currentTolerance = this.playerStats.minigame.sweetSpotTolerance; // <-- ADD THIS LINE
+        this.inSweetSpot = false;
         
         this.phase = 'SINKING';
         this.ai.isResting = false;
     },
 
     scrollDepth(delta) {
-        if (this.phase === 'SINKING') {
-            this.targetDepth = clamp(this.targetDepth + delta, 0, this.maxDepth);
-        }
+        if (this.phase === 'SINKING') this.targetDepth = clamp(this.targetDepth + delta, 0, this.maxDepth);
     },
 
     scrollReelPower(delta) {
@@ -174,8 +172,9 @@ export const FishingEngine = {
             this.fishStamina = this.fishData.combat.stamina;
             this.maxFishStamina = this.fishData.combat.stamina;
             
-            // Battles now last longer, scaled properly to endurance mechanics
-            this.maxFightTimer = 25 + ((100 - this.fishData.combat.speed) * 0.3) + (this.fishData.combat.stamina * 0.1);
+            const weightBonus = (this.fishData.actualWeight || 15) * 0.05;
+            const stamBonus = this.fishData.combat.stamina * 0.2;
+            this.maxFightTimer = clamp(35 + stamBonus + weightBonus, 30, 150);
             this.fightTimer = this.maxFightTimer;
 
             this.ai.aggression = this.fishData.combat.aggression;
@@ -223,10 +222,10 @@ export const FishingEngine = {
             return;
         }
 
-        // --- NEW 1: SECOND WIND (0% Stamina Preservation) ---
+        const fishStamPct = this.fishStamina / this.maxFishStamina;
+
         if (this.fishStamina <= 0 && this.ai.state !== 'SECOND_WIND') {
             this.ai.state = 'SECOND_WIND';
-            // Duration scales slightly with fish base stamina (Bosses get longer second winds)
             this.ai.timer = 1.5 + (this.fishData.combat.stamina / 250);
             this.targetSweetSpot = getRandomInRange(40, 60);
             return;
@@ -237,101 +236,139 @@ export const FishingEngine = {
             const aggro = this.fishData.combat.aggression;
             const tensionPct = this.tension / this.maxTension;
             const slack = (!isReeling && this.reelPower < 30);
-            const fishStamPct = this.fishStamina / this.maxFishStamina;
-
-            // --- NEW 2: SELF PRESERVATION (The 30% -> 50% Rule) ---
-            if (fishStamPct <= 0.3) this.ai.isResting = true;
-            if (fishStamPct >= 0.5) this.ai.isResting = false;
 
             let nextState = 'HOLD';
             let duration = getRandomInRange(1.0, 2.5);
 
             if (this.ai.state === 'SECOND_WIND') {
-                // Coming out of second wind, fish is desperate
                 nextState = Math.random() < 0.5 ? 'THRASH' : 'RUN';
                 duration = getRandomInRange(1.0, 2.0);
             }
-            else if (this.ai.isResting) {
-                // Desperately trying to rest
+            else if (fishStamPct < 0.20 && fishStamPct > 0) {
+                this.ai.isResting = false;
+                if (slack) {
+                    nextState = 'RUN';
+                    duration = getRandomInRange(1.5, 3.0);
+                } else {
+                    nextState = Math.random() < 0.7 ? 'BURST' : 'THRASH';
+                    duration = getRandomInRange(0.5, 1.2);
+                }
+            }
+            else if (fishStamPct >= 0.20 && fishStamPct < 0.50) {
+                this.ai.isResting = true;
                 if (tensionPct > 0.8) {
-                    // Panic if pulled too hard while trying to recover
                     nextState = 'THRASH'; 
                     duration = getRandomInRange(0.5, 1.0);
                 } else {
-                    // Refuses to run, just holds steady to regain energy
                     nextState = 'HOLD'; 
                     duration = getRandomInRange(1.5, 3.0);
                 }
             } 
-            else if (tensionPct > 0.85) {
-                // High tension: Panic!
-                nextState = Math.random() < 0.6 ? 'THRASH' : 'BURST';
-                duration = getRandomInRange(0.5, 1.2);
-            } 
-            else if (slack) {
-                // Slack line: Seize the chance to run
-                nextState = 'RUN';
-                duration = getRandomInRange(2.0, 4.0);
-            } 
             else {
-                // Standard behavior cycle based on aggression stat
-                const roll = Math.random();
-                if (roll < 0.1 * aggro) nextState = 'BURST';
-                else if (roll < 0.4 * aggro) nextState = 'THRASH';
-                else if (roll < 0.7 + (0.2 * aggro)) nextState = 'RUN';
-                else nextState = 'HOLD';
+                this.ai.isResting = false;
+                if (tensionPct > 0.85) {
+                    nextState = Math.random() < 0.6 ? 'THRASH' : 'BURST';
+                    duration = getRandomInRange(0.5, 1.2);
+                } 
+                else if (slack) {
+                    nextState = 'RUN';
+                    duration = getRandomInRange(2.0, 4.0);
+                } 
+                else {
+                    const roll = Math.random();
+                    if (roll < 0.1 * aggro) nextState = 'BURST';
+                    else if (roll < 0.4 * aggro) nextState = 'THRASH';
+                    else if (roll < 0.7 + (0.2 * aggro)) nextState = 'RUN';
+                    else nextState = 'HOLD';
+                }
             }
 
             this.ai.state = nextState;
             this.ai.timer = duration;
         }
 
-        // Set the Sweet Spot (Target Drag) based on the current AI state
         if (this.ai.state === 'THRASH') {
-            if (Math.random() < 10 * dt) this.targetSweetSpot = getRandomInRange(20, 90);
+            // Thrash violently jumps to new bounds frequently
+            if (Math.random() < 12 * dt) this.targetSweetSpot = getRandomInRange(10, 90);
         } else {
             const range = BEHAVIORS[this.ai.state].targetSweet;
             if (range && range !== 'wobble') {
-                this.targetSweetSpot = getRandomInRange(range[0], range[1]);
+                // Pick a new base anchor occasionally even within the same state
+                if (Math.random() < 2 * dt) {
+                    this.targetSweetSpot = getRandomInRange(range[0], range[1]);
+                }
             }
         }
     },
 
-    _applyPhysics(dt, isReeling) {
+_applyPhysics(dt, isReeling) {
         const behavior = BEHAVIORS[this.ai.state];
         const fishSpeed = this.fishData.combat.speed;
+        const fishAggro = this.fishData.combat.aggression;
         const fishStamPct = this.fishStamina / this.maxFishStamina;
 
-        // --- 1. SWEET SPOT (DRAG) INTERPOLATION ---
-        const shiftSpeed = (this.ai.state === 'BURST') ? 15.0 : 4.0;
-        this.currentSweetSpot += (this.targetSweetSpot - this.currentSweetSpot) * shiftSpeed * dt;
-        this.currentSweetSpot = clamp(this.currentSweetSpot, 10, 100);
+        // --- 1. WEIGHT FACTORS (Smoothed Curve) ---
+        const actualWeight = this.fishData.actualWeight || 15;
+        const wfProgress = Math.pow(actualWeight / 15, 0.25);
+        const clampedWfProgress = clamp(wfProgress, 0.6, 3.0);
+        
+        const wfTension = Math.pow(actualWeight / 15, 0.1);
+        const clampedWfTension = clamp(wfTension, 0.8, 1.8);
 
-        const tol = this.playerStats.minigame.sweetSpotTolerance;
+        // --- 2. DYNAMIC "BREATHING" SWEET SPOT & TOLERANCE ---
+        let finalTargetSweet = this.targetSweetSpot;
+        
+        // Calculate dynamic sweet spot width (Fast/Aggressive fish shrink the window!)
+        const baseTol = this.playerStats.minigame.sweetSpotTolerance;
+        const fishPenalty = (fishSpeed * 0.03) + (fishAggro * 2.0);
+        this.currentTolerance = Math.max(2.5, baseTol - fishPenalty);
+        const tol = this.currentTolerance; // Use dynamic tolerance for calculations
+        
+        if (this.ai.state !== 'INANIMATE' && this.ai.state !== 'THRASH') {
+            const timeSec = Date.now() / 1000;
+            const wobbleSpeed = fishSpeed * 0.035; 
+            const wobbleWidth = fishSpeed * 0.14 * fishAggro; 
+            
+            const wobble = Math.sin(timeSec * wobbleSpeed) * wobbleWidth;
+            finalTargetSweet = clamp(this.targetSweetSpot + wobble, 5, 100);
+        }
+
+        let shiftSpeed = 2.0 + (fishSpeed * 0.02); 
+        if (this.ai.state === 'BURST') shiftSpeed = 15.0; 
+        if (this.ai.state === 'THRASH') shiftSpeed = 10.0; 
+
+        this.currentSweetSpot += (finalTargetSweet - this.currentSweetSpot) * shiftSpeed * dt;
+        this.currentSweetSpot = clamp(this.currentSweetSpot, 5, 100);
+
         const powerDiff = this.reelPower - this.currentSweetSpot;
         this.inSweetSpot = Math.abs(powerDiff) <= tol;
 
         const dragNorm = clamp(this.reelPower / 100, 0.1, 1.0);
 
-        // --- 2. PLAYER EXHAUSTION MECHANIC ---
+        // --- 3. PLAYER EXHAUSTION & SHOCK ABSORBER MATH ---
         const playerExhausted = this.playerStamina <= 0;
         const effectiveRodPower = playerExhausted ? (this.playerStats.minigame.power * 0.25) : this.playerStats.minigame.power;
-        const tensionPenalty = playerExhausted ? 2.0 : 1.0;
+        const tensionPenalty = playerExhausted ? 2.0 : 1.0; 
 
-// --- 3. ELASTIC TENSION MATH ---
+        let shockAbsorber = 1.0;
+        if (this.ai.state === 'BURST' || this.ai.state === 'THRASH') {
+            shockAbsorber = clamp(1.5 - (this.playerStats.minigame.flexibility * 0.5), 0.4, 2.0);
+        }
+
+        // --- 4. ELASTIC TENSION MATH ---
         let tensionDelta = 0;
-        const baseFishPull = fishSpeed * behavior.pullMult;
+        const baseFishPull = fishSpeed * behavior.pullMult * shockAbsorber * clampedWfTension;
 
         if (isReeling) {
             this.playerStaminaDelayTimer = 1.0; 
             
-            let tensionBuild = (baseFishPull * dragNorm * 1.5) + (this.reelPower * 0.5);
+            let tensionBuild = (baseFishPull * dragNorm * 1.35) + (this.reelPower * 0.45);
             
             if (!this.inSweetSpot) {
                 const overpull = Math.max(0, Math.abs(powerDiff) - tol) / 50;
-                tensionBuild *= (1.0 + Math.pow(overpull, 1.5) * 3.0); 
+                tensionBuild *= (1.0 + Math.pow(overpull, 1.5) * 2.0); 
             } else {
-                tensionBuild *= 0.6; 
+                tensionBuild *= 0.45; 
             }
 
             tensionDelta = tensionBuild * tensionPenalty;
@@ -339,9 +376,7 @@ export const FishingEngine = {
             this.playerStaminaDelayTimer -= dt;
             const flex = this.playerStats.minigame.flexibility;
             
-            // BALANCE FIX: Increased tension decay from 40 to 75. 
-            // Tension drops much faster when resting, getting you out of the red zone quicker.
-            const tensionDecay = 75 * flex * (1.1 - dragNorm);
+            const tensionDecay = 65 * flex * (1.1 - dragNorm);
             const passivePullTension = baseFishPull * dragNorm * 0.5;
             
             tensionDelta = passivePullTension - tensionDecay;
@@ -351,60 +386,58 @@ export const FishingEngine = {
         tensionDelta = clamp(tensionDelta, -maxTensionDelta, maxTensionDelta);
         this.tension = clamp(this.tension + tensionDelta * dt, 0, this.maxTension + 5);
 
-        // --- 4. STAMINA DRAIN ---
+        // --- 5. STAMINA DRAIN ---
         
-        // Player
         if (isReeling) {
             const resistance = Math.max(1.0, behavior.pullMult); 
-            // BALANCE FIX: Lowered drain rate from 25 to 20. Reeling is less exhausting.
-            const drainRate = 20 * resistance * Math.pow(dragNorm + 0.2, 1.2); 
+            const drainRate = 35 * resistance * Math.pow(dragNorm + 0.2, 1.2); 
             this.playerStamina -= drainRate * dt;
         } else if (this.playerStaminaDelayTimer <= 0) {
             this.playerStamina += this.playerStaminaRegen * dt;
         }
         this.playerStamina = clamp(this.playerStamina, 0, this.maxPlayerStamina);
 
-        // Fish (The "Armor" & "Second Wind" mechanics)
         let fishDrain = 0;
-        
         if (behavior.invincible) {
             fishDrain = -(this.maxFishStamina * 0.15); 
         } else if (behavior.drainMult > 0) {
-            fishDrain = behavior.drainMult * 12 * dragNorm; 
+            // DIFFICULTY BALANCE: Lowered from 9.0 to 8.5
+            fishDrain = behavior.drainMult * 8.5 * dragNorm; 
         } else {
             fishDrain = behavior.drainMult * 5; 
-            const regenBoost = (this.maxFishStamina * 0.03);
+            const regenBoost = (this.maxFishStamina * 0.04);
             fishDrain -= regenBoost; 
         }
         
         if (isReeling && this.inSweetSpot && !behavior.invincible) {
-            fishDrain += 18 * effectiveRodPower;
+            // DIFFICULTY BALANCE: Lowered active drain from 14.0 to 12.5
+            fishDrain += (12.5 * effectiveRodPower) / Math.pow(clampedWfProgress, 0.7);
         }
 
         this.fishStamina -= fishDrain * dt;
         this.fishStamina = clamp(this.fishStamina, 0, this.maxFishStamina);
 
 
-        // --- 5. CATCH PROGRESS (The True Tug-of-War) ---
-        // BALANCE FIX: Reduced escape speed multiplier from 0.25 to 0.20. Fish steal line slightly slower.
-        const escapeSpeed = baseFishPull * (1.1 - dragNorm) * 0.20;
+        // --- 6. CATCH PROGRESS (The True Tug-of-War) ---
+        let escapeSpeed = baseFishPull * (1.1 - dragNorm) * 0.10;
+        
+        if (this.ai.state === 'RUN') {
+            const speedAdvantage = Math.max(0, fishSpeed - (effectiveRodPower * 30));
+            escapeSpeed += speedAdvantage * 0.06 * clampedWfProgress;
+        }
         
         if (!isReeling) {
             this.catchProgress -= escapeSpeed * dt;
             if (this.catchProgress <= 5) this.fightTimer -= dt * 2.0;
         } else {
-            // Fish Stamina acts as Armor. 
-            // BALANCE FIX: Reduced max armor factor from 4.0 to 3.0. 
-            // A fresh fish is now 4x harder to pull instead of 5x, making early progress less sluggish.
-            const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * 3.0);
-            
-            // BALANCE FIX: Increased base pull speed from 20 to 24.
-            let pullSpeed = (24 * effectiveRodPower * dragNorm) / armorFactor;
+            const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * (clampedWfProgress * 1.5));
+            // DIFFICULTY BALANCE: Base pulling speed reduced from 32 to 29
+            let pullSpeed = (29 * effectiveRodPower * dragNorm) / (armorFactor * clampedWfProgress);
             
             if (this.inSweetSpot) pullSpeed *= 1.5;
             else pullSpeed *= 0.5;
 
-            this.catchProgress += (pullSpeed - (escapeSpeed * 0.5)) * dt;
+            this.catchProgress += (pullSpeed - (escapeSpeed * 0.2)) * dt;
         }
 
         this.catchProgress = clamp(this.catchProgress, 0, 100);

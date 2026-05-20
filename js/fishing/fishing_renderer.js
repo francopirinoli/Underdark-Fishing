@@ -443,8 +443,8 @@ export const FishingRenderer = {
         const reelPower = engine.reelPower || 50; 
         const inSweetSpot = engine.inSweetSpot || false;
         
-        // --- NEW: Position and Scale the Sweet Spot Target Zone ---
-        const tol = engine.playerStats.minigame.sweetSpotTolerance;
+        // --- NEW: Position and Scale the DYNAMIC Sweet Spot Target Zone ---
+        const tol = engine.currentTolerance; // <-- UPDATED to use dynamic tolerance
         const leftLimit = Math.max(0, engine.currentSweetSpot - tol);
         const rightLimit = Math.min(100, engine.currentSweetSpot + tol);
         const dynamicWidth = rightLimit - leftLimit;
