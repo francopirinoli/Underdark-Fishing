@@ -209,16 +209,22 @@ export const MerchantGenerator = {
         return inventory;
     },
 
-    // --- 4. THE WANDERING FISHERMAN (LOCAL MAP) ---
+// --- 4. THE WANDERING FISHERMAN (LOCAL MAP) ---
     getWanderingStock(seed, biomeId, playerBarterLevel = 1) {
         const merchantStock = this.getMerchantStock(seed, biomeId, playerBarterLevel);
         const partsStock = this.getFishmongerStock(seed + 1, biomeId, playerBarterLevel);
         
-        // Grab a curated mix of parts, a rod, and a potion/bait
         const inv = [];
+        
+        // --- NEW: Guarantee emergency survival supplies ---
+        const survivalGear = merchantStock.filter(i => i.id === 'cons_ration' || i.id === 'cons_fuel_oil');
+        inv.push(...survivalGear);
+
+        // Grab a curated mix of parts, a rod, and a potion/bait
         inv.push(...merchantStock.filter(i => i.type === 'rod').slice(0, 1));
         inv.push(...merchantStock.filter(i => i.type === 'potion' || i.type === 'bait').slice(0, 2));
         inv.push(...partsStock.slice(0, 3));
+        
         return inv;
     },
 

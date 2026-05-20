@@ -19,6 +19,7 @@ import { generateRodData } from '../data/rod_data_generator.js';
 import { EventManager } from '../events/event_manager.js';
 import { GUIDE_CHAPTERS } from '../data/guide_data.js';
 import { TooltipUI } from './tooltip_ui.js'; // <-- ADD THIS IMPORT
+import { MerchantGenerator } from '../economy/merchant_generator.js'; // <-- ADD THIS IMPORT
 
 export const GrimoireUI = {
     selectedMapNode: null,
@@ -665,7 +666,7 @@ export const GrimoireUI = {
                 this.renderCargo();
             };
         }
-        // 9. CHESTS
+// 9. CHESTS
         else if (item.invType === 'chest' || item.invType === 'chest_encounter') {
             statsEl.innerHTML = `<div style="text-align:center; padding: 2rem 0;">A heavy, waterlogged chest.</div>`;
             btnAction.style.display = 'block';
@@ -696,19 +697,37 @@ export const GrimoireUI = {
                     player.vitals.gold += goldFound;
                     let lootHtml = `<div style="color:var(--green-safe); font-size:1.4rem; text-align:center; margin-bottom:1rem;">Found ${goldFound}g!</div>`;
                     
+                    // 1. Rare Parts
                     const rareParts =['phosphor_cap', 'wraith_silk', 'myconid_spore', 'jelly_bell'];
-                    const numParts = rng.int(2, 3);
+                    const numParts = rng.int(1, 2);
                     for(let i=0; i<numParts; i++) {
                         const pId = rng.pick(rareParts);
                         const pName = pId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                         player.reagents.push({
                             id: `part_${rng.int(10000,99999)}`, invType: 'part', name: pName, visualId: pId, rarity: 'Rare',
                             stats: { color: rng.int(-20,20), sound: rng.int(-20,20), light: rng.int(-20,20), weight: rng.int(-20,20) },
-                            imageDataUrl: generateLurePart({ visualId: pId, rng })
+                            // FIX: use a unique sub-seed so the parts don't all look identical
+                            imageDataUrl: generateLurePart({ visualId: pId, rng: createRng(Date.now() + i) }) 
                         });
                         lootHtml += `<div style="color:var(--cyan-glow); font-size:1.2rem; text-align:center; margin-bottom:0.2rem;">+1x ${pName} (To Reagents)</div>`;
                     }
                     
+                    // --- NEW: 2. Crafted Item (Lure, Potion, Bait) ---
+                    // 75% chance to find a high-quality crafted item
+                    if (rng.chance(0.75)) {
+                        const craftType = rng.pick(['lure', 'potion', 'bait']);
+                        // Generates a masterwork item (Level 3 to 5 crafting strength)
+                        const craftedItem = MerchantGenerator._createRandomCraftedItem(craftType, createRng(rng.next() * 100000), rng.int(3, 5));
+                        
+                        if (craftedItem) {
+                            craftedItem.invType = craftType;
+                            player.inventory.push(craftedItem);
+                            const cColor = craftType === 'potion' ? '#A855F7' : (craftType === 'bait' ? 'var(--gold-warn)' : 'var(--cyan-glow)');
+                            lootHtml += `<div style="color:${cColor}; font-size:1.2rem; text-align:center; margin-top:0.8rem;">+ ${craftedItem.name}!</div>`;
+                        }
+                    }
+
+                    // 3. Rod
                     if (rng.chance(0.15)) {
                         const rod = generateRodData({ seed: Date.now() });
                         rod.invType = 'rod';
@@ -1432,7 +1451,7 @@ renderBestiary() {
             list.appendChild(card);
         });
     },
-    
+
     // --- GUIDE (TUTORIAL) ---
     guideActiveChapterId: 'vitals', // State tracker for the sub-menu
 
