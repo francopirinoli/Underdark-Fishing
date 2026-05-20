@@ -318,24 +318,31 @@ _applyPhysics(dt, isReeling) {
         // --- 2. DYNAMIC "BREATHING" SWEET SPOT & TOLERANCE ---
         let finalTargetSweet = this.targetSweetSpot;
         
-        // Calculate dynamic sweet spot width (Fast/Aggressive fish shrink the window!)
+        // Calculate dynamic sweet spot width 
         const baseTol = this.playerStats.minigame.sweetSpotTolerance;
-        const fishPenalty = (fishSpeed * 0.03) + (fishAggro * 2.0);
-        this.currentTolerance = Math.max(2.5, baseTol - fishPenalty);
-        const tol = this.currentTolerance; // Use dynamic tolerance for calculations
+        
+        // DIFFICULTY BALANCE: Penalty reduced so the sweet spot doesn't shrink as sharply
+        const fishPenalty = (fishSpeed * 0.025) + (fishAggro * 1.5); 
+        
+        // DIFFICULTY BALANCE: Minimum sweet spot size increased from 2.5 to 3.5
+        this.currentTolerance = Math.max(3.5, baseTol - fishPenalty);
+        const tol = this.currentTolerance; 
         
         if (this.ai.state !== 'INANIMATE' && this.ai.state !== 'THRASH') {
             const timeSec = Date.now() / 1000;
-            const wobbleSpeed = fishSpeed * 0.035; 
-            const wobbleWidth = fishSpeed * 0.14 * fishAggro; 
+            // DIFFICULTY BALANCE: Wobble speed reduced so players can track it better
+            const wobbleSpeed = fishSpeed * 0.025; // Was 0.035
+            // DIFFICULTY BALANCE: Wobble width slightly narrowed
+            const wobbleWidth = fishSpeed * 0.12 * fishAggro; // Was 0.14
             
             const wobble = Math.sin(timeSec * wobbleSpeed) * wobbleWidth;
             finalTargetSweet = clamp(this.targetSweetSpot + wobble, 5, 100);
         }
 
-        let shiftSpeed = 2.0 + (fishSpeed * 0.02); 
-        if (this.ai.state === 'BURST') shiftSpeed = 15.0; 
-        if (this.ai.state === 'THRASH') shiftSpeed = 10.0; 
+        // DIFFICULTY BALANCE: Shift speed reduced to give more reaction time
+        let shiftSpeed = 1.5 + (fishSpeed * 0.015); // Was 2.0 + 0.02
+        if (this.ai.state === 'BURST') shiftSpeed = 12.0; // Was 15.0
+        if (this.ai.state === 'THRASH') shiftSpeed = 8.0; // Was 10.0
 
         this.currentSweetSpot += (finalTargetSweet - this.currentSweetSpot) * shiftSpeed * dt;
         this.currentSweetSpot = clamp(this.currentSweetSpot, 5, 100);
@@ -401,8 +408,7 @@ _applyPhysics(dt, isReeling) {
         if (behavior.invincible) {
             fishDrain = -(this.maxFishStamina * 0.15); 
         } else if (behavior.drainMult > 0) {
-            // DIFFICULTY BALANCE: Lowered from 9.0 to 8.5
-            fishDrain = behavior.drainMult * 8.5 * dragNorm; 
+            fishDrain = behavior.drainMult * 9.0 * dragNorm; 
         } else {
             fishDrain = behavior.drainMult * 5; 
             const regenBoost = (this.maxFishStamina * 0.04);
@@ -410,8 +416,7 @@ _applyPhysics(dt, isReeling) {
         }
         
         if (isReeling && this.inSweetSpot && !behavior.invincible) {
-            // DIFFICULTY BALANCE: Lowered active drain from 14.0 to 12.5
-            fishDrain += (12.5 * effectiveRodPower) / Math.pow(clampedWfProgress, 0.7);
+            fishDrain += (14 * effectiveRodPower) / Math.pow(clampedWfProgress, 0.7);
         }
 
         this.fishStamina -= fishDrain * dt;
@@ -431,8 +436,7 @@ _applyPhysics(dt, isReeling) {
             if (this.catchProgress <= 5) this.fightTimer -= dt * 2.0;
         } else {
             const armorFactor = behavior.invincible ? 1.0 : 1.0 + (fishStamPct * (clampedWfProgress * 1.5));
-            // DIFFICULTY BALANCE: Base pulling speed reduced from 32 to 29
-            let pullSpeed = (29 * effectiveRodPower * dragNorm) / (armorFactor * clampedWfProgress);
+            let pullSpeed = (32 * effectiveRodPower * dragNorm) / (armorFactor * clampedWfProgress);
             
             if (this.inSweetSpot) pullSpeed *= 1.5;
             else pullSpeed *= 0.5;

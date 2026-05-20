@@ -105,9 +105,10 @@ export const GrimoireUI = {
     close() {
         document.getElementById('z100-grimoire').style.display = 'none';
         
+        // --- FIX: Return uncrafted parts to the Reagents pouch, not the Cargo Hold! ---
         if (this.craftingBench.length > 0) {
-            this.gameState.player.inventory.push(...this.craftingBench);
-            this.craftingBench =[];
+            this.gameState.player.reagents.push(...this.craftingBench);
+            this.craftingBench = [];
         }
 
         this.gameState = null; 
@@ -373,7 +374,7 @@ export const GrimoireUI = {
                 }
                 
                 // --- NEW: Add Hover Tooltip ---
-                TooltipUI.bind(slot, item, player.gear);
+                TooltipUI.bind(slot, item, player);
 
                 slot.onclick = () => {
                     TooltipUI.hide(); // Hide tooltip when clicking to open details pane
@@ -791,7 +792,7 @@ export const GrimoireUI = {
                 slot.style.borderColor = 'var(--cyan-glow)';
                 
                 // --- NEW: Add Hover Tooltip ---
-                TooltipUI.bind(slot, part, player.gear);
+                TooltipUI.bind(slot, part, player);
 
                 slot.onclick = () => {
                     TooltipUI.hide();
@@ -814,7 +815,7 @@ export const GrimoireUI = {
             slot.innerHTML = `<img src="${item.imageDataUrl}" />`;
             
             // --- NEW: Add Hover Tooltip ---
-            TooltipUI.bind(slot, item, player.gear);
+            TooltipUI.bind(slot, item, player);
 
             slot.onclick = () => {
                 TooltipUI.hide();
@@ -1178,7 +1179,7 @@ renderBestiary() {
             slot.innerHTML = `<img src="${entry.speciesData.art.imageDataUrl}" />`;
             
             // --- NEW: Add Hover Tooltip (Binds to the template speciesData) ---
-            TooltipUI.bind(slot, entry.speciesData, player.gear);
+            TooltipUI.bind(slot, entry.speciesData, player);
 
             slot.onclick = () => {
                 TooltipUI.hide();

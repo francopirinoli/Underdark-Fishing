@@ -156,7 +156,7 @@ export const EncounterUI = {
                 `;
                 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, item, player.gear);
+                TooltipUI.bind(row, item, player);
 
                 if (!isDisabled) {
                     row.querySelector('.btn-buy').onclick = () => {
@@ -231,7 +231,7 @@ export const EncounterUI = {
                 `;
 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, item, player.gear);
+                TooltipUI.bind(row, item, player);
 
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();

@@ -8,8 +8,9 @@ import { createRng } from '../util/rng.js';
 import { getFishPoolForNode } from '../data/fish_data_generator.js';
 import { DialogueGenerator } from './dialogue_generator.js';
 
-const BASE_GOLD_PER_DIFFICULTY = 50;
-const BASE_XP_PER_DIFFICULTY = 25;
+// --- ECONOMY BOOST ---
+const BASE_GOLD_PER_DIFFICULTY = 80; // Was 50
+const BASE_XP_PER_DIFFICULTY = 30;   // Was 25
 
 export const QuestGenerator = {
 

@@ -326,7 +326,7 @@ export const HubUI = {
                 `;
                 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, item, player.gear);
+                TooltipUI.bind(row, item, player);
 
                 if (!isDisabled) {
                     row.querySelector('.btn-buy').onclick = () => {
@@ -393,7 +393,7 @@ export const HubUI = {
                 `;
 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, item, player.gear);
+                TooltipUI.bind(row, item, player);
 
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
@@ -468,7 +468,7 @@ export const HubUI = {
                 `;
                 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, item, player.gear);
+                TooltipUI.bind(row, item, player);
 
                 if (!isDisabled) {
                     row.querySelector('.btn-buy').onclick = () => {
@@ -523,7 +523,7 @@ export const HubUI = {
                     `;
                     
                     // --- NEW UNIFIED TOOLTIP BINDER ---
-                    TooltipUI.bind(row, item, player.gear);
+                    TooltipUI.bind(row, item, player);
 
                     row.querySelector('.btn-sell').onclick = () => {
                         SFX.playGold();
@@ -649,7 +649,7 @@ export const HubUI = {
             `;
             
             // --- NEW UNIFIED TOOLTIP BINDER ---
-            TooltipUI.bind(row, item, player.gear);
+            TooltipUI.bind(row, item, player);
 
             if (!isDisabled) {
                 row.querySelector('.btn-buy').onclick = () => {
@@ -714,7 +714,7 @@ export const HubUI = {
                 `;
 
                 // --- NEW UNIFIED TOOLTIP BINDER ---
-                TooltipUI.bind(row, oldItem, player.gear);
+                TooltipUI.bind(row, oldItem, player);
 
                 row.querySelector('.btn-sell').onclick = () => {
                     SFX.playGold();
@@ -1221,7 +1221,7 @@ export const HubUI = {
             else slot.innerHTML = `<span style="font-size: 0.6rem; color: #555;">${item.name.substring(0,6)}</span>`;
 
             // --- NEW UNIFIED TOOLTIP BINDER ---
-            TooltipUI.bind(slot, item, player.gear);
+            TooltipUI.bind(slot, item, player);
 
             slot.onclick = () => {
                 TooltipUI.hide(); // <-- UPDATED
@@ -1415,7 +1415,7 @@ export const HubUI = {
             slot.innerHTML = `<img src="${fish.art.imageDataUrl}" />`;
 
             // --- NEW UNIFIED TOOLTIP BINDER ---
-            TooltipUI.bind(slot, fish, player.gear);
+            TooltipUI.bind(slot, fish, player);
 
             slot.onclick = () => {
                 TooltipUI.hide(); // <-- UPDATED
