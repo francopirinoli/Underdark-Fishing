@@ -183,6 +183,15 @@ export const SFX = {
         } else if (race === 'Elf') {
             oscType = 'sine'; 
             baseFreq = gender === 'Male' ? 300 : 400;
+        } else if (race === 'Tiefling') {
+            // NEW: Harsh, infernal raspy voice
+            oscType = 'sawtooth';
+            baseFreq = gender === 'Male' ? 110 : 150;
+        } else if (race === 'Myconid') {
+            // NEW: Deep, bubbling, lethargic spore voice
+            oscType = 'sine';
+            baseFreq = gender === 'Male' ? 70 : 90;
+            baseSpeedMs += 40; // Speaks slower than normal races
         }
 
         SYNTHS.dialogue.oscillator.type = oscType;
