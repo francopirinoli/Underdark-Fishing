@@ -204,11 +204,13 @@ export const HubUI = {
         const rng = createRng(Date.now());
         
         if (this.activeTab === 'tavern') {
-            if (rng.chance(0.5) && this.localFishPool.length > 0) msg = DialogueGenerator.generateRumor(rng.pick(this.localFishPool), rng);
-            else msg = DialogueGenerator.getLore(rng);
+            // Pass the npc object down to generate species-specific rumors and lore
+            if (rng.chance(0.5) && this.localFishPool.length > 0) msg = DialogueGenerator.generateRumor(rng.pick(this.localFishPool), rng, npc);
+            else msg = DialogueGenerator.getLore(npc, rng);
         } else {
             const roleName = this.activeTab === 'market' ? 'Merchant' : this.activeTab.charAt(0).toUpperCase() + this.activeTab.slice(1);
-            msg = DialogueGenerator.getGreeting(roleName, rng);
+            // Pass the npc object down to select the correct cultural greeting
+            msg = DialogueGenerator.getGreeting(npc, roleName, rng);
         }
         
         this.triggerDialogue(npc, msg);
@@ -349,8 +351,8 @@ export const HubUI = {
                         }
 
                         const rng = createRng(Date.now());
-                        if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.market, DialogueGenerator.getHaggleResponse(true, rng));
-                        
+                        // Pass the market NPC down to get their species-specific haggling response
+                        if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.market, DialogueGenerator.getHaggleResponse(this.currentNPCs.market, true, rng));                        
                         TooltipUI.hide(); // <-- UPDATED
                         this.renderActiveTab(); 
                     };
@@ -478,8 +480,8 @@ export const HubUI = {
                         player.reagents.push({ ...item, invType: 'part' }); 
                         
                         const rng = createRng(Date.now());
-                        if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.fishmonger, DialogueGenerator.getHaggleResponse(true, rng));
-                        
+                        // Pass the fishmonger NPC down to get their species-specific haggling response
+                        if (rng.chance(0.3)) this.triggerDialogue(this.currentNPCs.fishmonger, DialogueGenerator.getHaggleResponse(this.currentNPCs.fishmonger, true, rng));                        
                         TooltipUI.hide(); // <-- UPDATED
                         this.renderActiveTab(); 
                     };
@@ -916,8 +918,8 @@ export const HubUI = {
 
         this.currentQuests.forEach(q => {
             const rng = createRng(Date.now() + q.difficulty);
-            const flavor = DialogueGenerator.getQuestFlavor(q, rng);
-            
+            const flavor = DialogueGenerator.getQuestFlavor(q, rng, this.currentNPCs.tavern);
+                
             const isAccepted = player.activeQuests.some(aq => aq.id === q.id);
             const isFull = !isAccepted && activeCount >= 8;
 

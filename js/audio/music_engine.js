@@ -194,6 +194,19 @@ export const MusicEngine = {
     async playBiome(biomeId, rng) {
         if (!AudioEngine.isInitialized) return;
         
+        // Read current saved music volume from localStorage
+        const savedMusicVol = localStorage.getItem('uf_vol_music') !== null 
+            ? parseFloat(localStorage.getItem('uf_vol_music')) 
+            : 50;
+
+        // If music is muted, stop playback but preserve currentBiome to allow unmuting later
+        if (savedMusicVol <= 1) {
+            this.stop(true); // Keep currentBiome
+            this.currentBiome = biomeId; 
+            console.log(`Resource Saver: Skipping music engine bakes & playback for muted biome: ${biomeId}`);
+            return;
+        }
+        
         await this.init(); 
         
         this.stop();
@@ -204,10 +217,25 @@ export const MusicEngine = {
 
         try {
             const biomeModule = await import(`./biomes/${biomeId}_music.js`);
+            
+            // Defensive check to prevent crashes if synths failed to initialize
+            if (!this.synths || !this.synths.noiseTape) {
+                console.warn("⚠️ Music synths not initialized. Aborting playback.");
+                return;
+            }
+
             biomeModule.compose(this, rng, { getNoteInScale, SCALES, safeVel });
             Tone.Transport.start();
         } catch (err) {
             console.error(`Error loading music for biome ${biomeId}:`, err);
         }
-    }
+    },
+
+    stop(keepBiome = false) {
+        try { Tone.Transport.stop(0); } catch(e){}
+        this.clearTracks();
+        if (!keepBiome) {
+            this.currentBiome = null;
+        }
+    },
 };

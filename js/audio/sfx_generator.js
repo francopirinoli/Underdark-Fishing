@@ -168,34 +168,68 @@ export const SFX = {
         if (!SYNTHS.dialogue) return;
         if (speechTimeout) clearTimeout(speechTimeout);
 
-        let baseFreq = 300;
+        // Define default base parameters
+        let baseFreq = 220;
         let oscType = 'triangle';
+        let targetVol = -16;
+        let decay = 0.05;
+        let release = 0.02;
 
+        // Custom property matrix to normalize perceived loudness (RMS) and vocal texture
         if (race === 'Orc') {
-            oscType = 'square'; 
-            baseFreq = gender === 'Male' ? 90 : 130;
+            oscType = 'square';
+            baseFreq = gender === 'Male' ? 90 : 120;
+            targetVol = -22; // Heavy attenuation on loud, buzzing square waves
+            decay = 0.04;
+            release = 0.01; // Tight, blunt, percussive chops
+            baseSpeedMs = 60; // Slower, heavier cadence
         } else if (race === 'Dwarf') {
-            oscType = 'sawtooth'; 
-            baseFreq = gender === 'Male' ? 140 : 180;
+            oscType = 'sawtooth';
+            baseFreq = gender === 'Male' ? 130 : 170;
+            targetVol = -18; // Sawtooth cuts through easily, moderate cut
+            decay = 0.08;
+            release = 0.04; // Deep, grunting, slightly warm decay
+            baseSpeedMs = 55;
         } else if (race === 'Human') {
-            oscType = 'triangle'; 
-            baseFreq = gender === 'Male' ? 200 : 280;
+            oscType = 'triangle';
+            baseFreq = gender === 'Male' ? 220 : 290;
+            targetVol = -5; // Triangle needs a massive boost to match saw/square volume
+            decay = 0.06;
+            release = 0.03; // Warm, natural spoken cadence
+            baseSpeedMs = 50;
         } else if (race === 'Elf') {
-            oscType = 'sine'; 
-            baseFreq = gender === 'Male' ? 300 : 400;
+            // Lyrical, high-pitched flutey voice using triangle with a singing release
+            oscType = 'triangle';
+            baseFreq = gender === 'Male' ? 340 : 440;
+            targetVol = -10; // Mild cut for high frequencies that naturally pierce the mix
+            decay = 0.14;
+            release = 0.10; // Longer, flowing, ethereal trail
+            baseSpeedMs = 45; // Slightly faster, musical flow
         } else if (race === 'Tiefling') {
-            // NEW: Harsh, infernal raspy voice
             oscType = 'sawtooth';
             baseFreq = gender === 'Male' ? 110 : 150;
+            targetVol = -18;
+            decay = 0.03;
+            release = 0.01; // Rapid, chattering clicks with zero sustain
+            baseSpeedMs = 42; // Fast, chattering speed
         } else if (race === 'Myconid') {
-            // NEW: Deep, bubbling, lethargic spore voice
-            oscType = 'sine';
-            baseFreq = gender === 'Male' ? 70 : 90;
-            baseSpeedMs += 40; // Speaks slower than normal races
+            // Lethargic, wet, organic bubble-pop voice
+            oscType = 'triangle'; 
+            baseFreq = 105; // Balanced deep anchor
+            targetVol = -4; // Massive boost to project low-frequency sweeps clearly
+            decay = 0.15;
+            release = 0.08; // Slower bubble-pop expansion trail
+            baseSpeedMs = 100; // Speaks with an extremely slow, dripping tempo
         }
 
+        // Apply global synthesis properties to clear out any leftover state from the previous speaker
         SYNTHS.dialogue.oscillator.type = oscType;
-        baseFreq += getRandomInRange(-20, 20);
+        SYNTHS.dialogue.volume.value = targetVol;
+        SYNTHS.dialogue.envelope.decay = decay;
+        SYNTHS.dialogue.envelope.release = release;
+
+        // Introduce a subtle random frequency drift per sentence to humanize the speech
+        baseFreq += getRandomInRange(-15, 15);
 
         let index = 0;
 
@@ -205,9 +239,23 @@ export const SFX = {
             let delay = baseSpeedMs;
 
             if (char.match(/[a-zA-Z0-9]/)) {
-                const charCodeOffset = (char.charCodeAt(0) % 15) * 5; 
+                // Character-specific pitch inflection offsets
+                const charCodeOffset = (char.charCodeAt(0) % 15) * 4; 
                 const inflection = (index % 2 === 0) ? charCodeOffset : -charCodeOffset;
-                SYNTHS.dialogue.triggerAttackRelease(baseFreq + inflection, "32n", Tone.now() + LOOKAHEAD);
+                const finalFreq = Math.max(65, baseFreq + inflection);
+                
+                const now = Tone.now() + LOOKAHEAD;
+                
+                if (race === 'Myconid') {
+                    // Custom upward pitch sweep for wet, bubbling spore pops
+                    SYNTHS.dialogue.triggerAttack(finalFreq, now);
+                    SYNTHS.dialogue.frequency.setValueAtTime(finalFreq, now);
+                    SYNTHS.dialogue.frequency.exponentialRampToValueAtTime(finalFreq * 2.5, now + 0.06);
+                    SYNTHS.dialogue.triggerRelease(now + 0.06);
+                } else {
+                    // Standard trigger for all other species
+                    SYNTHS.dialogue.triggerAttackRelease(finalFreq, "32n", now);
+                }
             } 
             else if (char === '.' || char === '!' || char === '?') delay += 250;
             else if (char === ',') delay += 100;

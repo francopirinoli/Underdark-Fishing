@@ -57,9 +57,9 @@ export const EncounterUI = {
         const rng = createRng(Date.now());
         let msg = "Quiet out here.";
         if (this.fishPool.length > 0) {
-            msg = DialogueGenerator.generateRumor(rng.pick(this.fishPool), rng);
+            // Pass the fisherman NPC so the rumor dialect matches their voice
+            msg = DialogueGenerator.generateRumor(rng.pick(this.fishPool), rng, this.fisherman.npc);
         }
-
         this.triggerDialogue(msg, this.fisherman.npc);
         this.renderMarket();
     },

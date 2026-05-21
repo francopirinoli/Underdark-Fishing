@@ -5,6 +5,8 @@
 
 import { AudioEngine } from '../audio/audio_engine.js';
 import { SFX } from '../audio/sfx_generator.js';
+import { MusicEngine } from '../audio/music_engine.js';
+import { createRng } from '../util/rng.js';
 
 export const PauseUI = {
     callbacks: null,
@@ -29,10 +31,22 @@ export const PauseUI = {
 
         // Live Volume Updates
         sliderMusic.addEventListener('input', (e) => {
-            const val = e.target.value;
+            const val = parseFloat(e.target.value);
             lblMusic.innerText = `${val}%`;
             AudioEngine.setMusicVolume(val / 100);
             localStorage.setItem('uf_vol_music', val);
+
+            // Dynamically manage Music Engine state to save CPU and handle unmuting
+            if (val > 1) {
+                // If we unmuted, have an active biome, and the music isn't currently running, start it
+                if (MusicEngine.currentBiome && Tone.Transport.state !== 'started') {
+                    const rng = createRng(Date.now());
+                    MusicEngine.playBiome(MusicEngine.currentBiome, rng);
+                }
+            } else {
+                // If fully muted (<= 1%), stop the music engine completely to save CPU
+                MusicEngine.stop(true); // Keep currentBiome so we can resume if unmuted
+            }
         });
 
         sliderSfx.addEventListener('input', (e) => {
